@@ -1,0 +1,130 @@
+/* border-radius */
+@mixin ellipsis($lines:null, $max-height: null) {
+	@if($lines==null){
+		overflow:hidden;
+		display:block;
+		text-overflow:ellipsis;
+		white-space:nowrap;
+	}
+	@else{
+		overflow:hidden;
+		display:block;
+		display:-webkit-box;
+		max-height:$max-height;
+		text-overflow:ellipsis;
+		-webkit-box-orient:vertical;
+		-webkit-line-clamp:$lines;
+	}
+}
+
+@mixin clear {
+	&:after {
+		content: '';
+		display: block;
+		clear: both;
+	}
+}
+
+//position
+@mixin absolute_LT($left, $top) {
+	position:absolute;
+	left:$left;
+	top:$top;
+}
+
+@mixin absolute_LB($left, $bottom) {
+	position:absolute;
+	left:$left;
+	bottom:$bottom;
+}
+
+@mixin absolute_RT($right, $top) {
+	position:absolute;
+	right:$right;
+	top:$top;
+}
+
+@mixin absolute_RB($right, $bottom) {
+	position:absolute;
+	right:$right;
+	bottom:$bottom;
+}
+
+@mixin absolute_zero {
+	position:absolute;
+	left:0;
+	right:0;
+	top:0;
+	bottom:0;
+}
+
+@mixin fixed_zero {
+	position:fixed;
+	left:0;
+	right:0;
+	top:0;
+	bottom:0;
+}
+
+@mixin mobile($point) {
+	@if $point==1023 {
+		@media (max-width: 1023px) {
+			@content;
+		}
+	}
+	@if $point==767 {
+		@media (max-width: 767px) {
+			@content;
+		}
+	}
+	@if $point==374 {
+		@media (max-width: 374px) {
+			@content;
+		}
+	}
+	@if $point==320 {
+		@media (max-width: 320px) {
+			@content;
+		}
+	}
+}
+@mixin pc {
+	@media (min-width: 1024px) {
+		@content;
+	}
+}
+
+@mixin box-sizing {
+	box-sizing:border-box;
+	-webkit-box-sizing:border-box;
+	-moz-box-sizing:border-box;
+}
+
+@mixin border-radius($radius) {
+	-webkit-border-radius: $radius;
+	-moz-border-radius: $radius;
+	-ms-border-radius: $radius;
+	border-radius: $radius;
+}
+
+@mixin translateX($value) {
+	-webkit-transform: translateX($value);
+	-moz-transform: translateX($value);
+	-ms-transform: translateX($value);
+	transform: translateX($value);
+}
+
+@mixin translateY($value) {
+	-webkit-transform: translateY($value);
+	-moz-transform: translateY($value);
+	-ms-transform: translateY($value);
+	transform: translateY($value);
+}
+
+@mixin flex-box {
+	display: -ms-flexbox;
+	display: -webkit-flex;
+	display: -moz-box;
+	display: -webkit-box;
+	display: flex;
+} 

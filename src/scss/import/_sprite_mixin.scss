@@ -1,0 +1,83 @@
+// 스프라이트 이미지의 base-class placeholder를 생성함
+// 새로운 스프라이트 폴더 추가 시 in 우측으로 list에 map추가
+@each $sprite-map in $map_list {
+	$map_name: map-get($sprite-map, name);
+	$image: map-get($sprite-map, image);
+	$map_width: map-get($sprite-map, width) / $ratio;
+	$map_height: map-get($sprite-map, height) / $ratio;
+
+	%#{$map_name}-sprite {
+		background-repeat: no-repeat;
+		background-image: url(#{$image});
+		background-size: ceil($map_width) ceil($map_height);
+	}
+}
+
+// Map deep getter
+// @param {Map} $map
+// @param {Arglist} $keys
+// @return {*} - Desired value
+@function map-deep-get($map, $keys...) {
+	@each $key in $keys {
+		$map: map-get($map, $key);
+	}
+	@return $map;
+}
+
+@mixin extend($map_name){
+	@extend %#{$map_name}-sprite !optional;
+}
+
+// Sprite Getter
+// @param {String} 파일명
+// @param {String} 폴더명
+// @param {Map} extend 출력 여부와 offset 값 조정
+@mixin get-sprite($filename, $sprite-map, $property: (extend: true, get-image: false, set-offset-x: 0, set-offset-y: 0)) {
+	$map_name: map-get($sprite-map, name);
+	$extend: map-get($property, extend);
+	$get-image: map-get($property, 'get-image');
+	$set-offset-x: if(map-get($property, 'set-offset-x'), map-get($property, 'set-offset-x'), 0);
+	$set-offset-y: if(map-get($property, 'set-offset-y'), map-get($property, 'set-offset-y'), 0);
+	$offset-x: map-deep-get($sprite-map, 'sprites', $filename, 'offset-x') / $ratio;
+	$offset-y: map-deep-get($sprite-map, 'sprites', $filename, 'offset-y') / $ratio;
+	$width: map-deep-get($sprite-map, 'sprites', $filename, 'width') / $ratio;
+	$height: map-deep-get($sprite-map, 'sprites', $filename, 'height') / $ratio;
+
+	@if($extend == true) {
+		@include extend($map_name);
+	}
+
+	@if($get-image == true) {
+		$image: map-get($sprite-map, image);
+		$map_width: map-get($sprite-map, width) / $ratio;
+		$map_height: map-get($sprite-map, height) / $ratio;
+		background-image: url(#{$image});
+		-webkit-background-size: ceil($map_width) ceil($map_height);
+		background-size: ceil($map_width) ceil($map_height);
+	}
+
+	background-position: floor($offset-x + $set-offset-x) floor($offset-y + $set-offset-y);
+	width: ceil($width);
+	height: ceil($height);
+}
+
+// Sprite Background Position
+@mixin get-sprite-background-position($filename, $sprite-map, $property: (set-offset-x: 0, set-offset-y: 0)) {
+	$set-offset-x: if(map-get($property, 'set-offset-x'), map-get($property, 'set-offset-x'), 0);
+	$set-offset-y: if(map-get($property, 'set-offset-y'), map-get($property, 'set-offset-y'), 0);
+	$offset-x: map-deep-get($sprite-map, 'sprites', $filename, 'offset-x') / $ratio;
+	$offset-y: map-deep-get($sprite-map, 'sprites', $filename, 'offset-y') / $ratio;
+	background-position: floor($offset-x + $set-offset-x) floor($offset-y + $set-offset-y);
+}
+
+// Sprite Width
+@mixin get-sprite-width($filename, $sprite-map) {
+	$width: map-deep-get($sprite-map, 'sprites', $filename, 'width') / $ratio;
+	width: ceil($width);
+}
+
+// Sprite Height
+@mixin get-sprite-height($filename, $sprite-map) {
+	$height: map-deep-get($sprite-map, 'sprites', $filename, 'height') / $ratio;
+	height: ceil($height);
+}

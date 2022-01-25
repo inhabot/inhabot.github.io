@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="stylesheet" href="css/blog.css">
+    <link rel="stylesheet" href="css/card.css">
+    <link rel="stylesheet" href="css/swiper.min.css">
+    <title>2022 인사카드 보내기</title>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="spot layout" id="top">
+          <!-- <div class="spot-box"></div> -->
+          <div class="center">
+            <div class="text">
+              <h1>
+                <img src="img/title.svg" alt="">
+              </h1>
+              <p class="time">2022년<span class="bold"> 4</span>월 <span class="bold">30</span>일 <span class="bold">12</span>시</p>
+              <p class="map">
+                <span>원주 빌라드 아모르 3층</span>
+                <!-- <a href="https://m.place.naver.com/place/1984016486/location?subtab=location" target="_blank" class="button">지도 보기</a> -->
+              </p>
+              <a href="#top2" class="a-top2 arrowCta"></a>
+            </div>
+          </div>
+            <div id="leaves">
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i> 
+            </div>
+        </div>
+        <div id="top2" style="height: 1000px;">
+          <div class="marquee_wrap">
+            <div class="marquee_box box1">
+              <span class="marquee_text">YOU'RE INVITED! </span>
+            </div>
+            <div class="marquee_box box2">
+              <span class="marquee_text"> YOU'RE INVITED!</span>
+            </div>
+            <div class="marquee_box box2">
+              <span class="marquee_text">YOU'RE INVITED!</span>
+            </div>
+          </div>
+          <input id="myInput" value="Hello, World!" readonly>
+          <br><br><br><br>
+<button onclick="copy_to_clipboard()">클립보드로 복사</button>
+        <!-- <a href="#top" class="a-top">위로각가가가ㅏ</a> -->
+        </div>
+        <div>
+          <div class="swiper mySwiper2">
+            <div class="swiper-wrapper">
+              <div class="swiper-slide">
+                <img src="https://swiperjs.com/demos/images/nature-1.jpg">
+              </div>
+              <div class="swiper-slide">
+                <img src="https://swiperjs.com/demos/images/nature-2.jpg">
+              </div>
+              <div class="swiper-slide">
+                <img src="https://swiperjs.com/demos/images/nature-3.jpg">
+              </div>
+              <div class="swiper-slide">
+                <img src="https://swiperjs.com/demos/images/nature-4.jpg">
+              </div>
+              <div class="swiper-slide">
+                <img src="https://swiperjs.com/demos/images/nature-5.jpg">
+              </div>
+              <div class="swiper-slide">
+                <img src="https://swiperjs.com/demos/images/nature-5.jpg">
+              </div>
+              <div class="swiper-slide">
+                <img src="https://swiperjs.com/demos/images/nature-4.jpg">
+              </div>
+            </div>
+          </div>
+          <div class="thumb_swiper">
+            <div thumbsslider="" class="swiper mySwiper swiper-container-initialized swiper-container-horizontal">
+              <div class="swiper-wrapper" style="transform: translate3d(0px, 0px, 0px);">
+                <div class="swiper-slide swiper-slide-active" style="width: 92.3738px;">
+                  <img src="https://swiperjs.com/demos/images/nature-1.jpg">
+                </div>
+                <div class="swiper-slide swiper-slide-next" style="width: 92.3738px;">
+                  <img src="https://swiperjs.com/demos/images/nature-2.jpg">
+                </div>
+                <div class="swiper-slide" style="width: 92.3738px;">
+                  <img src="https://swiperjs.com/demos/images/nature-3.jpg">
+                </div>
+                <div class="swiper-slide" style="width: 92.3738px;">
+                  <img src="https://swiperjs.com/demos/images/nature-4.jpg">
+                </div>
+                <div class="swiper-slide" style="width: 92.3738px;">
+                  <img src="https://swiperjs.com/demos/images/nature-5.jpg">
+                </div>
+                <div class="swiper-slide" style="width: 92.3738px;">
+                  <img src="https://swiperjs.com/demos/images/nature-5.jpg">
+                </div>
+                <div class="swiper-slide" style="width: 92.3738px;">
+                  <img src="https://swiperjs.com/demos/images/nature-4.jpg">
+                </div>
+              </div>
+            <span class="swiper-notification" aria-live="assertive" aria-atomic="true"></span></div>
+            <div class="swiper-button-next"></div>
+            <div class="swiper-button-prev"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="js/jquery-1.12.4.js"></script>
+    <script src="js/swiper.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.6.0/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.6.0/ScrollTrigger.min.js"></script>
+    <script>
+ // Cache selectors
+// var lastId,
+//  topMenu = $("body"),
+//  topMenuHeight = 0,
+//  // All list items
+//  menuItems = topMenu.find("a"),
+//  // Anchors corresponding to menu items
+//  scrollItems = menuItems.map(function(){
+//    var item = $($(this).attr("href"));
+//     if (item.length) { return item; }
+//  });
+
+// Bind click handler to menu items
+// so we can get a fancy scroll animation
+var height = document.querySelector(".spot").scrollHeight;
+  $(document).ready(function(){
+    $(".a-top2").click(function(){
+      $('body').animate({
+        scrollTop: height
+      },1200);
+    return false;
+    });
+    $(".a-top").click(function(){
+      $('body').animate({
+        scrollTop: 0
+      },1200);
+    return false;
+    });
+   
+  });
+
+
+// Bind to scroll
+
+    </script>
+
+    <script>
+      gsap.registerPlugin(ScrollTrigger);
+      gsap.fromTo(".center",{opacity:1} ,{
+        scrollTrigger: {
+          // trigger: "#top2",
+          markers: true,
+          // start: "top center",
+          scrub: .5,
+        },
+        opacity: -2, duration: .5,
+      });
+    </script>
+    <script>
+      function copy_to_clipboard() {
+        var copyText = document.getElementById("myInput");
+        copyText.select();
+        document.execCommand("Copy");
+        console.log('Copied!');
+      }
+
+
+   
+      </script>
+       <script>
+        var swiper = new Swiper(".mySwiper", {
+          spaceBetween: 0,
+          noSwiping: 'true',
+          slidesPerView: '4.655',
+          mousewheel: {
+              },
+          breakpoints:{
+            768: {
+              slidesPerView: '4.46',
+            },
+          }
+        });
+        swiper.init();
+        var swiper2 = new Swiper(".mySwiper2", {
+          spaceBetween: 0,
+          centeredSlides : true,
+          slidesPerView: 1,
+          navigation: {
+            nextEl: ".swiper-button-next",
+            prevEl: ".swiper-button-prev"
+          },
+          thumbs: {
+            swiper: swiper
+          }
+        });
+      </script>
+  </body>
+
+
+  </html>

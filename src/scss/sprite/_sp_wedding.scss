@@ -1,0 +1,21 @@
+// Sprites Map
+$sp_wedding: (
+	name: 'sp_wedding',
+	width: 2001px,
+	height: 1667px,
+	image: '../img/sp_wedding.png',
+	sprites: (
+	spot_kim: (
+			offset-x: -1027px,
+			offset-y: 0px,
+			width: 974px,
+			height: 1667px,
+		),
+		spot_lee: (
+			offset-x: 0px,
+			offset-y: 0px,
+			width: 1017px,
+			height: 1667px,
+		),
+	)
+);

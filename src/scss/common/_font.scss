@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Gothic+A1:wght@100;200;300;400;500;600;700;800;900&family=Montserrat:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
+/* NunumSquare */
+@font-face {
+  font-family:'NanumSquare';
+  font-weight:200;
+  src:url(../font/NanumSquareLight.eot),
+  url(../font/NanumSquareLight.eot?#iefix) format("embedded-opentype"),
+  url(../font/NanumSquareLight.woff2) format("woff2"),
+  url(../font/NanumSquareLight.woff) format("woff"),
+  url(../font/NanumSquareLight.ttf) format("truetype");
+}
+
+@font-face {
+  font-family: 'NanumSquare';
+  font-weight:400;
+  src:url(../font/NanumSquare_seR.eot),
+  url(../font/NanumSquare_seR.eot?#iefix) format('embedded-opentype'),
+  url(../font/NanumSquare_seR.woff2) format('woff2'),
+  url(../font/NanumSquare_seR.woff) format('woff'),
+  url(../font/NanumSquare_seR.ttf) format('truetype');
+}
+
+@font-face {
+  font-family:'NanumSquare';
+  font-weight:700;
+  src:url(../font/NanumSquare_seB.eot),
+  url(../font/NanumSquare_seB.eot?#iefix) format('embedded-opentype'),
+  url(../font/NanumSquare_seB.woff2) format('woff2'),
+  url(../font/NanumSquare_seB.woff) format('woff'),
+  url(../font/NanumSquare_seB.ttf) format('truetype');
+}
+
+@font-face {
+  font-family:'NanumSquare';
+  font-weight:900;
+  src: url(../font/NanumSquareEB.eot),
+  url(../font/NanumSquareEB.eot?#iefix) format('embedded-opentype'),
+  url(../font/NanumSquareEB.woff2) format('woff2'),
+  url(../font/NanumSquareEB.woff) format('woff'),
+  url(../font/NanumSquareEB.ttf) format('truetype');
+}
+
+

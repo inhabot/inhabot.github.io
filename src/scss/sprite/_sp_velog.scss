@@ -1,0 +1,21 @@
+// Sprites Map
+$sp_velog: (
+	name: 'sp_velog',
+	width: 91px,
+	height: 64px,
+	image: '../img/sp_velog.png',
+	sprites: (
+	image_1: (
+			offset-x: 0px,
+			offset-y: 0px,
+			width: 57px,
+			height: 64px,
+		),
+		search: (
+			offset-x: -67px,
+			offset-y: 0px,
+			width: 24px,
+			height: 24px,
+		),
+	)
+);

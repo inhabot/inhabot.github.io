@@ -1,0 +1,27 @@
+// Sprites Map
+$sp_blog: (
+	name: 'sp_blog',
+	width: 1192px,
+	height: 2436px,
+	image: '../img/sp_blog.png',
+	sprites: (
+	apple: (
+			offset-x: 0px,
+			offset-y: 0px,
+			width: 1125px,
+			height: 2436px,
+		),
+		image_1: (
+			offset-x: -1135px,
+			offset-y: 0px,
+			width: 57px,
+			height: 64px,
+		),
+		search: (
+			offset-x: -1135px,
+			offset-y: -74px,
+			width: 24px,
+			height: 24px,
+		),
+	)
+);
