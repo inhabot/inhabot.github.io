@@ -22,27 +22,29 @@
                   <img src="img/name_k.svg" alt="">
                 </div>
                 <div class="swiper mySwiper3">
-                  <div class="swiper-wrapper" dir="ttb">
-                    <div class="swiper-slide slide-1">
-                    </div>
-                    <div class="swiper-slide slide-2">
-                    </div>
-                    <div class="swiper-slide slide-3">
-                    </div>
+                  <div class="swiper-wrapper">
+                    <div class="swiper-slide slide-1"></div>
+                    <div class="swiper-slide slide-2"></div>
+                    <div class="swiper-slide slide-3"></div>
+                    <div class="swiper-slide slide-4"></div>
+                    <div class="swiper-slide slide-5"></div>
+                    <div class="swiper-slide slide-6"></div>
                   </div>
                 </div>
               </div>
-              <p class="time">2022년<span class="bold"> 4</span>월 <span class="bold">30</span>일 <span class="bold">12</span>시</p>
+            </div>
+            <div class="spot-bottom">
+              <p class="time">2022.04.30  12:00</p>
               <p class="map">
                 <span>원주 빌라드 아모르 3층</span>
                 <!-- <a href="https://m.place.naver.com/place/1984016486/location?subtab=location" target="_blank" class="button">지도 보기</a> -->
               </p>
+              <a href="#top2" class="a-top2">
+                <span class="blind">아래로</span>
+                <div class="arrow arrow-first"></div>
+                <div class="arrow arrow-second"></div>
+              </a>
             </div>
-            <a href="#top2" class="a-top2">
-              <span class="blind">아래로</span>
-              <div class="arrow arrow-first"></div>
-              <div class="arrow arrow-second"></div>
-            </a>
           </div>
             <div id="leaves">
               <i></i>
@@ -64,14 +66,14 @@
         <div id="top2" style="height: 1000px;">
           <div class="marquee_wrap">
             <div class="marquee_box box1">
-              <span class="marquee_text">YOU'RE INVITED! </span>
+              <span class="marquee_text">HAPPY WEDDING! HAPPY WEDDING! HAPPY WEDDING! HAPPY WEDDING! </span>
             </div>
-            <div class="marquee_box box2">
+            <!-- <div class="marquee_box box2">
               <span class="marquee_text"> YOU'RE INVITED!</span>
             </div>
             <div class="marquee_box box2">
               <span class="marquee_text">YOU'RE INVITED!</span>
-            </div>
+            </div> -->
           </div>
           <input id="myInput" value="Hello, World!" readonly>
           <br><br><br><br>
@@ -177,7 +179,7 @@ var height = document.querySelector(".spot").scrollHeight;
 
     <script>
       gsap.registerPlugin(ScrollTrigger);
-      gsap.fromTo(".center",{opacity:1} ,{
+      gsap.fromTo(".text",{opacity:1} ,{
         scrollTrigger: {
           // trigger: "#top2",
           markers: true,
@@ -185,6 +187,15 @@ var height = document.querySelector(".spot").scrollHeight;
           scrub: .5,
         },
         opacity: -2, duration: .5,
+      });
+      gsap.fromTo(".marquee_text",{left:0} ,{
+        scrollTrigger: {
+          // trigger: "#top2",
+          markers: true,
+          // start: "top center",
+          scrub: 2,
+        },
+        left: -800, duration: .5,
       });
     </script>
     <script>
@@ -222,7 +233,7 @@ var height = document.querySelector(".spot").scrollHeight;
         });
         var swiper3 = new Swiper(".mySwiper3", {
           direction: 'vertical',
-          spaceBetween: 0,
+          spaceBetween: 1,
           centeredSlides : true,
           slidesPerView: 1,
           autoplay: {

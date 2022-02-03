@@ -48,6 +48,10 @@ html,body,.wrap {
     width: 100%;
     overflow: hidden;
     text-align: center;
+    min-height: 496px;
+    @include pc {
+      min-height: 650px;
+    }
 }
 /* leaf animations */
 .spot {
@@ -63,7 +67,7 @@ html,body,.wrap {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        margin: 0 auto 0;
+        margin: 0 auto;
         position: relative;
         z-index: 0;
         @include pc {
@@ -82,6 +86,7 @@ html,body,.wrap {
             width: 100%;
             font-size: 18px;
             padding-top: 200px;
+            margin-top: -30px;
             background: url(../img/main.png) no-repeat 50% 0;
             background-size: auto 200px;
             @include pc {
@@ -94,17 +99,6 @@ html,body,.wrap {
                 padding-top: 140px;
                 background: url(../img/main.png) no-repeat 50% 0;
                 background-size: auto 140px;
-            }
-            .bold {
-                // font-weight: 900;
-            }
-            .time {
-                font-weight: 600;
-                margin-bottom: 2px;
-            }
-            .map {
-              font-weight: 600;
-              letter-spacing: -1.5px;
             }
             .mySwiper3 {
               position: absolute;
@@ -119,7 +113,7 @@ html,body,.wrap {
                 height: 36px;
               }
               .swiper-slide{
-                  @for $i from 1 to 4 {
+                  @for $i from 1 to 7 {
                     &.slide-#{$i} {
                       @include get-sprite(emoji#{$i}, $sp_wedding,(extend:false, get-image:true));
                     }
@@ -163,19 +157,40 @@ html,body,.wrap {
         }
       }
     }
+    .spot-bottom {
+      position: absolute;
+      bottom: 60px;
+      .time {
+        font-weight: 600;
+        margin-bottom: 2px;
+        font-size: 16px;
+      }
+      .map {
+        font-weight: 600;
+        letter-spacing: -1.5px;
+        font-size: 16px;
+      }
+      @include pc {
+        bottom: 80px;
+        .time,.map {
+          font-size: 20px;
+        }
+      }
+    }
     .a-top2 {
         opacity: 1;
         display: block;
         position: absolute;
         left: 50%;
         margin-left: -25px;
-        bottom: 20px;
+        bottom: -48px;
         width: 50px;
         height: 50px;
         @include pc {
-          width: 100px;
-          height: 100px;
-          margin-left: -50px;
+          width: 60px;
+          height: 60px;
+          margin-left: -30px;
+          bottom: -65px;
         }
         .arrow {
           border: 1px solid #000;  
@@ -194,8 +209,8 @@ html,body,.wrap {
             animation: arrow 2s 1s ease-in-out infinite;
           }
           @include pc {
-            width: 20px;
-            height: 20px;
+            width: 16px;
+            height: 16px;
             border-width: 0px 0px 3px 3px;
           }
         }
@@ -357,15 +372,41 @@ html,body,.wrap {
         opacity: 0;
     }
 }
-.marquee_wrap { white-space: nowrap; font-size: calc(8vw); display: flex; align-items: center; will-change: transform; width: 100%;background-color: black;}
-
-.marquee_box { will-change: transform; animation: marquee 10s linear infinite; font-weight: 900; padding: 8px 20px 5px; }
-.marquee_text {line-height: 1.2rem; font-family: 'Montserrat';}
-.box1 { background:black; width: 100vw; color: #fff; }
-.box2 { background:black; width: 100vw; color: #fff}
-
-@keyframes marquee {
-  from { transform: translateZ(0) }
-  to { transform: translate3d(-100%,0,0) }
+.marquee_wrap {
+  white-space: nowrap;
+  font-size: calc(8vw);
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 1px solid black;
+  border-width: 1px 0 1px 0;
+  position: relative;
+  height: 8.5vw;
+  @include pc {
+    height: 8vw;
+  }
 }
+
+// .marquee_box { will-change: transform; animation: marquee 10s linear infinite; font-weight: 900; padding: 8px 20px 5px; }
+.marquee_text {
+  top: 50%;
+  transform: translateY(-50%);
+  line-height: 1.2rem;
+  font-family: 'Montserrat';
+  position: absolute;
+  color: #fff;
+  text-shadow:
+  -1px -1px 0 #000,
+  1px -1px 0 #000,
+  -1px 1px 0 #000,
+  1px 1px 0 #000; 
+  font-weight: 900;
+}
+// .box1 { background:black; width: 100vw; color: #fff; }
+// .box2 { background:black; width: 100vw; color: #fff}
+
+// @keyframes marquee {
+//   from { transform: translateZ(0) }
+//   to { transform: translate3d(-100%,0,0) }
+// }
 

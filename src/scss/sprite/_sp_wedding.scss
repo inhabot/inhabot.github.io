@@ -1,7 +1,7 @@
 // Sprites Map
 $sp_wedding: (
 	name: 'sp_wedding',
-	width: 330px,
+	width: 500px,
 	height: 330px,
 	image: '../img/sp_wedding.png',
 	sprites: (
@@ -19,6 +19,24 @@ $sp_wedding: (
 		),
 		emoji3: (
 			offset-x: 0px,
+			offset-y: -170px,
+			width: 160px,
+			height: 160px,
+		),
+		emoji4: (
+			offset-x: -170px,
+			offset-y: -170px,
+			width: 160px,
+			height: 160px,
+		),
+		emoji5: (
+			offset-x: -340px,
+			offset-y: 0px,
+			width: 160px,
+			height: 160px,
+		),
+		emoji6: (
+			offset-x: -340px,
 			offset-y: -170px,
 			width: 160px,
 			height: 160px,

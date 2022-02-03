@@ -160,6 +160,13 @@ html, body, .wrap {
 	width: 100%;
 	overflow: hidden;
 	text-align: center;
+	min-height: 496px;
+}
+
+@media (min-width: 1024px) {
+	.layout {
+		min-height: 650px;
+	}
 }
 
 /* leaf animations */
@@ -175,7 +182,7 @@ html, body, .wrap {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	margin: 0 auto 0;
+	margin: 0 auto;
 	position: relative;
 	z-index: 0;
 }
@@ -202,6 +209,7 @@ html, body, .wrap {
 	width: 100%;
 	font-size: 18px;
 	padding-top: 200px;
+	margin-top: -30px;
 	background: url(../img/main.png) no-repeat 50% 0;
 	background-size: auto 200px;
 }
@@ -223,16 +231,6 @@ html, body, .wrap {
 	}
 }
 
-.spot .center .text .time {
-	font-weight: 600;
-	margin-bottom: 2px;
-}
-
-.spot .center .text .map {
-	font-weight: 600;
-	letter-spacing: -1.5px;
-}
-
 .spot .center .text .mySwiper3 {
 	position: absolute;
 	left: 50%;
@@ -250,8 +248,8 @@ html, body, .wrap {
 
 .spot .center .text .mySwiper3 .swiper-slide.slide-1 {
 	background-image: url(../img/sp_wedding.png);
-	-webkit-background-size: 74px 74px;
-	background-size: 74px 74px;
+	-webkit-background-size: 112px 74px;
+	background-size: 112px 74px;
 	background-position: 0px 0px;
 	width: 36px;
 	height: 36px;
@@ -259,8 +257,8 @@ html, body, .wrap {
 
 .spot .center .text .mySwiper3 .swiper-slide.slide-2 {
 	background-image: url(../img/sp_wedding.png);
-	-webkit-background-size: 74px 74px;
-	background-size: 74px 74px;
+	-webkit-background-size: 112px 74px;
+	background-size: 112px 74px;
 	background-position: -38px 0px;
 	width: 36px;
 	height: 36px;
@@ -268,9 +266,36 @@ html, body, .wrap {
 
 .spot .center .text .mySwiper3 .swiper-slide.slide-3 {
 	background-image: url(../img/sp_wedding.png);
-	-webkit-background-size: 74px 74px;
-	background-size: 74px 74px;
+	-webkit-background-size: 112px 74px;
+	background-size: 112px 74px;
 	background-position: 0px -38px;
+	width: 36px;
+	height: 36px;
+}
+
+.spot .center .text .mySwiper3 .swiper-slide.slide-4 {
+	background-image: url(../img/sp_wedding.png);
+	-webkit-background-size: 112px 74px;
+	background-size: 112px 74px;
+	background-position: -38px -38px;
+	width: 36px;
+	height: 36px;
+}
+
+.spot .center .text .mySwiper3 .swiper-slide.slide-5 {
+	background-image: url(../img/sp_wedding.png);
+	-webkit-background-size: 112px 74px;
+	background-size: 112px 74px;
+	background-position: -76px 0px;
+	width: 36px;
+	height: 36px;
+}
+
+.spot .center .text .mySwiper3 .swiper-slide.slide-6 {
+	background-image: url(../img/sp_wedding.png);
+	-webkit-background-size: 112px 74px;
+	background-size: 112px 74px;
+	background-position: -76px -38px;
 	width: 36px;
 	height: 36px;
 }
@@ -326,22 +351,49 @@ html, body, .wrap {
 	}
 }
 
+.spot .spot-bottom {
+	position: absolute;
+	bottom: 60px;
+}
+
+.spot .spot-bottom .time {
+	font-weight: 600;
+	margin-bottom: 2px;
+	font-size: 16px;
+}
+
+.spot .spot-bottom .map {
+	font-weight: 600;
+	letter-spacing: -1.5px;
+	font-size: 16px;
+}
+
+@media (min-width: 1024px) {
+	.spot .spot-bottom {
+		bottom: 80px;
+	}
+	.spot .spot-bottom .time, .spot .spot-bottom .map {
+		font-size: 20px;
+	}
+}
+
 .spot .a-top2 {
 	opacity: 1;
 	display: block;
 	position: absolute;
 	left: 50%;
 	margin-left: -25px;
-	bottom: 20px;
+	bottom: -48px;
 	width: 50px;
 	height: 50px;
 }
 
 @media (min-width: 1024px) {
 	.spot .a-top2 {
-		width: 100px;
-		height: 100px;
-		margin-left: -50px;
+		width: 60px;
+		height: 60px;
+		margin-left: -30px;
+		bottom: -65px;
 	}
 }
 
@@ -367,8 +419,8 @@ html, body, .wrap {
 
 @media (min-width: 1024px) {
 	.spot .a-top2 .arrow {
-		width: 20px;
-		height: 20px;
+		width: 16px;
+		height: 16px;
 		border-width: 0px 0px 3px 3px;
 	}
 }
@@ -550,42 +602,28 @@ html, body, .wrap {
 	font-size: calc(8vw);
 	display: flex;
 	align-items: center;
-	will-change: transform;
 	width: 100%;
-	background-color: black;
+	border: 1px solid black;
+	border-width: 1px 0 1px 0;
+	position: relative;
+	height: 8.5vw;
 }
 
-.marquee_box {
-	will-change: transform;
-	animation: marquee 10s linear infinite;
-	font-weight: 900;
-	padding: 8px 20px 5px;
+@media (min-width: 1024px) {
+	.marquee_wrap {
+		height: 8vw;
+	}
 }
 
 .marquee_text {
+	top: 50%;
+	transform: translateY(-50%);
 	line-height: 1.2rem;
 	font-family: 'Montserrat';
-}
-
-.box1 {
-	background: black;
-	width: 100vw;
+	position: absolute;
 	color: #fff;
-}
-
-.box2 {
-	background: black;
-	width: 100vw;
-	color: #fff;
-}
-
-@keyframes marquee {
-	from {
-		transform: translateZ(0);
-	}
-	to {
-		transform: translate3d(-100%, 0, 0);
-	}
+	text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+	font-weight: 900;
 }
 
 /*# sourceMappingURL=blog.css.map */
