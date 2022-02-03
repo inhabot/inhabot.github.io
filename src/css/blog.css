@@ -223,69 +223,125 @@ html, body, .wrap {
 	}
 }
 
-.spot .center .text .bold {
-	font-weight: 900;
-}
-
 .spot .center .text .time {
-	font-weight: 900;
-	margin-bottom: 6px;
+	font-weight: 600;
+	margin-bottom: 2px;
 }
 
-.spot h1 {
+.spot .center .text .map {
+	font-weight: 600;
+	letter-spacing: -1.5px;
+}
+
+.spot .center .text .mySwiper3 {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: 36px;
+	height: 36px;
+	overflow: hidden;
+}
+
+.spot .center .text .mySwiper3 .swiper-wrapper, .spot .center .text .mySwiper3 .swiper-slide {
+	width: 36px;
+	height: 36px;
+}
+
+.spot .center .text .mySwiper3 .swiper-slide.slide-1 {
+	background-image: url(../img/sp_wedding.png);
+	-webkit-background-size: 74px 74px;
+	background-size: 74px 74px;
+	background-position: 0px 0px;
+	width: 36px;
+	height: 36px;
+}
+
+.spot .center .text .mySwiper3 .swiper-slide.slide-2 {
+	background-image: url(../img/sp_wedding.png);
+	-webkit-background-size: 74px 74px;
+	background-size: 74px 74px;
+	background-position: -38px 0px;
+	width: 36px;
+	height: 36px;
+}
+
+.spot .center .text .mySwiper3 .swiper-slide.slide-3 {
+	background-image: url(../img/sp_wedding.png);
+	-webkit-background-size: 74px 74px;
+	background-size: 74px 74px;
+	background-position: 0px -38px;
+	width: 36px;
+	height: 36px;
+}
+
+.spot .name-box {
 	width: 100%;
 	max-width: 240px;
 	margin: 0 auto;
-	margin-bottom: 50px;
+	position: relative;
+	height: 150px;
+	margin-top: -20px;
+}
+
+.spot .name-box img {
+	width: 100%;
 }
 
 @media (min-width: 1024px) {
-	.spot h1 {
+	.spot .name-box {
 		max-width: 380px;
 	}
 }
 
 @media (max-width: 320px) {
-	.spot h1 {
+	.spot .name-box {
 		max-width: 170px;
 		margin-bottom: 32px;
 	}
 }
 
-.spot h1 img {
-	width: 100%;
+.spot .name-box .name-l {
+	position: absolute;
+	left: 0;
+	width: 100px;
 }
 
-.spot .spot-box {
-	overflow: hidden;
-	width: 100%;
-	display: -webkit-box;
-	display: -ms-flexbox;
-	display: flex;
-	-webkit-box-pack: center;
-	-ms-flex-pack: center;
-	justify-content: center;
-	opacity: 1;
+@media (min-width: 1024px) {
+	.spot .name-box .name-l {
+		width: 140px;
+	}
+}
+
+.spot .name-box .name-k {
 	position: absolute;
-	top: 0;
-	left: 0;
 	right: 0;
 	bottom: 0;
+	width: 164px;
+}
+
+@media (min-width: 1024px) {
+	.spot .name-box .name-k {
+		width: 230px;
+	}
 }
 
 .spot .a-top2 {
 	opacity: 1;
 	display: block;
-	position: relative;
+	position: absolute;
+	left: 50%;
+	margin-left: -25px;
+	bottom: 20px;
 	width: 50px;
 	height: 50px;
-	margin: 0 auto;
 }
 
 @media (min-width: 1024px) {
 	.spot .a-top2 {
 		width: 100px;
 		height: 100px;
+		margin-left: -50px;
 	}
 }
 

@@ -74,28 +74,6 @@ html,body,.wrap {
             width: 280px;
             min-width: 280px;
         }
-        // &::before,&::after {
-        //     content: '';
-        //     position: absolute;
-        //     background-position: 0 30px;
-        //     height: 100%;
-        //     background-repeat: no-repeat;
-        //     background-size: 160px auto;
-        //     width: 160px;
-        //     z-index: -1;
-        //     @include pc {
-        //         background-size: 340px auto;
-        //         width: 340px;
-        //     }
-        // }
-        // &::before {
-        //     left: 50px;
-        //     background-image: url(../img/spot-l.png);
-        // }
-        // &::after {
-        //     right: 50px;
-        //     background-image: url(../img/spot-k.png);
-        // }
         .text {
             position: absolute;
             top: 50%;
@@ -118,63 +96,86 @@ html,body,.wrap {
                 background-size: auto 140px;
             }
             .bold {
-                font-weight: 900;
+                // font-weight: 900;
             }
             .time {
-                font-weight: 900;
-                margin-bottom: 6px;
+                font-weight: 600;
+                margin-bottom: 2px;
             }
-            // a {
-            //     display: block;
-            //     width: 50px;
-            //     height: 50px;
-            // }
+            .map {
+              font-weight: 600;
+              letter-spacing: -1.5px;
+            }
+            .mySwiper3 {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              transform: translate(-50%,-50%);
+              width: 36px;
+              height: 36px;
+              overflow: hidden;
+              .swiper-wrapper,.swiper-slide {
+                width: 36px;
+                height: 36px;
+              }
+              .swiper-slide{
+                  @for $i from 1 to 4 {
+                    &.slide-#{$i} {
+                      @include get-sprite(emoji#{$i}, $sp_wedding,(extend:false, get-image:true));
+                    }
+                  }
+              }
+            }
         }
     }
-    h1 {
-        width:100%;
-        max-width: 240px;
-        margin: 0 auto;
-        @include pc {
-            max-width: 380px;
-        }
-        @include mobile(320) {
-            max-width: 170px;
-            margin-bottom: 32px;
-        }
-        img {
-            width: 100%;
-        }
-        margin-bottom: 50px;
-    }
-    .spot-box{
-        overflow: hidden;
+    .name-box {
+      width:100%;
+      max-width: 240px;
+      margin: 0 auto;
+      position: relative;
+      height: 150px;
+      margin-top: -20px;
+      img {
         width: 100%;
-        display: -webkit-box;
-        display: -ms-flexbox;
-        display: flex;
-        -webkit-box-pack: center;
-        -ms-flex-pack:center;
-        justify-content: center;
-        opacity: 1;
+      }
+      @include pc {
+          max-width: 380px;
+      }
+      @include mobile(320) {
+          max-width: 170px;
+          margin-bottom: 32px;
+      }
+      .name-l {
         position: absolute;
-        top: 0;
         left: 0;
+        width: 100px;
+        @include pc {
+          width: 140px;
+        }
+      }
+      .name-k {
+        position: absolute;
         right: 0;
         bottom: 0;
-        // background: url(../img/spot.png) no-repeat 50% 50%;
-        // background-size: 320px auto;
+        width: 164px;
+        @include pc {
+          width: 230px;
+        }
+      }
     }
     .a-top2 {
         opacity: 1;
         display: block;
-        position: relative;
+        position: absolute;
+        left: 50%;
+        margin-left: -25px;
+        bottom: 20px;
         width: 50px;
         height: 50px;
-        margin: 0 auto;
         @include pc {
           width: 100px;
           height: 100px;
+          margin-left: -50px;
         }
         .arrow {
           border: 1px solid #000;  
@@ -216,7 +217,6 @@ html,body,.wrap {
         }
     }
 }
-
 
 
 

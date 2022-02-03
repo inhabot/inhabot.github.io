@@ -1,21 +1,27 @@
 // Sprites Map
 $sp_wedding: (
 	name: 'sp_wedding',
-	width: 2001px,
-	height: 1667px,
+	width: 330px,
+	height: 330px,
 	image: '../img/sp_wedding.png',
 	sprites: (
-	spot_kim: (
-			offset-x: -1027px,
-			offset-y: 0px,
-			width: 974px,
-			height: 1667px,
-		),
-		spot_lee: (
+	emoji1: (
 			offset-x: 0px,
 			offset-y: 0px,
-			width: 1017px,
-			height: 1667px,
+			width: 160px,
+			height: 160px,
+		),
+		emoji2: (
+			offset-x: -170px,
+			offset-y: 0px,
+			width: 160px,
+			height: 160px,
+		),
+		emoji3: (
+			offset-x: 0px,
+			offset-y: -170px,
+			width: 160px,
+			height: 160px,
 		),
 	)
 );
