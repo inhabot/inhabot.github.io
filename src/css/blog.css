@@ -303,7 +303,7 @@ html, body, .wrap {
 .spot .name-box {
 	width: 100%;
 	max-width: 240px;
-	margin: 0 auto;
+	margin: -18px auto 0;
 	position: relative;
 	height: 150px;
 }
@@ -314,6 +314,7 @@ html, body, .wrap {
 
 @media (min-width: 1024px) {
 	.spot .name-box {
+		margin-top: -24px;
 		max-width: 380px;
 	}
 }

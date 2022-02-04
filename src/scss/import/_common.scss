@@ -125,13 +125,14 @@ html,body,.wrap {
     .name-box {
       width:100%;
       max-width: 240px;
-      margin: 0 auto;
+      margin: -18px auto 0;
       position: relative;
       height: 150px;
       img {
         width: 100%;
       }
       @include pc {
+          margin-top: -24px;
           max-width: 380px;
       }
       @include mobile(320) {
