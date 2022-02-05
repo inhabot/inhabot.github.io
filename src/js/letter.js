@@ -4,7 +4,7 @@ $(document).ready(function(){
     if (checkPublished()) {
     }
     list();
-    $('.btn').attr('onclick','post()')
+    $('.letter-btn').attr('onclick','post()')
 });
 
 function post() {
