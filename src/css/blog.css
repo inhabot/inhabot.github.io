@@ -626,4 +626,13 @@ html, body, .wrap {
 	font-weight: 900;
 }
 
+.letter-box {
+	position: relative;
+}
+
+.letter-box img {
+	width: 20px;
+	height: 20px;
+}
+
 /*# sourceMappingURL=blog.css.map */
