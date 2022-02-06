@@ -63,7 +63,7 @@
               <i></i>
             </div>
         </div>
-        <div id="top2" style="height: 1000px;">
+        <div id="top2" style="height: 200px;">
           <div class="marquee_wrap">
             <div class="marquee_box">
               <em class="marquee_text">HAPPY WEDDING! HAPPY WEDDING! HAPPY WEDDING! HAPPY WEDDING! </em>
@@ -85,12 +85,11 @@
             </div>
             <div class="letter-btn">바구니에 덕담 남기기</div>
         </div>
-          <input id="myInput" value="Hello, World!" readonly>
-          <br><br><br><br>
-<button onclick="copy_to_clipboard()">클립보드로 복사</button>
+          
         <!-- <a href="#top" class="a-top">위로각가가가ㅏ</a> -->
         </div>
-        <div>
+        <div class="inner sec-photo">
+          <h2 class="font-mont">Photos</h2>
           <div class="swiper mySwiper2">
             <div class="swiper-wrapper">
               <div class="swiper-slide">
@@ -141,8 +140,14 @@
                   <img src="https://swiperjs.com/demos/images/nature-4.jpg">
                 </div>
               </div>
-            <span class="swiper-notification" aria-live="assertive" aria-atomic="true"></span></div>
+            <span class="swiper-notification" aria-live="assertive" aria-atomic="true"></span>
           </div>
+          </div>
+        </div>
+        <div>
+          <input id="myInput" value="Hello, World!" readonly>
+          <br><br><br><br>
+<button onclick="copy_to_clipboard()">클립보드로 복사</button>
         </div>
       </div>
     </div>
@@ -225,16 +230,17 @@ var height = document.querySelector(".spot").scrollHeight;
       </script>
        <script>
         var swiper = new Swiper(".mySwiper", {
-          spaceBetween: 0,
+          spaceBetween: 5,
           noSwiping: 'true',
-          slidesPerView: '4.655',
-          mousewheel: {
-              },
-          breakpoints:{
-            768: {
-              slidesPerView: '4.46',
-            },
-          }
+          // centeredSlides : true,
+          slidesPerView: 'auto',
+          // mousewheel: {
+          //     },
+          // breakpoints:{
+          //   768: {
+          //     slidesPerView: '4.46',
+          //   },
+          // }
         });
         swiper.init();
         var swiper2 = new Swiper(".mySwiper2", {

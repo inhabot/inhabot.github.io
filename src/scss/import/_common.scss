@@ -386,7 +386,9 @@ html,body,.wrap {
     height: 8vw;
   }
 }
-
+.font-mont {
+  font-family: 'Montserrat' !important;
+}
 // .marquee_box { will-change: transform; animation: marquee 10s linear infinite; font-weight: 900; padding: 8px 20px 5px; }
 .marquee_text {
   top: 50%;
@@ -418,3 +420,87 @@ html,body,.wrap {
   }
 }
 
+
+.inner {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 50px 10px;
+}
+.sec-photo {
+  border-top: 1px solid #000;
+  h2 {
+    padding-bottom: 5px;
+  }
+}
+.mySwiper2 {
+  // width: 375px;
+  // height: 375px;
+  width: 100%;
+  overflow: hidden;
+  .swiper-wrapper {
+    width: 100%;
+    height: auto;
+  }
+  .swiper-slide {
+    width: 100%;
+    height: auto;
+    img {
+      width: 100%;
+      height: auto;
+    }
+  }
+}
+.mySwiper {
+  margin-top: 5px;
+  .swiper-wrapper {
+    transform: none !important;
+    width: 100%;
+    @include flex-box;
+    justify-content: space-between;
+    // flex: 0 0 10%;
+    .swiper-slide {
+      flex: 1 1 auto;
+      // width: 100% !important;
+      // width: 50px !important;
+      // height: 50px !important;
+      img {
+        width: 100%;
+        height: auto;
+      }
+      &:last-child {
+        margin-right: 0 !important;
+        &::before {
+          top: -20%;
+          left: -50% !important;
+          bottom: -50%;
+          right: -20% !important;
+          transform: scaleX(-1);
+        }
+      }
+      &.swiper-slide-thumb-active {
+        position: relative;
+        &::before {
+          content: '';
+          position: absolute;
+          top: -20%;
+          right: -50%;
+          bottom: -50%;
+          left: -20%;
+          background: url(../img/emoji-magni.png) no-repeat 0 0;
+          background-size: cover;
+          z-index: 10;
+        }
+        // &::after {
+        //   content: '';
+        //   position: absolute;
+        //   top: 0;
+        //   right: 0;
+        //   bottom: -5px;
+        //   left: 0;
+        //   border-bottom: 5px solid rgb(18, 104, 202);
+        // }
+      }
+    }
+  }
+}

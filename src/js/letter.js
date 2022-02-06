@@ -8,7 +8,7 @@ $(document).ready(function(){
 });
 
 function post() {
-    let msg = prompt('방명록을 남겨주세요!')
+    let msg = prompt('방명록을 남겨주세요! ✉️')
     if (msg === null) {
         return
     }
@@ -18,7 +18,7 @@ function post() {
         url: "https://spartacodingclub.kr/api/free_newyear_2022/write",
         data: {'mycode':mycode, 'msg':msg},
         success: function (response) {
-            alert('방명록을 남겨주셔서 감사합니다!');
+            alert(' ✉️방명록을 작성해 주셔서 감사합니다! ✉️ ');
             window.location.reload();
         }
     })

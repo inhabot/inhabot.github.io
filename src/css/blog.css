@@ -615,6 +615,10 @@ html, body, .wrap {
 	}
 }
 
+.font-mont {
+	font-family: 'Montserrat' !important;
+}
+
 .marquee_text {
 	top: 50%;
 	transform: translateY(-50%);
@@ -633,6 +637,93 @@ html, body, .wrap {
 .letter-box img {
 	width: 20px;
 	height: 20px;
+}
+
+.inner {
+	width: 100%;
+	max-width: 600px;
+	margin: 0 auto;
+	padding: 50px 10px;
+}
+
+.sec-photo {
+	border-top: 1px solid #000;
+}
+
+.sec-photo h2 {
+	padding-bottom: 5px;
+}
+
+.mySwiper2 {
+	width: 100%;
+	overflow: hidden;
+}
+
+.mySwiper2 .swiper-wrapper {
+	width: 100%;
+	height: auto;
+}
+
+.mySwiper2 .swiper-slide {
+	width: 100%;
+	height: auto;
+}
+
+.mySwiper2 .swiper-slide img {
+	width: 100%;
+	height: auto;
+}
+
+.mySwiper {
+	margin-top: 5px;
+}
+
+.mySwiper .swiper-wrapper {
+	transform: none !important;
+	width: 100%;
+	display: -ms-flexbox;
+	display: -webkit-flex;
+	display: -moz-box;
+	display: -webkit-box;
+	display: flex;
+	justify-content: space-between;
+}
+
+.mySwiper .swiper-wrapper .swiper-slide {
+	flex: 1 1 auto;
+}
+
+.mySwiper .swiper-wrapper .swiper-slide img {
+	width: 100%;
+	height: auto;
+}
+
+.mySwiper .swiper-wrapper .swiper-slide:last-child {
+	margin-right: 0 !important;
+}
+
+.mySwiper .swiper-wrapper .swiper-slide:last-child::before {
+	top: -20%;
+	left: -50% !important;
+	bottom: -50%;
+	right: -20% !important;
+	transform: scaleX(-1);
+}
+
+.mySwiper .swiper-wrapper .swiper-slide.swiper-slide-thumb-active {
+	position: relative;
+}
+
+.mySwiper .swiper-wrapper .swiper-slide.swiper-slide-thumb-active::before {
+	content: '';
+	position: absolute;
+	top: -20%;
+	right: -50%;
+	bottom: -50%;
+	left: -20%;
+	background: url(../img/emoji-magni.png) no-repeat 0 0;
+	background-size: cover;
+	z-index: 10;
 }
 
 /*# sourceMappingURL=blog.css.map */
