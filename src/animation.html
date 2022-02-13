@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="stylesheet" href="css/blog.css">
+    <link rel="stylesheet" href="css/card.css">
+    <link rel="stylesheet" href="css/swiper.css">
+    <title>2022 인사카드 보내기</title>
+
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="flex-box">
+        <div class="hand-box">
+          <div class="hand hand-first"></div>
+          <div class="hand hand-second"></div>
+        </div>
+        <p>밀어서 가격비교</p>
+      </div>
+    </div>
+    <script src="js/query.js"></script>
+    <script src="js/swiper.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.6.0/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.6.0/ScrollTrigger.min.js"></script>
+    <script src="js/letter.js"></script>
+    <script>
+        let mycode = '1f3870be274f6c49b3e31a0c672895dddsdd';
+    </script>
+    <script>
+ // Cache selectors
+// var lastId,
+//  topMenu = $("body"),
+//  topMenuHeight = 0,
+//  // All list items
+//  menuItems = topMenu.find("a"),
+//  // Anchors corresponding to menu items
+//  scrollItems = menuItems.map(function(){
+//    var item = $($(this).attr("href"));
+//     if (item.length) { return item; }
+//  });
+
+// Bind click handler to menu items
+// so we can get a fancy scroll animation
+var height = document.querySelector(".spot").scrollHeight;
+  $(document).ready(function(){
+    $(".a-top2").click(function(){
+      $('body').animate({
+        scrollTop: height
+      },1200);
+    return false;
+    });
+    $(".a-top").click(function(){
+      $('body').animate({
+        scrollTop: 0
+      },1200);
+    return false;
+    });
+   
+  });
+
+
+// Bind to scroll
+
+    </script>
+
+    <script>
+      gsap.registerPlugin(ScrollTrigger);
+      gsap.fromTo(".text,.a-top2",{opacity:1} ,{
+        scrollTrigger: {
+          // trigger: "#top2",
+          markers: true,
+          // start: "top center",
+          scrub: .5,
+        },
+        opacity: -2, duration: .5,
+      });
+      gsap.fromTo(".marquee_text",{left:0} ,{
+        scrollTrigger: {
+          // trigger: "#top2",
+          markers: true,
+          // start: "top center",
+          scrub: 2,
+        },
+        left: -800, duration: .5,
+      });
+    </script>
+    <script>
+      function copy_to_clipboard() {
+        var copyText = document.getElementById("myInput");
+        copyText.select();
+        document.execCommand("Copy");
+        console.log('Copied!');
+      }
+
+
+   
+      </script>
+       <script>
+        var swiper = new Swiper(".mySwiper", {
+          spaceBetween: 5,
+          noSwiping: 'true',
+          // centeredSlides : true,
+          slidesPerView: 'auto',
+          // mousewheel: {
+          //     },
+          // breakpoints:{
+          //   768: {
+          //     slidesPerView: '4.46',
+          //   },
+          // }
+        });
+        swiper.init();
+        var swiper2 = new Swiper(".mySwiper2", {
+          spaceBetween: 0,
+          centeredSlides : true,
+          slidesPerView: 1,
+          thumbs: {
+            swiper: swiper
+          },
+        });
+        var swiper3 = new Swiper(".mySwiper3", {
+          direction: 'vertical',
+          spaceBetween: 1,
+          centeredSlides : true,
+          slidesPerView: 1,
+          autoplay: {
+            delay: 1800,
+            disableOnInteraction: false,
+            reverseDirection: true,
+          },
+          loop: 'infinity',
+          mousewheel: {},
+        });
+      </script>
+  </body>
+
+
+  </html>

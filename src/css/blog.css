@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Gothic+A1:wght@100;200;300;400;500;600;700;800;900&family=Montserrat:wght@100;200;300;400;500;600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Gothic+A1:wght@100;200;300;400;500;600;700;800;900&family=Gowun+Batang:wght@400;700&family=Montserrat:wght@100;200;300;400;500;600;700;800;900&display=swap");
 * {
 	box-sizing: border-box;
 	-webkit-box-sizing: border-box;
@@ -93,65 +93,19 @@ html, body {
 	clip: rect(0px, 0px, 0px, 0px);
 }
 
-/* NunumSquare */
-@font-face {
-	font-family: 'NanumSquare';
-	font-weight: 200;
-	src: url(../font/NanumSquareLight.eot), url(../font/NanumSquareLight.eot?#iefix) format("embedded-opentype"), url(../font/NanumSquareLight.woff2) format("woff2"), url(../font/NanumSquareLight.woff) format("woff"), url(../font/NanumSquareLight.ttf) format("truetype");
-}
-
-@font-face {
-	font-family: 'NanumSquare';
-	font-weight: 400;
-	src: url(../font/NanumSquare_seR.eot), url(../font/NanumSquare_seR.eot?#iefix) format("embedded-opentype"), url(../font/NanumSquare_seR.woff2) format("woff2"), url(../font/NanumSquare_seR.woff) format("woff"), url(../font/NanumSquare_seR.ttf) format("truetype");
-}
-
-@font-face {
-	font-family: 'NanumSquare';
-	font-weight: 700;
-	src: url(../font/NanumSquare_seB.eot), url(../font/NanumSquare_seB.eot?#iefix) format("embedded-opentype"), url(../font/NanumSquare_seB.woff2) format("woff2"), url(../font/NanumSquare_seB.woff) format("woff"), url(../font/NanumSquare_seB.ttf) format("truetype");
-}
-
-@font-face {
-	font-family: 'NanumSquare';
-	font-weight: 900;
-	src: url(../font/NanumSquareEB.eot), url(../font/NanumSquareEB.eot?#iefix) format("embedded-opentype"), url(../font/NanumSquareEB.woff2) format("woff2"), url(../font/NanumSquareEB.woff) format("woff"), url(../font/NanumSquareEB.ttf) format("truetype");
-}
-
 /* border-radius */
-path[class*='cls'] {
-	fill: #FFFFFF;
-	stroke: #000000;
-	stroke-miterlimit: 10;
-	stroke-dasharray: 1000;
-	stroke-dashoffset: 1000;
-	animation: dash 5s ease-in-out;
-	stroke-linejoin: round;
-	stroke-width: 1;
-	stroke-linecap: round;
-	animation-fill-mode: forwards;
-}
-
-@keyframes dash {
-	from {
-		stroke-dashoffset: 1000;
-	}
-	to {
-		stroke-dashoffset: 0;
-	}
-}
-
-@keyframes dash2 {
-	from {
-		stroke-dashoffset: -1000;
-	}
-	to {
-		stroke-dashoffset: 0;
-	}
-}
-
 html, body, .wrap {
 	height: 100%;
+}
+
+.btn {
+	margin-top: -4px;
+	font-size: 16px;
+	line-height: 24px;
+	border-radius: 4px;
+	padding: 2px 6px 0;
+	background-color: #222;
+	color: #fff;
 }
 
 .layout {
@@ -648,6 +602,8 @@ html, body, .wrap {
 
 .sec-photo {
 	border-top: 1px solid #000;
+	padding-top: 80px;
+	padding-bottom: 80px;
 }
 
 .sec-photo h2 {
@@ -655,6 +611,7 @@ html, body, .wrap {
 }
 
 .mySwiper2 {
+	height: 100%;
 	width: 100%;
 	overflow: hidden;
 }
@@ -691,6 +648,7 @@ html, body, .wrap {
 
 .mySwiper .swiper-wrapper .swiper-slide {
 	flex: 1 1 auto;
+	cursor: pointer;
 }
 
 .mySwiper .swiper-wrapper .swiper-slide img {
@@ -702,28 +660,143 @@ html, body, .wrap {
 	margin-right: 0 !important;
 }
 
-.mySwiper .swiper-wrapper .swiper-slide:last-child::before {
-	top: -20%;
-	left: -50% !important;
-	bottom: -50%;
-	right: -20% !important;
-	transform: scaleX(-1);
-}
-
 .mySwiper .swiper-wrapper .swiper-slide.swiper-slide-thumb-active {
 	position: relative;
 }
 
-.mySwiper .swiper-wrapper .swiper-slide.swiper-slide-thumb-active::before {
+.mySwiper .swiper-wrapper .swiper-slide.swiper-slide-thumb-active::after {
 	content: '';
 	position: absolute;
-	top: -20%;
-	right: -50%;
-	bottom: -50%;
-	left: -20%;
-	background: url(../img/emoji-magni.png) no-repeat 0 0;
-	background-size: cover;
-	z-index: 10;
+	top: 0;
+	right: 0;
+	bottom: -8px;
+	left: 0;
+	border-bottom: 8px solid #a4b8df;
+}
+
+.sec-p {
+	padding-top: 20vw;
+	padding-bottom: 11.5vw;
+	text-align: center;
+}
+
+.sec-p .sec-pp {
+	font-size: 16px;
+	line-height: 32px;
+	padding: 100px 0 40px;
+}
+
+@media (min-width: 1024px) {
+	.sec-p .sec-pp {
+		padding: 40px 0;
+	}
+}
+
+.sec-p .name-box {
+	font-family: 'Gowun Batang', serif !important;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.sec-p .name-box p {
+	display: inline-block;
+	padding-right: 120px;
+	line-height: 50px;
+}
+
+.sec-p .name-box.sign-l {
+	margin-top: 20px;
+}
+
+.sec-p .name-box.sign-l p {
+	background: url(../img/sign_l.png) no-repeat 100% 50%;
+	background-size: 110px auto;
+}
+
+.sec-p .name-box.sign-k {
+	padding-bottom: 100px;
+}
+
+.sec-p .name-box.sign-k p {
+	background: url(../img/sign_k.png) no-repeat 100% 50%;
+	background-size: 110px auto;
+}
+
+.toast {
+	position: fixed;
+	display: inline-block;
+	font-size: 16px;
+	font-weight: bold;
+	display: none;
+	color: #fff;
+	line-height: 40px;
+	padding: 3px 24px 0;
+	border-radius: 21px;
+	left: 50%;
+	text-align: center;
+	transform: translateX(-50%);
+	background-color: rgba(0, 0, 0, 0.6);
+}
+
+.sec-map {
+	border-top: 1px solid #000;
+	padding-top: 80px;
+	padding-bottom: 80px;
+}
+
+.sec-map .map-box p {
+	font-size: 15px;
+	letter-spacing: 1.2px;
+	margin-bottom: 4px;
+}
+
+.sec-map .map-box #place {
+	cursor: text;
+	width: 150px;
+}
+
+.sec-map .map-box strong {
+	display: block;
+	font-size: 25px;
+	font-weight: bold;
+	margin-bottom: 8px;
+	margin-left: -2px;
+}
+
+.sec-map .address {
+	display: flex;
+	align-items: center;
+	margin-bottom: 40px;
+}
+
+.sec-map .map {
+	width: 100%;
+}
+
+.sec-map .map img {
+	width: 100%;
+	height: auto;
+}
+
+.sec-info {
+	border-top: 1px solid #000;
+}
+
+.sec-info h2 {
+	margin-bottom: 20px;
+}
+
+.sec-info .b-t {
+	font-size: 13px;
+	color: #888;
+	letter-spacing: 0.5px;
+	margin-bottom: 8px;
+}
+
+.sec-info .b-box {
+	margin-bottom: 40px;
 }
 
 /*# sourceMappingURL=blog.css.map */
