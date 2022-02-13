@@ -6,13 +6,9 @@
     <link rel="stylesheet" href="css/blog.css">
     <link rel="stylesheet" href="css/card.css">
     <link rel="stylesheet" href="css/swiper.css">
-    <title>2022 인사카드 보내기</title>
-
+    <title>이인하·김유현 결혼합니다</title>
   </head>
   <body>
-    <audio class="pop" src="https://freesound.org/data/previews/244/244654_3624044-lq.mp3"></audio>
-<audio class="pop" src="https://freesound.org/data/previews/411/411642_5121236-lq.mp3"></audio>
-<audio class="pop" src="https://freesound.org/data/previews/245/245645_1038806-lq.mp3"></audio>
     <div class="wrap">
       <div class="spot layout" id="top">
           <div class="spot-box"></div>
@@ -38,7 +34,7 @@
               </div>
             </div>
             <div class="spot-bottom">
-              <p class="time">4월 30일 12시 원주 빌라드 아모르</p>
+              <p class="time">2022.04.30 <span class="lite">SAT</span> 12:00</p>
               <p class="map">
                 <!-- <a href="https://m.place.naver.com/place/1984016486/location?subtab=location" target="_blank" class="button">지도 보기</a> -->
               </p>
@@ -92,8 +88,7 @@
           
             <br><br>
             찬바람이 부는 겨울이 되며 코로나가 재확산되었지만,<br>
-            3살 연상의 신부가 더 이상 기다릴 수 없어 긴 고민 끝에 <br>
-결혼식을 예정대로 진행하기로 했습니다.<br>
+            고민 끝에 결혼식을 예정대로 진행하기로 했습니다.<br>
             무리해서 참석해주시지 않으셔도 괜찮습니다.<br>
             축하의 따뜻한 마음만으로도<br> 저희에겐 덧없는 기쁨이 될것입니다.<br>
             <br>
@@ -108,7 +103,7 @@
           
         </div>
         <div class="inner sec-photo">
-          <h2 class="font-mont">Photos</h2>
+          <h2 class="font-mont">Gallery</h2>
           <div class="swiper mySwiper2">
             <div class="swiper-wrapper">
               <div class="swiper-slide">
@@ -140,7 +135,7 @@
                 <div class="swiper-slide">
                   <img src="../src/img/p-01.jpg">
                 </div>
-                <div class="swiper-slide">
+                <div class="swiper-slide img-h">
                   <img src="../src/img/p-02.jpg">
                 </div>
                 <div class="swiper-slide">
@@ -155,7 +150,7 @@
                 <div class="swiper-slide">
                   <img src="../src/img/p-06.jpg">
                 </div>
-                <div class="swiper-slide">
+                <div class="swiper-slide img-h">
                   <img src="../src/img/p-07.jpg">
                 </div>
               </div>
@@ -166,15 +161,20 @@
         <div class="inner sec-map">
           <div class="map-box">
             <p>2022년 4월 30일 토요일 낮 12시</p>
-            <strong>원주 빌라드 아모르 : 3층</strong>
+            <strong>원주 빌라드 아모르 <br>: 3층 르블루씨엘</strong>
             <div class="address">
               <input id="place" value="원주시 북원로 2888" readonly>
               <button onclick="copyPlace()" class="btn">주소 복사</button>
             </div>
-            <!-- <a href="https://m.place.naver.com/place/1984016486/location?subtab=location" target="_blank" class="link-naver">네이버지도</a>
-            <a href="http://kko.to/7eN4QRATP" target="_blank" class="link-kakao">카카오맵</a>
-            <a href="https://surl.tmap.co.kr/63b6f5ac" target="_blank" class="link-tmap">티맵</a> -->
-            <div class="map"><img src="img/map.png" alt="map"></div>
+           
+            <div class="map"><img src="img/map.jpg" alt="map">
+              <div class="link-box">
+                <a href="https://m.place.naver.com/place/1984016486/location?subtab=location" target="_blank"
+                  class="link-naver btn">네이버지도</a>
+                <a href="http://kko.to/7eN4QRATP" target="_blank" class="link-kakao btn">카카오맵</a>
+                <a href="https://surl.tmap.co.kr/63b6f5ac" target="_blank" class="link-tmap btn">티맵</a>
+              </div>
+            </div>
           </div>
         </div>
         <div class="inner sec-info">
@@ -194,7 +194,7 @@
         </div>
       </div>
       <div class="toast">복사 되었습니다</div>
-      
+      <div id="kb">sdfsdfsdf</div>
     </div>
     <script src="js/query.js"></script>
     <script src="js/swiper.js"></script>
@@ -291,6 +291,81 @@
           mousewheel: {},
         });
       </script>
+        <script src="https://developers.kakao.com/sdk/js/kakao.js"></script>
+        <script>
+          // SDK를 초기화 합니다. 사용할 앱의 JavaScript 키를 설정해 주세요.
+          Kakao.init('4c199b94451dab5dd3c0b3060fd1abaf');
+  
+          // SDK 초기화 여부를 판단합니다.
+          console.log(Kakao.isInitialized());
+      </script>
+      <script>
+        Kakao.Link.createDefaultButton({
+  container: '#kb',
+  objectType: 'feed',
+  content: {
+    title: '오늘의 디저트',
+    description: '아메리카노, 빵, 케익',
+    imageUrl:
+      'http://mud-kage.kakao.co.kr/dn/NTmhS/btqfEUdFAUf/FjKzkZsnoeE4o19klTOVI1/openlink_640x640s.jpg',
+    link: {
+      mobileWebUrl: 'https://www.inhabot.github.io',
+      androidExecutionParams: 'test',
+    },
+  },
+  itemContent: {
+    profileText: 'Kakao',
+    profileImageUrl: 'http://mud-kage.kakao.co.kr/dn/Q2iNx/btqgeRgV54P/VLdBs9cvyn8BJXB3o7N8UK/kakaolink40_original.png',
+    titleImageUrl: 'http://mud-kage.kakao.co.kr/dn/Q2iNx/btqgeRgV54P/VLdBs9cvyn8BJXB3o7N8UK/kakaolink40_original.png',
+    titleImageText: 'Cheese cake',
+    titleImageCategory: 'Cake',
+    items: [
+      {
+        item: 'Cake1',
+        itemOp: '1000원',
+      },
+      {
+        item: 'Cake2',
+        itemOp: '2000원',
+      },
+      {
+        item: 'Cake3',
+        itemOp: '3000원',
+      },
+      {
+        item: 'Cake4',
+        itemOp: '4000원',
+      },
+      {
+        item: 'Cake5',
+        itemOp: '5000원',
+      },
+    ],
+    sum: 'Total',
+    sumOp: '15000원',
+  },
+  social: {
+    likeCount: 10,
+    commentCount: 20,
+    sharedCount: 30,
+  },
+  buttons: [
+    {
+      title: '웹으로 이동',
+      link: {
+        mobileWebUrl: 'https://www.inhabot.github.io',
+      },
+    },
+    {
+      title: '앱으로 이동',
+      link: {
+        mobileWebUrl: 'https://www.inhabot.github.io',
+      },
+    },
+  ]
+});
+      </script>
+
   </body>
 
 

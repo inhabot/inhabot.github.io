@@ -133,9 +133,13 @@ html,body,.wrap {
       position: absolute;
       bottom: 60px;
       .time {
-        font-weight: 600;
+        font-weight: 800;
         margin-bottom: 2px;
         font-size: 16px;
+        letter-spacing: 1px;
+        .lite {
+          font-weight: 600;
+        }
       }
       .map {
         font-weight: 600;
@@ -420,6 +424,9 @@ html,body,.wrap {
   .swiper-slide {
     width: 100%;
     height: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     img {
       width: 100%;
       height: auto;
@@ -436,24 +443,61 @@ html,body,.wrap {
     .swiper-slide {
       flex: 1 1 auto;
       cursor: pointer;
+      position: relative;
+      height: 50px;
+      overflow: hidden;
+      // background-color: rgb(241, 241, 241);
       img {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%,-50%);
         width: 100%;
         height: auto;
       }
       &:last-child {
         margin-right: 0 !important;
       }
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+      }
       &.swiper-slide-thumb-active {
-        position: relative;
         &::after {
           content: '';
           position: absolute;
           top: 0;
           right: 0;
-          bottom: -8px;
+          bottom: 0;
           left: 0;
-          border-bottom: 8px solid #a4b8df;
+          border-bottom: 4px solid #000000;
         }
+      }
+      &:not(.swiper-slide-thumb-active) {
+        &::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          left: 0;
+          background-color: #fff;
+          z-index: 10;
+          opacity: .5;
+        }
+      }
+      &.img-h {
+        img {
+          height: 100%;
+          width: auto;
+        }
+      }
+      @include pc {
+        height: 70px;
       }
     }
   }
@@ -521,7 +565,7 @@ html,body,.wrap {
     p {
       font-size: 15px;
       letter-spacing: 1.2px;
-      margin-bottom: 4px;
+      margin-bottom: 40px;
     }
     #place {
       cursor: text;
@@ -543,9 +587,20 @@ html,body,.wrap {
   }
   .map {
     width: 100%;
+    position: relative;
     img {
       width: 100%;
       height: auto;
+    }
+    .link-box {
+      position: absolute;
+      bottom: 5px;
+      left: 5px;
+      display: flex;
+      align-items: center;
+      .btn + .btn {
+        margin-left: 5px;
+      }
     }
   }
 }

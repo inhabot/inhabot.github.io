@@ -311,9 +311,14 @@ html, body, .wrap {
 }
 
 .spot .spot-bottom .time {
-	font-weight: 600;
+	font-weight: 800;
 	margin-bottom: 2px;
 	font-size: 16px;
+	letter-spacing: 1px;
+}
+
+.spot .spot-bottom .time .lite {
+	font-weight: 600;
 }
 
 .spot .spot-bottom .map {
@@ -624,6 +629,9 @@ html, body, .wrap {
 .mySwiper2 .swiper-slide {
 	width: 100%;
 	height: auto;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
 }
 
 .mySwiper2 .swiper-slide img {
@@ -649,9 +657,16 @@ html, body, .wrap {
 .mySwiper .swiper-wrapper .swiper-slide {
 	flex: 1 1 auto;
 	cursor: pointer;
+	position: relative;
+	height: 50px;
+	overflow: hidden;
 }
 
 .mySwiper .swiper-wrapper .swiper-slide img {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
 	width: 100%;
 	height: auto;
 }
@@ -660,8 +675,13 @@ html, body, .wrap {
 	margin-right: 0 !important;
 }
 
-.mySwiper .swiper-wrapper .swiper-slide.swiper-slide-thumb-active {
-	position: relative;
+.mySwiper .swiper-wrapper .swiper-slide::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
 }
 
 .mySwiper .swiper-wrapper .swiper-slide.swiper-slide-thumb-active::after {
@@ -669,9 +689,32 @@ html, body, .wrap {
 	position: absolute;
 	top: 0;
 	right: 0;
-	bottom: -8px;
+	bottom: 0;
 	left: 0;
-	border-bottom: 8px solid #a4b8df;
+	border-bottom: 4px solid #000000;
+}
+
+.mySwiper .swiper-wrapper .swiper-slide:not(.swiper-slide-thumb-active)::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	background-color: #fff;
+	z-index: 10;
+	opacity: .5;
+}
+
+.mySwiper .swiper-wrapper .swiper-slide.img-h img {
+	height: 100%;
+	width: auto;
+}
+
+@media (min-width: 1024px) {
+	.mySwiper .swiper-wrapper .swiper-slide {
+		height: 70px;
+	}
 }
 
 .sec-p {
@@ -749,7 +792,7 @@ html, body, .wrap {
 .sec-map .map-box p {
 	font-size: 15px;
 	letter-spacing: 1.2px;
-	margin-bottom: 4px;
+	margin-bottom: 40px;
 }
 
 .sec-map .map-box #place {
@@ -773,11 +816,24 @@ html, body, .wrap {
 
 .sec-map .map {
 	width: 100%;
+	position: relative;
 }
 
 .sec-map .map img {
 	width: 100%;
 	height: auto;
+}
+
+.sec-map .map .link-box {
+	position: absolute;
+	bottom: 5px;
+	left: 5px;
+	display: flex;
+	align-items: center;
+}
+
+.sec-map .map .link-box .btn + .btn {
+	margin-left: 5px;
 }
 
 .sec-info {
