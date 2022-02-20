@@ -94,8 +94,52 @@ html, body {
 }
 
 /* border-radius */
-html, body, .wrap {
+@keyframes von {
+	0% {
+		opacity: 0;
+		transform: translateY(20px);
+	}
+	100% {
+		transform: translateY(0px);
+		opacity: 1;
+	}
+}
+
+.ani {
+	opacity: 0;
+}
+
+.ani.active {
+	opacity: 1;
+	animation-fill-mode: forwards;
+}
+
+html, body {
+	-webkit-font-smoothing: antialiased;
 	height: 100%;
+	width: 100%;
+	height: 100vh;
+	width: 100vw;
+	margin: 0;
+	padding: 0;
+	/* required to prevent rogue scrollbars */
+	overflow: hidden;
+	/* cosmetic stuff: */
+}
+
+.wrap {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 0;
+	margin: 0;
+	/* if you want the content to scroll normally: */
+	overflow-y: auto;
+	overflow-x: hidden;
+	/* cosmetic stuff: */
+	box-sizing: border-box;
 }
 
 .btn {
@@ -108,9 +152,15 @@ html, body, .wrap {
 	color: #fff;
 }
 
+.btn.btn-copy {
+	padding-left: 20px;
+	background: #222 url(../img/ico-copy.png) no-repeat 5px 50%;
+	background-size: 12px auto;
+}
+
 .layout {
 	position: relative;
-	height: 100%;
+	height: 100vh;
 	width: 100%;
 	overflow: hidden;
 	text-align: center;
@@ -124,6 +174,10 @@ html, body, .wrap {
 }
 
 /* leaf animations */
+.spot {
+	height: 100vh;
+}
+
 .spot .center {
 	height: 100%;
 	min-width: 320px;
@@ -566,6 +620,7 @@ html, body, .wrap {
 	border-width: 1px 0 1px 0;
 	position: relative;
 	height: 8.5vw;
+	padding-left: 30px;
 }
 
 @media (min-width: 1024px) {
@@ -575,7 +630,7 @@ html, body, .wrap {
 }
 
 .font-mont {
-	font-family: 'Montserrat' !important;
+	font-family: 'Montserrat','serif' !important;
 }
 
 .marquee_text {
@@ -639,6 +694,10 @@ html, body, .wrap {
 	height: auto;
 }
 
+.mySwiper2.active {
+	animation: von 1s ease;
+}
+
 .mySwiper {
 	margin-top: 5px;
 }
@@ -655,6 +714,7 @@ html, body, .wrap {
 }
 
 .mySwiper .swiper-wrapper .swiper-slide {
+	opacity: 0;
 	flex: 1 1 auto;
 	cursor: pointer;
 	position: relative;
@@ -691,6 +751,7 @@ html, body, .wrap {
 	right: 0;
 	bottom: 0;
 	left: 0;
+	border-top: 4px solid #000;
 	border-bottom: 4px solid #000000;
 }
 
@@ -717,6 +778,41 @@ html, body, .wrap {
 	}
 }
 
+.mySwiper.active .slide-1 {
+	animation: von 0.5s 0.1s ease;
+	animation-fill-mode: forwards;
+}
+
+.mySwiper.active .slide-2 {
+	animation: von 0.5s 0.2s ease;
+	animation-fill-mode: forwards;
+}
+
+.mySwiper.active .slide-3 {
+	animation: von 0.5s 0.3s ease;
+	animation-fill-mode: forwards;
+}
+
+.mySwiper.active .slide-4 {
+	animation: von 0.5s 0.4s ease;
+	animation-fill-mode: forwards;
+}
+
+.mySwiper.active .slide-5 {
+	animation: von 0.5s 0.5s ease;
+	animation-fill-mode: forwards;
+}
+
+.mySwiper.active .slide-6 {
+	animation: von 0.5s 0.6s ease;
+	animation-fill-mode: forwards;
+}
+
+.mySwiper.active .slide-7 {
+	animation: von 0.5s 0.7s ease;
+	animation-fill-mode: forwards;
+}
+
 .sec-p {
 	padding-top: 20vw;
 	padding-bottom: 11.5vw;
@@ -727,6 +823,10 @@ html, body, .wrap {
 	font-size: 16px;
 	line-height: 32px;
 	padding: 100px 0 40px;
+}
+
+.sec-p .sec-pp.active {
+	animation: von 1s ease;
 }
 
 @media (min-width: 1024px) {
@@ -767,6 +867,10 @@ html, body, .wrap {
 	background-size: 110px auto;
 }
 
+.sec-p .name-box.active {
+	animation: von 1s ease;
+}
+
 .toast {
 	position: fixed;
 	display: inline-block;
@@ -781,6 +885,81 @@ html, body, .wrap {
 	text-align: center;
 	transform: translateX(-50%);
 	background-color: rgba(0, 0, 0, 0.6);
+}
+
+.sec-cal {
+	border-top: 1px solid #000;
+	padding: 80px 20px 0;
+}
+
+.sec-cal h2 {
+	padding-right: 20px;
+	text-align: right;
+	margin-bottom: 20px;
+}
+
+.sec-cal h2 > span {
+	font-size: 50px;
+	font-weight: 400;
+	font-family: 'Montserrat','serif' !important;
+}
+
+.sec-cal .cal-box {
+	width: 100%;
+	position: relative;
+	padding-bottom: 80px;
+}
+
+.sec-cal .cal-box .ball {
+	position: absolute;
+	right: 20px;
+	bottom: 100px;
+	mix-blend-mode: difference;
+	width: 60px;
+	height: 60px;
+}
+
+.sec-cal .cal-box img {
+	width: 100%;
+	padding-bottom: 40px;
+}
+
+.sec-cal .cal-box i[class*='bl-'] {
+	top: 0;
+	position: absolute;
+	width: 1px;
+	background-color: #000;
+}
+
+.sec-cal .cal-box .bl-1 {
+	left: 14.1%;
+}
+
+.sec-cal .cal-box .bl-2 {
+	left: 28.2%;
+}
+
+.sec-cal .cal-box .bl-3 {
+	left: 42.3%;
+}
+
+.sec-cal .cal-box .bl-4 {
+	left: 56.4%;
+}
+
+.sec-cal .cal-box .bl-5 {
+	left: 70.5%;
+}
+
+.sec-cal .cal-box .bl-6 {
+	left: 84.6%;
+}
+
+.sec-cal .cal-box .april {
+	position: absolute;
+	bottom: 0;
+	right: 20px;
+	font-size: 40px;
 }
 
 .sec-map {

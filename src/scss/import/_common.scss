@@ -1,10 +1,50 @@
-
-
-
-html,body,.wrap {
-    height: 100%;
-        // scroll-behavior: smooth;
+@keyframes von{
+  0% {
+    opacity: 0;
+    transform: translateY(20px)
+  }
+  100% {
+    transform: translateY(0px);
+    opacity: 1;
+  }
 }
+.ani {
+  opacity: 0;
+}
+.ani.active {
+  opacity: 1;
+  animation-fill-mode: forwards;
+}
+html,body {
+  -webkit-font-smoothing: antialiased;
+  height: 100%;
+    width: 100%;
+    height: 100vh;
+    width: 100vw;
+    margin:0;
+    padding:0;
+    /* required to prevent rogue scrollbars */
+    overflow: hidden;
+    /* cosmetic stuff: */
+    // background-color:#5AE;
+}
+.wrap {
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:0;
+  margin:0;
+/* if you want the content to scroll normally: */
+overflow-y: auto;
+overflow-x: hidden;
+  /* cosmetic stuff: */
+  // background-color:#AEA;
+  // border: #6B6 1em solid;
+  box-sizing:border-box;
+}
+
 .btn {
   margin-top: -4px;
   font-size: 16px;
@@ -13,10 +53,15 @@ html,body,.wrap {
   padding: 2px 6px 0;
   background-color: #222;
   color: #fff;
+  &.btn-copy {
+    padding-left: 20px;
+    background:#222 url(../img/ico-copy.png) no-repeat 5px 50%;
+    background-size: 12px auto;
+  }
 }
 .layout{
     position: relative;
-    height:100%;
+    height:100vh;
     width: 100%;
     overflow: hidden;
     text-align: center;
@@ -31,6 +76,9 @@ html,body,.wrap {
     // @include pc {
     //     min-height: 1400px;
     // }
+    height: 100vh;
+    // padding-bottom: 500px;
+    // margin-bottom: -500px;
     .center {
         height: 100%;
         min-width: 320px;
@@ -358,12 +406,13 @@ html,body,.wrap {
   border-width: 1px 0 1px 0;
   position: relative;
   height: 8.5vw;
+  padding-left: 30px;
   @include pc {
     height: 8vw;
   }
 }
 .font-mont {
-  font-family: 'Montserrat' !important;
+  font-family: 'Montserrat','serif' !important;
 }
 // .marquee_box { will-change: transform; animation: marquee 10s linear infinite; font-weight: 900; padding: 8px 20px 5px; }
 .marquee_text {
@@ -432,6 +481,9 @@ html,body,.wrap {
       height: auto;
     }
   }
+  &.active {
+    animation: von 1s ease;
+  }
 }
 .mySwiper {
   margin-top: 5px;
@@ -441,6 +493,7 @@ html,body,.wrap {
     @include flex-box;
     justify-content: space-between;
     .swiper-slide {
+      opacity: 0;
       flex: 1 1 auto;
       cursor: pointer;
       position: relative;
@@ -474,6 +527,7 @@ html,body,.wrap {
           right: 0;
           bottom: 0;
           left: 0;
+          border-top: 4px solid #000;
           border-bottom: 4px solid #000000;
         }
       }
@@ -501,6 +555,14 @@ html,body,.wrap {
       }
     }
   }
+  &.active {
+    @for $i from 1 to 8 {
+      .slide-#{$i} {
+        animation: von .5s $i*0.1s ease;
+       animation-fill-mode: forwards;
+      }
+    }
+  }
 }
 .sec-p {
   padding-top: 20vw;
@@ -510,6 +572,9 @@ html,body,.wrap {
     font-size: 16px;
     line-height: 32px;
     padding: 100px 0 40px;
+    &.active {
+      animation: von 1s ease;
+    }
     @include pc {
       padding: 40px 0;
     }
@@ -539,6 +604,9 @@ html,body,.wrap {
         background-size: 110px auto;
       }
     }
+    &.active {
+      animation: von 1s ease;
+    }
   }
 }
 .toast {
@@ -556,6 +624,55 @@ html,body,.wrap {
   text-align: center;
   transform: translateX(-50%);
   background-color: rgba(0,0,0,0.6);
+}
+
+.sec-cal {
+  border-top:  1px solid #000;
+  padding: 80px 20px 0;
+  h2 {
+    padding-right: 20px;
+    text-align: right;
+    margin-bottom: 20px;
+    &>span {
+      font-size: 50px;
+      font-weight: 400;
+      font-family: 'Montserrat','serif' !important;
+    }
+  }
+  .cal-box {
+    width: 100%;
+    position: relative;
+    padding-bottom: 80px;
+    .ball {
+      position: absolute;
+      right: 20px;
+      bottom: 100px;
+      mix-blend-mode: difference;
+      width: 60px;
+      height: 60px;
+    }
+    img {
+      width: 100%;
+      padding-bottom: 40px;
+    }
+    i[class*='bl-']{
+      top: 0;
+      position: absolute;
+      width: 1px;
+      background-color: #000;
+    }
+    @for $i from 1 to 7 {
+      .bl-#{$i} {
+        left: $i*14.1%;
+      }
+    }
+    .april {
+      position: absolute;
+      bottom: 0;
+      right: 20px;
+      font-size: 40px;
+    }
+  }
 }
 .sec-map {
   border-top: 1px solid #000;
