@@ -18,7 +18,7 @@ body, div, dl, dt, dd, ul, ol, li, h1, h2, h3, h4, h5, h6, p, table, th, td, for
 }
 
 body, input, select, textarea, button {
-	color: #000;
+	color: #222;
 	font-family: 'Gothic A1','NanumSquare',dotum, arial, sans-serif;
 	font-size: 18px;
 	font-weight: 400;
@@ -115,6 +115,7 @@ html, body {
 }
 
 html, body {
+	color: #222;
 	-webkit-font-smoothing: antialiased;
 	height: 100%;
 	width: 100%;
@@ -218,14 +219,14 @@ html, body {
 	font-size: 18px;
 	padding-top: 200px;
 	margin-top: -30px;
-	background: url(../img/main.png) no-repeat 50% 0;
+	background: url(../img/main.jpg) no-repeat 50% 0;
 	background-size: auto 200px;
 }
 
 @media (min-width: 1024px) {
 	.spot .center .text {
 		padding-top: 300px;
-		background: url(../img/main.png) no-repeat 50% 0;
+		background: url(../img/main.jpg) no-repeat 50% 0;
 		background-size: auto 300px;
 		font-size: 24px;
 	}
@@ -234,7 +235,7 @@ html, body {
 @media (max-width: 320px) {
 	.spot .center .text {
 		padding-top: 140px;
-		background: url(../img/main.png) no-repeat 50% 0;
+		background: url(../img/main.jpg) no-repeat 50% 0;
 		background-size: auto 140px;
 	}
 }
@@ -411,7 +412,7 @@ html, body {
 }
 
 .spot .a-top2 .arrow {
-	border: 1px solid #000;
+	border: 1px solid #222;
 	border-width: 0px 0px 2px 2px;
 	width: 12px;
 	height: 12px;
@@ -640,7 +641,7 @@ html, body {
 	font-family: 'Montserrat';
 	position: absolute;
 	color: #fff;
-	text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+	text-shadow: -1px -1px 0 #222, 1px -1px 0 #222, -1px 1px 0 #222, 1px 1px 0 #222;
 	font-weight: 900;
 }
 
@@ -661,7 +662,7 @@ html, body {
 }
 
 .sec-photo {
-	border-top: 1px solid #000;
+	border-top: 1px solid #222;
 	padding-top: 80px;
 	padding-bottom: 80px;
 }
@@ -695,7 +696,7 @@ html, body {
 }
 
 .mySwiper2.active {
-	animation: von 1s ease;
+	animation: von 1s ease-in-out;
 }
 
 .mySwiper {
@@ -751,8 +752,8 @@ html, body {
 	right: 0;
 	bottom: 0;
 	left: 0;
-	border-top: 4px solid #000;
-	border-bottom: 4px solid #000000;
+	border-top: 4px solid #222;
+	border-bottom: 4px solid #222000;
 }
 
 .mySwiper .swiper-wrapper .swiper-slide:not(.swiper-slide-thumb-active)::before {
@@ -779,37 +780,37 @@ html, body {
 }
 
 .mySwiper.active .slide-1 {
-	animation: von 0.5s 0.1s ease;
+	animation: von 1s 0.1s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .mySwiper.active .slide-2 {
-	animation: von 0.5s 0.2s ease;
+	animation: von 1s 0.2s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .mySwiper.active .slide-3 {
-	animation: von 0.5s 0.3s ease;
+	animation: von 1s 0.3s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .mySwiper.active .slide-4 {
-	animation: von 0.5s 0.4s ease;
+	animation: von 1s 0.4s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .mySwiper.active .slide-5 {
-	animation: von 0.5s 0.5s ease;
+	animation: von 1s 0.5s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .mySwiper.active .slide-6 {
-	animation: von 0.5s 0.6s ease;
+	animation: von 1s 0.6s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .mySwiper.active .slide-7 {
-	animation: von 0.5s 0.7s ease;
+	animation: von 1s 0.7s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
@@ -826,7 +827,7 @@ html, body {
 }
 
 .sec-p .sec-pp.active {
-	animation: von 1s ease;
+	animation: von 1s ease-in-out;
 }
 
 @media (min-width: 1024px) {
@@ -888,20 +889,55 @@ html, body {
 }
 
 .sec-cal {
-	border-top: 1px solid #000;
+	border-top: 1px solid #222;
 	padding: 80px 20px 0;
 }
 
 .sec-cal h2 {
 	padding-right: 20px;
 	text-align: right;
-	margin-bottom: 20px;
+	margin-bottom: 80px;
+	font-weight: 300;
+	color: #222;
 }
 
 .sec-cal h2 > span {
+	display: inline-block;
+	font-weight: 600;
 	font-size: 50px;
 	font-weight: 400;
 	font-family: 'Montserrat','serif' !important;
+	opacity: 0;
+	color: #222;
+}
+
+.sec-cal h2 .tl-2 {
+	letter-spacing: -1.5px;
+}
+
+.sec-cal h2.active .tl-1 {
+	animation: von 1.4s 0.3s ease-in;
+	animation-fill-mode: forwards;
+}
+
+.sec-cal h2.active .tl-2 {
+	animation: von 1.4s 0.6s ease-in;
+	animation-fill-mode: forwards;
+}
+
+.sec-cal h2.active .tl-3 {
+	animation: von 1.4s 0.9s ease-in;
+	animation-fill-mode: forwards;
+}
+
+.sec-cal h2.active .tl-4 {
+	animation: von 1.4s 1.2s ease-in;
+	animation-fill-mode: forwards;
+}
+
+.sec-cal h2.active .tl-5 {
+	animation: von 1.4s 1.5s ease-in;
+	animation-fill-mode: forwards;
 }
 
 .sec-cal .cal-box {
@@ -911,12 +947,50 @@ html, body {
 }
 
 .sec-cal .cal-box .ball {
+	opacity: 0;
 	position: absolute;
-	right: 20px;
-	bottom: 100px;
 	mix-blend-mode: difference;
-	width: 60px;
-	height: 60px;
+	width: 11%;
+	height: 11%;
+}
+
+.sec-cal .cal-box .ball.active {
+	opacity: 0;
+	animation: ball 3s 2s ease-in-out;
+	animation-fill-mode: forwards;
+}
+
+@keyframes ball {
+	0% {
+		opacity: 0;
+		bottom: 100%;
+		right: 100%;
+	}
+	100% {
+		opacity: 1;
+		bottom: 95px;
+		right: 2.2%;
+		transform: translateY(-50%);
+	}
+}
+
+@media (min-width: 1024px) {
+	.sec-cal .cal-box .ball.active {
+		animation: ball2 3s 2s ease-in-out;
+		animation-fill-mode: forwards;
+	}
+	@keyframes ball2 {
+		0% {
+			opacity: 0;
+			bottom: 100%;
+			right: 100%;
+		}
+		100% {
+			opacity: 1;
+			bottom: 118px;
+			right: 13px;
+		}
+	}
 }
 
 .sec-cal .cal-box img {
@@ -928,7 +1002,13 @@ html, body {
 	top: 0;
 	position: absolute;
 	width: 1px;
-	background-color: #000;
+	background-color: #222;
+}
+
+@media (min-width: 1024px) {
+	.sec-cal .cal-box i[class*='bl-'] {
+		width: 2px;
+	}
 }
 
 .sec-cal .cal-box .bl-1 {
@@ -963,14 +1043,27 @@ html, body {
 }
 
 .sec-map {
-	border-top: 1px solid #000;
+	border-top: 1px solid #222;
 	padding-top: 80px;
 	padding-bottom: 80px;
 }
 
-.sec-map .map-box p {
-	font-size: 15px;
-	letter-spacing: 1.2px;
+.sec-map .map-box h2 {
+	font-size: 30px;
+	line-height: 18px;
+	margin-bottom: 40px;
+	letter-spacing: -3px;
+}
+
+.sec-map .map-box h2 .mini {
+	font-size: 14px;
+	color: #888;
+	letter-spacing: 0;
+}
+
+.sec-map .map-box .floor {
+	font-size: 16px;
+	font-weight: bold;
 	margin-bottom: 40px;
 }
 
@@ -1005,18 +1098,34 @@ html, body {
 
 .sec-map .map .link-box {
 	position: absolute;
-	bottom: 5px;
-	left: 5px;
+	bottom: 0;
+	right: 0;
 	display: flex;
 	align-items: center;
+	font-weight: bold;
 }
 
 .sec-map .map .link-box .btn + .btn {
 	margin-left: 5px;
 }
 
+.sec-map .map .link-box .link-naver {
+	background-color: #54b547;
+	border: 1px solid #90f583;
+}
+
+.sec-map .map .link-box .link-kakao {
+	background-color: #e9c527;
+	border: 1px solid #f7dd97;
+}
+
+.sec-map .map .link-box .link-tmap {
+	background-color: #1a8fee;
+	border: 1px solid #a3cdf5;
+}
+
 .sec-info {
-	border-top: 1px solid #000;
+	border-top: 1px solid #222;
 }
 
 .sec-info h2 {
