@@ -587,7 +587,6 @@ html, body {
 	}
 	100% {
 		-webkit-transform: translate3d(-350px, 700px, 0) rotate(90deg);
-		opacity: 0;
 	}
 }
 
@@ -597,7 +596,6 @@ html, body {
 	}
 	100% {
 		-webkit-transform: translate3d(-230px, 640px, 0) rotate(-70deg);
-		opacity: 0;
 	}
 }
 
@@ -607,7 +605,6 @@ html, body {
 	}
 	100% {
 		-webkit-transform: translate3d(-400px, 680px, 0) rotate(0deg);
-		opacity: 0;
 	}
 }
 
@@ -823,7 +820,8 @@ html, body {
 .sec-p .sec-pp {
 	font-size: 16px;
 	line-height: 32px;
-	padding: 100px 0 40px;
+	padding: 100px 0 20px;
+	font-family: 'Gowun Batang', serif !important;
 }
 
 .sec-p .sec-pp.active {
@@ -836,6 +834,34 @@ html, body {
 	}
 }
 
+.sec-p .sec-pp + .sec-pp {
+	padding: 0 0 40px;
+}
+
+.sec-p .sign-box {
+	opacity: 1;
+	padding-bottom: 100px;
+}
+
+@keyframes width {
+	0% {
+		width: 100%;
+	}
+	100% {
+		width: 0;
+	}
+}
+
+.sec-p .sign-box.ani.active .sign-l::before {
+	animation: width 1s 1s ease;
+	animation-fill-mode: forwards;
+}
+
+.sec-p .sign-box.ani.active .sign-k::before {
+	animation: width 1s 2s ease;
+	animation-fill-mode: forwards;
+}
+
 .sec-p .name-box {
 	font-family: 'Gowun Batang', serif !important;
 	width: 100%;
@@ -846,26 +872,36 @@ html, body {
 
 .sec-p .name-box p {
 	display: inline-block;
-	padding-right: 120px;
 	line-height: 50px;
+	margin-right: 12px;
 }
 
-.sec-p .name-box.sign-l {
-	margin-top: 20px;
+.sec-p .name-box div[class*='sign'] {
+	width: 110px;
+	position: relative;
 }
 
-.sec-p .name-box.sign-l p {
-	background: url(../img/sign_l.png) no-repeat 100% 50%;
-	background-size: 110px auto;
+.sec-p .name-box div[class*='sign']::before {
+	content: '';
+	position: absolute;
+	right: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #fff;
 }
 
-.sec-p .name-box.sign-k {
-	padding-bottom: 100px;
+.sec-p .name-box div[class*='sign'] img {
+	display: inline-block;
+	vertical-align: top;
+	width: 100%;
 }
 
-.sec-p .name-box.sign-k p {
-	background: url(../img/sign_k.png) no-repeat 100% 50%;
-	background-size: 110px auto;
+.sec-p .name-box .sign-l {
+	width: 110px;
+}
+
+.sec-p .name-box .sign-k {
+	width: 110px;
 }
 
 .sec-p .name-box.active {
@@ -884,8 +920,8 @@ html, body {
 	border-radius: 21px;
 	left: 50%;
 	text-align: center;
-	transform: translateX(-50%);
-	background-color: rgba(0, 0, 0, 0.6);
+	transform: translate(-50%, -50%);
+	background-color: rgba(0, 0, 0, 0.8);
 }
 
 .sec-cal {
@@ -916,27 +952,27 @@ html, body {
 }
 
 .sec-cal h2.active .tl-1 {
-	animation: von 1.4s 0.3s ease-in;
+	animation: von 0.5s 0.2s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .sec-cal h2.active .tl-2 {
-	animation: von 1.4s 0.6s ease-in;
+	animation: von 0.5s 0.4s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .sec-cal h2.active .tl-3 {
-	animation: von 1.4s 0.9s ease-in;
+	animation: von 0.5s 0.6s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .sec-cal h2.active .tl-4 {
-	animation: von 1.4s 1.2s ease-in;
+	animation: von 0.5s 0.8s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
 .sec-cal h2.active .tl-5 {
-	animation: von 1.4s 1.5s ease-in;
+	animation: von 0.5s 1s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
@@ -944,6 +980,7 @@ html, body {
 	width: 100%;
 	position: relative;
 	padding-bottom: 80px;
+	overflow: hidden;
 }
 
 .sec-cal .cal-box .ball {
@@ -956,7 +993,7 @@ html, body {
 
 .sec-cal .cal-box .ball.active {
 	opacity: 0;
-	animation: ball 3s 2s ease-in-out;
+	animation: ball 3s .5s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
@@ -976,7 +1013,7 @@ html, body {
 
 @media (min-width: 1024px) {
 	.sec-cal .cal-box .ball.active {
-		animation: ball2 3s 2s ease-in-out;
+		animation: ball2 3s 1s ease-in-out;
 		animation-fill-mode: forwards;
 	}
 	@keyframes ball2 {
@@ -1044,7 +1081,7 @@ html, body {
 
 .sec-map {
 	border-top: 1px solid #222;
-	padding-top: 80px;
+	padding-top: 140px;
 	padding-bottom: 80px;
 }
 
@@ -1057,7 +1094,6 @@ html, body {
 
 .sec-map .map-box h2 .mini {
 	font-size: 14px;
-	color: #888;
 	letter-spacing: 0;
 }
 
@@ -1065,11 +1101,6 @@ html, body {
 	font-size: 16px;
 	font-weight: bold;
 	margin-bottom: 40px;
-}
-
-.sec-map .map-box #place {
-	cursor: text;
-	width: 150px;
 }
 
 .sec-map .map-box strong {
@@ -1083,45 +1114,103 @@ html, body {
 .sec-map .address {
 	display: flex;
 	align-items: center;
-	margin-bottom: 40px;
+	margin-bottom: 2px;
+}
+
+.sec-map .address span {
+	margin-right: 5px;
 }
 
 .sec-map .map {
 	width: 100%;
+	height: 100%;
 	position: relative;
+	background-color: whitesmoke;
 }
 
-.sec-map .map img {
+.sec-map .map .map1 {
 	width: 100%;
 	height: auto;
+	vertical-align: top;
+	display: inline-block;
 }
 
-.sec-map .map .link-box {
+.sec-map .map .map2 {
 	position: absolute;
-	bottom: 0;
-	right: 0;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: auto;
+	z-index: 0;
+	background-color: whitesmoke;
+	animation: opacity 2s ease infinite;
+}
+
+@keyframes opacity {
+	0% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+
+.sec-map .link-box {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	font-weight: bold;
+	justify-content: center;
 }
 
-.sec-map .map .link-box .btn + .btn {
-	margin-left: 5px;
+@media (min-width: 1024px) {
+	.sec-map .link-box {
+		flex-wrap: nowrap;
+		justify-content: space-between;
+	}
 }
 
-.sec-map .map .link-box .link-naver {
-	background-color: #54b547;
-	border: 1px solid #90f583;
+.sec-map .link-box .btn-map {
+	padding: 20px 0;
+	flex: 0 0 100%;
 }
 
-.sec-map .map .link-box .link-kakao {
-	background-color: #e9c527;
-	border: 1px solid #f7dd97;
+@media (min-width: 1024px) {
+	.sec-map .link-box .btn-map {
+		flex: 0 0 33%;
+	}
 }
 
-.sec-map .map .link-box .link-tmap {
-	background-color: #1a8fee;
-	border: 1px solid #a3cdf5;
+.sec-map .link-box .btn-map + a {
+	margin-top: 2px;
+}
+
+@media (min-width: 1024px) {
+	.sec-map .link-box .btn-map + a {
+		margin-top: 0;
+	}
+}
+
+.sec-map .link-box .link-naver {
+	background: #222 url(../img/map-n.png) no-repeat 50% 50%;
+	background-size: auto 26px;
+}
+
+.sec-map .link-box .link-kakao {
+	background: #222 url(../img/map-k.png) no-repeat 50% 50%;
+	background-size: auto 26px;
+}
+
+.sec-map .link-box .link-tmap {
+	background: #222 url(../img/map-t.png) no-repeat 50% 50%;
+	background-size: auto 26px;
+}
+
+.sec-map .link-box a {
+	display: block;
+	height: 26px;
 }
 
 .sec-info {

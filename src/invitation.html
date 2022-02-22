@@ -5,9 +5,9 @@
     <meta name="format-detection" content="telephone=no">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://inhabot.github.io/src/invitation.html">
-    <meta property="og:title" content="유현,인하 결혼합니다.">
+    <meta property="og:title" content="인하·유현 결혼합니다.">
     <meta property="og:image" content="img/og.jpg">
-    <meta property="og:description" content="2022년 4월 30일 12시">
+    <meta property="og:description" content="2022년 4월 30일 낮 12시·원주 빌라드아모르">
     <meta property="og:site_name" content="Site Name">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
@@ -81,10 +81,11 @@
       <div class="inner sec-p">
         <p class="sec-pp ani">
           영화관 아르바이트 동료로 처음 만나 <br>
-          팝콘만 튀겼어야 했는데 사랑도 뜨겁게 튀겨버렸습니다.<br>
-          그렇게 행복한 4년을 함께하고 드디어 결혼합니다.
-  
-          <br><br>
+          팝콘만 튀겼어야 했는데 사랑도 튀겼습니다.<br>
+          그렇게 행복한 4년을 함께하고 드디어 결혼합니다.<br>
+          지금처럼 재밌게 살겠습니다.
+        </p>
+        <p class="sec-pp ani">
           찬바람이 부는 겨울이 되며 코로나가 재확산되었지만,<br>
           고민 끝에 결혼식을 예정대로 진행하기로 했습니다.<br>
           무리해서 참석해주시지 않으셔도 괜찮습니다.<br>
@@ -92,13 +93,20 @@
           <br>
           감사합니다.
         </p>
-        <div class="name-box sign-l ani">
-          <p>이상훈 · 양미경의 차남</p><span class="blind">이인하</span>
+        <div class="sign-box ani">
+          <div class="name-box">
+            <p>이상훈 · 양미경의 차남</p>
+            <div class="sign-l">
+              <img src="img/sign_l.png" alt="이인하">
+            </div>
+          </div>
+          <div class="name-box">
+            <p>김정태 · 정계신의 장녀</p>
+            <div class="sign-k">
+              <img src="img/sign_k.png" alt="이인하">
+            </div>
+          </div>
         </div>
-        <div class="name-box sign-k ani">
-          <p>김정태 · 정계신의 장녀</p><span class="blind">김유현</span>
-        </div>
-  
       </div>
       <div class="inner sec-photo">
         <h2 class="font-mont">Gallery</h2>
@@ -186,20 +194,27 @@
       </div>
       <div class="inner sec-map">
         <div class="map-box">
-          <h2>원주 빌라 드 아모르 <span class="mini"><br>(구)아모르컨벤션</span></h2>
-          <p class="floor">4층 : 르 블루 씨엘 홀</p>
+          <h2>원주 빌라 드 아모르 <span class="mini"><br>(구)아모르컨벤션웨딩홀</span></h2>
           <div class="address">
-            <input id="place" value="강원도 원주시 북원로 2888" readonly>
-            <button onclick="copyPlace()" class="btn btn-copy">복사</button>
+            <input id="place" value="강원도 원주시 북원로 2888" readonly class="blind">
+            <span>
+              강원도 원주시 북원로 2888
+            </span>
+            <button onclick="copyPlace()" class="btn btn-copy">주소복사</button>
           </div>
+          
+          <p class="floor">4층 오른쪽에 있는 이주하님(친형)이 안내합니다</p>
+         
   
-          <div class="map"><img src="img/map.png" alt="map">
-            <div class="link-box">
-              <a href="https://m.place.naver.com/place/1984016486/location?subtab=location" target="_blank"
-                class="link-naver btn btn-map">네이버지도</a>
-              <a href="http://kko.to/7eN4QRATP" target="_blank" class="link-kakao btn btn-map">카카오맵</a>
-              <a href="https://surl.tmap.co.kr/63b6f5ac" target="_blank" class="link-tmap btn btn-map">티맵</a>
-            </div>
+          <div class="map">
+            <img src="img/map.png" alt="map" class="map1">
+            <img src="img/map2.png" alt="map" class="map2">
+          </div>
+          <div class="link-box">
+            <a href="https://m.place.naver.com/place/1984016486/location?subtab=location" target="_blank"
+              class="link-naver btn-map"><span class="blind">네이버지도</span></a>
+            <a href="http://kko.to/7eN4QRATP" target="_blank" class="link-kakao btn-map"><span class="blind">카카오지도</span></a>
+            <a href="https://surl.tmap.co.kr/63b6f5ac" target="_blank" class="link-tmap btn-map"><span class="blind">티맵</span></a>
           </div>
         </div>
       </div>
@@ -217,8 +232,12 @@
         <div class="b-box">
           예식장측에서 환경 및 통행문제로 화환을 받지 않습니다.
         </div>
+        <p class="b-t">리무진 안내</p>
+        <div class="b-box">
+          리무진 운영하지않음
+        </div>
       </div>
-      <div class="toast">🖨️ 복사 되었습니다</div>
+      <div class="toast">복사 되었습니다!</div>
     </div>
  
     <script src="js/query.js"></script>
@@ -267,7 +286,57 @@
         left: -1200,
         duration: .5,
       });
-      gsap.fromTo(".bl", {
+      gsap.fromTo(".bl-1", {
+        height: "0"
+      }, {
+        scrollTrigger: {
+          trigger: ".cal-box",
+          scrub: 1,
+        },
+        height: "150%",
+        duration: .2,
+      });
+      gsap.fromTo(".bl-2", {
+        height: "0"
+      }, {
+        scrollTrigger: {
+          trigger: ".cal-box",
+          scrub: 1,
+        },
+        height: "140%",
+        duration: .2,
+      });
+      gsap.fromTo(".bl-3", {
+        height: "0"
+      }, {
+        scrollTrigger: {
+          trigger: ".cal-box",
+          scrub: 1,
+        },
+        height: "130%",
+        duration: .2,
+      });
+      gsap.fromTo(".bl-4", {
+        height: "0"
+      }, {
+        scrollTrigger: {
+          trigger: ".cal-box",
+          scrub: 1,
+        },
+        height: "120%",
+        duration: .2,
+      });
+      gsap.fromTo(".bl-5", {
+        height: "0"
+      }, {
+        scrollTrigger: {
+          trigger: ".cal-box",
+          scrub: 1,
+        },
+        height: "110%",
+        duration: .2,
+      });
+      gsap.fromTo(".bl-6", {
         height: "0"
       }, {
         scrollTrigger: {
@@ -283,23 +352,28 @@
       toastAni.from('.toast', {
         duration: 0,
         delay: 0,
-        bottom: -50
+        bottom: '40%',
+        opacity: 0,
       });
       toastAni.to('.toast', {
         duration: 0,
         delay: 0,
-        display: 'block'
+        bottom: '40%',
+        display: 'block',
+        opacity: 0,
       });
       toastAni.to('.toast', {
         duration: 1,
         delay: 0,
-        bottom: 40,
+        bottom: "49%",
+        opacity: 1,
         ease: Expo.easeOut
       });
       toastAni.to('.toast', {
         duration: 1,
         delay: 1.5,
-        bottom: -100,
+        bottom: "40%",
+        opacity: 0,
         ease: Expo.easeIn
       });
       toastAni.to('.toast', {
