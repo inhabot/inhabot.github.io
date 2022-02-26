@@ -97,21 +97,12 @@ html, body {
 @keyframes von {
 	0% {
 		opacity: 0;
-		transform: translateY(20px);
+		transform: translateY(10px);
 	}
 	100% {
 		transform: translateY(0px);
 		opacity: 1;
 	}
-}
-
-.ani {
-	opacity: 0;
-}
-
-.ani.active {
-	opacity: 1;
-	animation-fill-mode: forwards;
 }
 
 html, body {
@@ -672,6 +663,7 @@ html, body {
 	height: 100%;
 	width: 100%;
 	overflow: hidden;
+	opacity: 0;
 }
 
 .mySwiper2 .swiper-wrapper {
@@ -694,6 +686,7 @@ html, body {
 
 .mySwiper2.active {
 	animation: von 1s ease-in-out;
+	animation-fill-mode: forwards;
 }
 
 .mySwiper {
@@ -817,15 +810,36 @@ html, body {
 	text-align: center;
 }
 
+@media (min-width: 1024px) {
+	.sec-p {
+		padding-top: 10vw;
+	}
+}
+
 .sec-p .sec-pp {
 	font-size: 16px;
 	line-height: 32px;
 	padding: 100px 0 20px;
-	font-family: 'Gowun Batang', serif !important;
+	opacity: 0;
 }
 
 .sec-p .sec-pp.active {
 	animation: von 1s ease-in-out;
+	animation-fill-mode: forwards;
+}
+
+.sec-p .sec-pp.active + .sign-box {
+	margin-top: 40px;
+}
+
+.sec-p .sec-pp.active + .sign-box .sign-l::before {
+	animation: width 1s 2s ease;
+	animation-fill-mode: forwards;
+}
+
+.sec-p .sec-pp.active + .sign-box .sign-k::before {
+	animation: width 1s 3s ease;
+	animation-fill-mode: forwards;
 }
 
 @media (min-width: 1024px) {
@@ -852,18 +866,9 @@ html, body {
 	}
 }
 
-.sec-p .sign-box.ani.active .sign-l::before {
-	animation: width 1s 1s ease;
-	animation-fill-mode: forwards;
-}
-
-.sec-p .sign-box.ani.active .sign-k::before {
-	animation: width 1s 2s ease;
-	animation-fill-mode: forwards;
-}
-
 .sec-p .name-box {
-	font-family: 'Gowun Batang', serif !important;
+	font-weight: bold;
+	font-size: 14px;
 	width: 100%;
 	display: flex;
 	align-items: center;
@@ -872,12 +877,12 @@ html, body {
 
 .sec-p .name-box p {
 	display: inline-block;
-	line-height: 50px;
+	line-height: 30px;
 	margin-right: 12px;
 }
 
 .sec-p .name-box div[class*='sign'] {
-	width: 110px;
+	width: 90px;
 	position: relative;
 }
 
@@ -1085,16 +1090,22 @@ html, body {
 	padding-bottom: 80px;
 }
 
+.sec-map .map-box .mini {
+	display: block;
+	font-size: 14px;
+	letter-spacing: 0;
+	margin-bottom: 8px;
+	font-weight: bold;
+}
+
 .sec-map .map-box h2 {
-	font-size: 30px;
-	line-height: 18px;
-	margin-bottom: 40px;
+	line-height: 34px;
+	margin-bottom: 20px;
 	letter-spacing: -3px;
 }
 
-.sec-map .map-box h2 .mini {
-	font-size: 14px;
-	letter-spacing: 0;
+.sec-map .map-box h2 .gray {
+	color: #222;
 }
 
 .sec-map .map-box .floor {
@@ -1112,9 +1123,7 @@ html, body {
 }
 
 .sec-map .address {
-	display: flex;
-	align-items: center;
-	margin-bottom: 2px;
+	margin-bottom: 30px;
 }
 
 .sec-map .address span {
@@ -1179,7 +1188,7 @@ html, body {
 
 @media (min-width: 1024px) {
 	.sec-map .link-box .btn-map {
-		flex: 0 0 33%;
+		flex: 0 0 33.3333%;
 	}
 }
 
@@ -1217,19 +1226,168 @@ html, body {
 	border-top: 1px solid #222;
 }
 
+.sec-info > p {
+	font-size: 15px;
+	line-height: 23px;
+}
+
 .sec-info h2 {
 	margin-bottom: 20px;
 }
 
-.sec-info .b-t {
-	font-size: 13px;
-	color: #888;
-	letter-spacing: 0.5px;
-	margin-bottom: 8px;
+.sec-info .b-box {
+	margin-bottom: 20px;
+	padding-bottom: 20px;
 }
 
-.sec-info .b-box {
-	margin-bottom: 40px;
+.b-t {
+	font-weight: bold;
+	font-size: 13px;
+	color: #b6b6b6;
+	letter-spacing: 0.5px;
+	margin-bottom: 6px;
+}
+
+.accwrap {
+	position: relative;
+	height: 400px;
+}
+
+.accwrap .accbox {
+	background-color: #fff;
+	box-shadow: 0px 1px 6px 0px rgba(0, 0, 0, 0.5);
+	border-radius: 6px;
+	position: absolute;
+	box-sizing: border-box;
+	width: 100%;
+	top: 0;
+	left: 50%;
+	transform: translate(-50%, 0);
+}
+
+.accwrap .accbox .acc {
+	border-radius: 6px;
+}
+
+.accwrap .accbox .acc2 {
+	margin-top: 1px;
+}
+
+.accwrap .accbox .acc2 .acchead {
+	border-radius: 0 0 6px 6px;
+}
+
+.accwrap .accbox .acc2 .acchead.active {
+	border-radius: 0;
+}
+
+.accwrap .accbox .acc2 .acchead.active + .accbody {
+	border-radius: 0 0 6px 6px;
+}
+
+.acchead {
+	border: 1px solid #222;
+	background-color: #222;
+	font-size: 15px;
+	padding: 10px 20px;
+	width: 100%;
+	color: #fff;
+	border-radius: 6px;
+	transition: border-radius 1s ease;
+	border-radius: 6px 6px 0 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.acchead.active {
+	transition: border-radius 1s ease;
+}
+
+.acchead.active .arrow {
+	transform: rotate(180deg);
+	transition: transform 0.5s ease;
+}
+
+.acchead + .accbody {
+	background-color: #fff;
+	overflow: hidden;
+	box-sizing: border-box;
+	height: 0;
+	transition: height .5s ease-in;
+	animation: accordionOut 0.45s alternate ease-in-out both 1;
+}
+
+.acchead + .accbody .inner {
+	padding: 20px;
+}
+
+.acchead + .accbody .inner .b-t {
+	color: #444;
+}
+
+.acchead + .accbody .inner .b-box.bd-ddd {
+	border-bottom: 1px solid #ddd;
+}
+
+.acchead.active + .accbody {
+	height: 177px;
+	transition: height .5s ease-out;
+	animation: accordionIn 0.45s normal ease-in-out both 1;
+}
+
+.acchead .tt {
+	font-weight: bold;
+	color: #fff;
+}
+
+.acchead .arrow {
+	width: 30px;
+	height: 30px;
+	display: block;
+	background: url(../img/arrow-round.png) no-repeat 50% 50%;
+	background-size: 30px 30px;
+	transition: transform 0.5s ease;
+}
+
+.animateIn {
+	animation: accordionIn 0.45s normal ease-in-out both 1;
+}
+
+.animateOut {
+	animation: accordionOut 0.45s alternate ease-in-out both 1;
+}
+
+@keyframes accordionIn {
+	0% {
+		opacity: 0;
+		transform: scale(0.9) rotateX(-60deg);
+		transform-origin: 50% 0;
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes height {
+	0% {
+		height: 0;
+	}
+	100% {
+		height: 100%;
+	}
+}
+
+@keyframes accordionOut {
+	0% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	100% {
+		opacity: 0;
+		transform: scale(0.9) rotateX(-60deg);
+	}
 }
 
 /*# sourceMappingURL=blog.css.map */
