@@ -94,6 +94,127 @@ html, body {
 }
 
 /* border-radius */
+.t-fx {
+	display: -ms-flexbox;
+	display: -webkit-flex;
+	display: -moz-box;
+	display: -webkit-box;
+	display: flex;
+	align-items: center;
+}
+
+.t-fx > div {
+	font-size: 27px;
+	font-weight: bold;
+	line-height: 32px;
+	margin-left: 8px;
+	opacity: 0;
+}
+
+.t-fx > div.active {
+	animation: von 1s ease;
+	animation-fill-mode: forwards;
+}
+
+.h2 {
+	font-size: 27px;
+	font-weight: bold;
+	line-height: 32px;
+}
+
+.svg1 {
+	padding: 1px;
+	overflow: visible;
+}
+
+.svg1 .cls-2 {
+	fill: none;
+}
+
+.svg1.active polyline[class*='cls-2'] {
+	stroke: #222;
+	stroke-miterlimit: 10;
+	stroke-dasharray: 300;
+	stroke-dashoffset: 300;
+	animation: dash 6s 1s ease-in-out;
+	stroke-linejoin: round;
+	stroke-width: 2;
+	stroke-linecap: round;
+	animation-fill-mode: forwards;
+}
+
+.svg2 {
+	padding: 1px;
+	overflow: visible;
+	margin-top: -2px;
+}
+
+.svg2 .cls-3 {
+	fill: none;
+}
+
+.svg2.active path[class*='cls-3'] {
+	stroke: #222;
+	stroke-miterlimit: 10;
+	stroke-dasharray: 300;
+	stroke-dashoffset: 300;
+	animation-delay: 5s;
+	animation: dash 6s 2s ease-in-out;
+	stroke-linejoin: round;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	animation-fill-mode: forwards;
+}
+
+.svg2 + .active {
+	animation-delay: 2s;
+}
+
+.svg3 {
+	padding: 1px;
+	overflow: visible;
+	margin-top: -2px;
+}
+
+.svg3 .cls-4 {
+	fill: none;
+}
+
+.svg3.active path[class*='cls-4'] {
+	stroke: #222;
+	stroke-miterlimit: 10;
+	stroke-dasharray: 300;
+	stroke-dashoffset: 300;
+	animation-delay: 5s;
+	animation: dash 6s 2.5s ease-in-out;
+	stroke-linejoin: round;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	animation-fill-mode: forwards;
+}
+
+.svg3 + .active {
+	animation-delay: 4s;
+}
+
+@keyframes dash {
+	from {
+		stroke-dashoffset: 300;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+@keyframes dash2 {
+	from {
+		stroke-dashoffset: -300;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
 @keyframes von {
 	0% {
 		opacity: 0;
@@ -463,15 +584,15 @@ html, body {
 	display: inline-block;
 	transform: skew(20deg);
 	z-index: 1;
-	-webkit-animation: falling 5s 0s infinite;
+	animation: falling 5s 0s infinite;
 }
 
 #leaves i:nth-of-type(2n) {
-	-webkit-animation: falling2 5s 0s infinite;
+	animation: falling2 5s 0s infinite;
 }
 
 #leaves i:nth-of-type(3n) {
-	-webkit-animation: falling3 5s 0s infinite;
+	animation: falling3 5s 0s infinite;
 }
 
 #leaves i:nth-of-type(n) {
@@ -492,64 +613,70 @@ html, body {
 	background: #ffd44d;
 }
 
+#leaves i:nth-of-type(5n+1) {
+	height: 7px;
+	width: 14px;
+	background: #4d9aff;
+}
+
 #leaves i:nth-of-type(n) {
-	-webkit-animation-delay: 1.9s;
+	animation-delay: 1.9s;
 }
 
 #leaves i:nth-of-type(2n) {
-	-webkit-animation-delay: 3.9s;
+	animation-delay: 3.9s;
 }
 
 #leaves i:nth-of-type(3n) {
-	-webkit-animation-delay: 2.3s;
+	animation-delay: 2.3s;
 }
 
 #leaves i:nth-of-type(4n) {
-	-webkit-animation-delay: 4.4s;
+	animation-delay: 4.4s;
 }
 
 #leaves i:nth-of-type(5n) {
-	-webkit-animation-delay: 5s;
+	animation-delay: 5s;
 }
 
 #leaves i:nth-of-type(6n) {
-	-webkit-animation-delay: 3.5s;
+	animation-delay: 3.5s;
 }
 
 #leaves i:nth-of-type(7n) {
-	-webkit-animation-delay: 2.8s;
+	animation-delay: 2.8s;
 }
 
 #leaves i:nth-of-type(8n) {
-	-webkit-animation-delay: 1.5s;
+	animation-delay: 1.5s;
 }
 
 #leaves i:nth-of-type(9n) {
-	-webkit-animation-delay: 3.3s;
+	animation-delay: 3.3s;
 }
 
 #leaves i:nth-of-type(10n) {
-	-webkit-animation-delay: 2.5s;
+	animation-delay: 2.5s;
 }
 
 #leaves i:nth-of-type(11n) {
-	-webkit-animation-delay: 1.2s;
+	animation-delay: 1.2s;
 }
 
 #leaves i:nth-of-type(12n) {
-	-webkit-animation-delay: 4.1s;
+	animation-delay: 4.1s;
 }
 
 #leaves i:nth-of-type(13n) {
-	-webkit-animation-delay: 1s;
+	animation-delay: 1s;
 }
 
 #leaves i:nth-of-type(14n) {
-	-webkit-animation-delay: 4.7s;
+	animation-delay: 4.7s;
 }
 
 #leaves i:nth-of-type(15n) {
-	-webkit-animation-delay: 3s;
+	animation-delay: 3s;
 }
 
 #leaves i:nth-of-type(n) {
@@ -569,10 +696,10 @@ html, body {
 }
 
 #leaves i:nth-of-type(n) {
-	-webkit-animation-timing-function: ease-in-out;
+	animation-timing-function: ease-in-out;
 }
 
-@-webkit-keyframes falling {
+@keyframes falling {
 	0% {
 		-webkit-transform: translate3d(300, 0, 0) rotate(0deg);
 	}
@@ -581,7 +708,7 @@ html, body {
 	}
 }
 
-@-webkit-keyframes falling3 {
+@keyframes falling3 {
 	0% {
 		-webkit-transform: translate3d(0, 0, 0) rotate(-20deg);
 	}
@@ -590,7 +717,7 @@ html, body {
 	}
 }
 
-@-webkit-keyframes falling2 {
+@keyframes falling2 {
 	0% {
 		-webkit-transform: translate3d(0, 0, 0) rotate(90deg);
 	}
@@ -651,8 +778,8 @@ html, body {
 
 .sec-photo {
 	border-top: 1px solid #222;
-	padding-top: 80px;
-	padding-bottom: 80px;
+	padding-top: 140px;
+	padding-bottom: 140px;
 }
 
 .sec-photo h2 {
@@ -926,7 +1053,7 @@ html, body {
 	left: 50%;
 	text-align: center;
 	transform: translate(-50%, -50%);
-	background-color: rgba(0, 0, 0, 0.8);
+	background-color: rgba(94, 94, 94, 0.8);
 }
 
 .sec-cal {
@@ -1086,8 +1213,8 @@ html, body {
 
 .sec-map {
 	border-top: 1px solid #222;
-	padding-top: 140px;
-	padding-bottom: 80px;
+	padding-top: 160px;
+	padding-bottom: 120px;
 }
 
 .sec-map .map-box .mini {
@@ -1099,6 +1226,7 @@ html, body {
 }
 
 .sec-map .map-box h2 {
+	font-size: 40px;
 	line-height: 34px;
 	margin-bottom: 20px;
 	letter-spacing: -3px;
@@ -1122,15 +1250,8 @@ html, body {
 	margin-left: -2px;
 }
 
-.sec-map .address {
-	margin-bottom: 30px;
-}
-
-.sec-map .address span {
-	margin-right: 5px;
-}
-
 .sec-map .map {
+	margin-top: 80px;
 	width: 100%;
 	height: 100%;
 	position: relative;
@@ -1176,7 +1297,7 @@ html, body {
 
 @media (min-width: 1024px) {
 	.sec-map .link-box {
-		flex-wrap: nowrap;
+		flex-wrap: wrap;
 		justify-content: space-between;
 	}
 }
@@ -1202,6 +1323,29 @@ html, body {
 	}
 }
 
+.sec-map .link-box .address {
+	height: 40px;
+	flex: 1 0 100%;
+	text-align: center;
+	background-color: #222;
+	color: #fff;
+	margin-bottom: 2px;
+	display: -ms-flexbox;
+	display: -webkit-flex;
+	display: -moz-box;
+	display: -webkit-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.sec-map .link-box .address > div {
+	padding-right: 20px;
+	background: #222 url(../img/ico-copy.png) no-repeat 100% 20%;
+	background-size: 14px auto;
+}
+
 .sec-map .link-box .link-naver {
 	background: #222 url(../img/map-n.png) no-repeat 50% 50%;
 	background-size: auto 26px;
@@ -1224,11 +1368,13 @@ html, body {
 
 .sec-info {
 	border-top: 1px solid #222;
+	padding-top: 150px;
 }
 
 .sec-info > p {
 	font-size: 15px;
 	line-height: 23px;
+	text-align: center;
 }
 
 .sec-info h2 {
@@ -1250,13 +1396,11 @@ html, body {
 
 .accwrap {
 	position: relative;
-	height: 400px;
+	margin-top: 110px;
+	height: 300px;
 }
 
 .accwrap .accbox {
-	background-color: #fff;
-	box-shadow: 0px 1px 6px 0px rgba(0, 0, 0, 0.5);
-	border-radius: 6px;
 	position: absolute;
 	box-sizing: border-box;
 	width: 100%;
@@ -1267,22 +1411,12 @@ html, body {
 
 .accwrap .accbox .acc {
 	border-radius: 6px;
+	box-shadow: 0px 1px 6px 0px rgba(0, 0, 0, 0.5);
+	background-color: #fff;
 }
 
 .accwrap .accbox .acc2 {
-	margin-top: 1px;
-}
-
-.accwrap .accbox .acc2 .acchead {
-	border-radius: 0 0 6px 6px;
-}
-
-.accwrap .accbox .acc2 .acchead.active {
-	border-radius: 0;
-}
-
-.accwrap .accbox .acc2 .acchead.active + .accbody {
-	border-radius: 0 0 6px 6px;
+	margin-top: 12px;
 }
 
 .acchead {
@@ -1293,15 +1427,15 @@ html, body {
 	width: 100%;
 	color: #fff;
 	border-radius: 6px;
-	transition: border-radius 1s ease;
-	border-radius: 6px 6px 0 0;
+	transition: border-radius 0.3s 0.5s ease;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 }
 
 .acchead.active {
-	transition: border-radius 1s ease;
+	transition: border-radius 0s ease;
+	border-radius: 6px 6px 0 0;
 }
 
 .acchead.active .arrow {
@@ -1310,16 +1444,22 @@ html, body {
 }
 
 .acchead + .accbody {
-	background-color: #fff;
+	margin-top: -.5px;
+	background: #222222;
+	background: -moz-linear-gradient(180deg, #222 0%, white 3%, white 100%);
+	background: -webkit-linear-gradient(180deg, #222 0%, white 3%, white 100%);
+	background: linear-gradient(180deg, #222 0%, white 3%, white 100%);
+	filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#222222",endColorstr="#ffffff",GradientType=1);
 	overflow: hidden;
 	box-sizing: border-box;
 	height: 0;
 	transition: height .5s ease-in;
-	animation: accordionOut 0.45s alternate ease-in-out both 1;
+	border-radius: 0 0 6px 6px;
 }
 
 .acchead + .accbody .inner {
 	padding: 20px;
+	animation: accordionOut 0.45s alternate ease-in-out both 1;
 }
 
 .acchead + .accbody .inner .b-t {
@@ -1333,6 +1473,9 @@ html, body {
 .acchead.active + .accbody {
 	height: 177px;
 	transition: height .5s ease-out;
+}
+
+.acchead.active + .accbody .inner {
 	animation: accordionIn 0.45s normal ease-in-out both 1;
 }
 
