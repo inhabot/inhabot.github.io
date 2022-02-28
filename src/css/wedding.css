@@ -1523,23 +1523,25 @@ html, body {
 
 .sec-map .link-box .address > div {
 	padding-right: 20px;
-	background: #222 url(../img/ico-copy.png) no-repeat 100% 20%;
-	background-size: 14px auto;
+	background: #222 url(../img/ico-copy.png) no-repeat 100% 0;
+	background-size: 12px auto;
+	font-size: 14px;
+	margin-bottom: -2px;
 }
 
 .sec-map .link-box .link-naver {
 	background: #222 url(../img/map-n.png) no-repeat 50% 50%;
-	background-size: auto 20px;
+	background-size: auto 18px;
 }
 
 .sec-map .link-box .link-kakao {
 	background: #222 url(../img/map-k.png) no-repeat 50% 50%;
-	background-size: auto 20px;
+	background-size: auto 18px;
 }
 
 .sec-map .link-box .link-tmap {
 	background: #222 url(../img/map-t.png) no-repeat 50% 50%;
-	background-size: auto 20px;
+	background-size: auto 18px;
 }
 
 @media (max-width: 320px) {
@@ -1565,8 +1567,9 @@ html, body {
 }
 
 .sec-info > p {
-	font-size: 17px;
+	font-size: 16px;
 	line-height: 23px;
+	font-weight: bold;
 }
 
 .sec-info h2 {
@@ -1589,16 +1592,6 @@ html, body {
 
 .accwrap {
 	position: relative;
-	height: 300px;
-}
-
-.accwrap .accbox {
-	position: absolute;
-	box-sizing: border-box;
-	width: 100%;
-	top: 0;
-	left: 50%;
-	transform: translate(-50%, 0);
 }
 
 .accwrap .accbox .acc {
@@ -1654,12 +1647,12 @@ html, body {
 }
 
 .acchead + .accbody .inner {
-	padding: 20px;
+	padding: 20px 10px;
 	animation: accordionOut 0.45s alternate ease-in-out both 1;
 }
 
 .acchead + .accbody .inner .b-t {
-	color: #444;
+	color: #929292;
 }
 
 .acchead + .accbody .inner .b-box {
@@ -1669,15 +1662,50 @@ html, body {
 	display: -webkit-box;
 	display: flex;
 	align-items: center;
+	font-size: 16px;
+	font-weight: bold;
+	flex-wrap: wrap;
+	color: #929292;
+}
+
+.acchead + .accbody .inner .b-box > span {
+	letter-spacing: .5px;
+	margin-left: 3px;
+	color: #222;
 }
 
 .acchead + .accbody .inner .b-box.bd-ddd {
 	border-bottom: 1px solid #ddd;
 }
 
+.acchead + .accbody .inner .b-box .b-full {
+	margin-left: 4px;
+	flex: 0 0 auto;
+	display: -ms-flexbox;
+	display: -webkit-flex;
+	display: -moz-box;
+	display: -webkit-box;
+	display: flex;
+	align-items: center;
+}
+
+@media (max-width: 320px) {
+	.acchead + .accbody .inner .b-box .b-full {
+		flex: 0 0 100%;
+		margin-left: 0;
+		margin-top: 4px;
+	}
+}
+
 .acchead.active + .accbody {
 	height: 180px;
 	transition: height .5s ease-out;
+}
+
+@media (max-width: 320px) {
+	.acchead.active + .accbody {
+		height: 230px;
+	}
 }
 
 .acchead.active + .accbody .inner {
@@ -1757,7 +1785,7 @@ h3 {
 }
 
 .ml-5 {
-	margin-left: 5px !important;
+	margin-left: 4px !important;
 }
 
 .footer {

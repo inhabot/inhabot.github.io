@@ -1022,21 +1022,23 @@ overflow-x: hidden;
       cursor: pointer;
       & > div {
         padding-right: 20px;
-        background:#222 url(../img/ico-copy.png) no-repeat 100% 20%;
-        background-size: 14px auto;
+        background:#222 url(../img/ico-copy.png) no-repeat 100% 0;
+        background-size: 12px auto;
+        font-size: 14px;
+        margin-bottom: -2px;
       }
     }
     .link-naver {
       background:#222 url(../img/map-n.png) no-repeat 50% 50%;
-      background-size: auto 20px;
+      background-size: auto 18px;
     }
     .link-kakao {
       background:#222 url(../img/map-k.png) no-repeat 50% 50%;
-      background-size: auto 20px;
+      background-size: auto 18px;
     }
     .link-tmap {
       background:#222 url(../img/map-t.png) no-repeat 50% 50%;
-      background-size: auto 20px;
+      background-size: auto 18px;
     }
     @include m320 {
       .link-naver {
@@ -1059,8 +1061,9 @@ overflow-x: hidden;
   border-top: 1px solid #222;
   padding-top: 150px;
   & > p {
-    font-size: 17px;
+    font-size: 16px;
     line-height: 23px;
+    font-weight: bold;
   }
   h2 {
     margin-bottom: 20px;
@@ -1088,17 +1091,20 @@ overflow-x: hidden;
 
 .accwrap {
   position: relative;
-  height: 300px;
+  // height: 300px;
+  @include m320 {
+    // height: 340px;
+  }
   .accbox {
     // background-color: #fff;
     // box-shadow: 0px 1px 6px 0px rgba(0,0,0,0.5);
     // border-radius: 6px;
-    position: absolute;
-    box-sizing: border-box;
-    width: 100%;
-    top: 0;
-    left: 50%;
-    transform: translate(-50%,0);
+    // position: absolute;
+    // box-sizing: border-box;
+    // width: 100%;
+    // top: 0;
+    // left: 50%;
+    // transform: translate(-50%,0);
     .acc {
       border-radius: 6px;
       box-shadow: 0px 1px 6px 0px rgba(0,0,0,0.5);
@@ -1139,17 +1145,37 @@ overflow-x: hidden;
     transition: height .5s ease-in;
     border-radius: 0 0 6px 6px;
     .inner {
-      padding: 20px;
+      padding: 20px 10px;
       animation: accordionOut 0.45s alternate ease-in-out both 1;
 
       .b-t {
-        color: #444;
+        color: rgb(146, 146, 146);
       }
       .b-box {
         @include flex-box;
         align-items: center;
+        font-size: 16px;
+        font-weight: bold;
+        flex-wrap: wrap;;
+        color: rgb(146, 146, 146);
+        & > span {
+          letter-spacing: .5px;
+          margin-left: 3px;
+          color: #222;
+        }
         &.bd-ddd {
           border-bottom: 1px solid #ddd;
+        }
+        .b-full {
+          margin-left: 4px;
+          flex:  0 0 auto;
+          @include flex-box;
+          align-items: center;
+          @include m320 {
+            flex: 0 0 100%;
+            margin-left: 0;
+            margin-top: 4px;
+          }
         }
       }
     }
@@ -1157,6 +1183,9 @@ overflow-x: hidden;
   &.active + .accbody {
     height: 180px;
     transition: height .5s ease-out;
+    @include m320 {
+      height: 230px;
+    }
     .inner {
       animation: accordionIn 0.45s normal ease-in-out both 1; 
     }
@@ -1233,7 +1262,7 @@ h3 {
   background-size: 60px auto;
 }
 .ml-5 {
-  margin-left: 5px !important;
+  margin-left: 4px !important;
 }
 
 .footer {
