@@ -9,14 +9,14 @@ br.mo {
   @include flex-box;
   align-items: center;
   & > div {
-    font-size: 27px;
-    font-weight: bold;
+    font-size: 20px;
+    // font-weight: bold;
     line-height: 32px;
     margin-left: 8px;
     opacity: 0;
-    &.active {
-      animation: von 1s ease;
-      animation-fill-mode: forwards;
+    &>span {
+      font-size: 14px;
+      margin-left: 2px;
     }
   }
 }
@@ -31,19 +31,7 @@ br.mo {
   .cls-2 {
     fill: none;
   }
-  &.active {
-    polyline[class*='cls-2']{
-      stroke:#222;
-      stroke-miterlimit:10;  
-      stroke-dasharray: 300;
-      stroke-dashoffset: 300;
-      animation: dash 6s 1s ease-in-out;
-      stroke-linejoin: round;
-      stroke-width: 2;
-      stroke-linecap: round;
-      animation-fill-mode: forwards;
-    }
-  }
+ 
 }
 .svg2 {
   padding: 1px;
@@ -52,23 +40,7 @@ br.mo {
   .cls-3 {
     fill: none;
   }
-  &.active {
-    path[class*='cls-3']{
-      stroke:#222;
-      stroke-miterlimit:10;  
-      stroke-dasharray: 300;
-      stroke-dashoffset: 300;
-      animation-delay: 5s;
-      animation: dash 6s 2s ease-in-out;
-      stroke-linejoin: round;
-      stroke-width: 1.5;
-      stroke-linecap: round;
-      animation-fill-mode: forwards;
-    }
-  }
-  & + .active {
-    animation-delay: 2s;
-  }
+   
 }
 .svg3 {
   padding: 1px;
@@ -77,24 +49,58 @@ br.mo {
   .cls-4 {
     fill: none;
   }
-  &.active {
-    path[class*='cls-4']{
-      stroke:#222;
-      stroke-miterlimit:10;  
-      stroke-dasharray: 300;
-      stroke-dashoffset: 300;
-      animation-delay: 5s;
-      animation: dash 6s 2.5s ease-in-out;
-      stroke-linejoin: round;
-      stroke-width: 1.5;
-      stroke-linecap: round;
-      animation-fill-mode: forwards;
-    }
+}
+.map-box.active {
+  polyline[class*='cls-2']{
+    stroke:#222;
+    stroke-miterlimit:10;  
+    stroke-dasharray: 300;
+    stroke-dashoffset: 300;
+    animation: dash 4s 1s ease-in-out;
+    stroke-linejoin: round;
+    stroke-width: 2;
+    stroke-linecap: round;
+    animation-fill-mode: forwards;
   }
-  & + .active {
-    animation-delay: 4s;
+  path[class*='cls-3']{
+    stroke:#222;
+    stroke-miterlimit:10;  
+    stroke-dasharray: 300;
+    stroke-dashoffset: 300;
+    animation-delay: 5s;
+    animation: dash 6s 2s ease-in-out;
+    stroke-linejoin: round;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    animation-fill-mode: forwards;
+    animation-delay: 2s;
+  }
+  path[class*='cls-4']{
+    stroke:#222;
+    stroke-miterlimit:10;  
+    stroke-dasharray: 300;
+    stroke-dashoffset: 300;
+    animation: dash 4s 2.5s ease-in-out;
+    stroke-linejoin: round;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    animation-fill-mode: forwards;
+    animation-delay: 3s;
+  }
+  .pt {
+    animation: von 1s ease;
+    animation-fill-mode: forwards;
+  }
+  .pt2 {
+    animation-delay: 1s;
+  }
+  .pt3 {
+    animation-delay: 2s;
   }
 }
+
+
+
 
 @keyframes dash {
   from {
@@ -464,7 +470,7 @@ overflow-x: hidden;
     
     0% {
         -webkit-transform:
-            translate3d(0vw,0,0)
+            translate3d(30vw,0,0)
             rotate(0deg);
     }
     
@@ -490,13 +496,13 @@ overflow-x: hidden;
 @keyframes falling4 {
   0% {
      -webkit-transform:
-         translate3d(-40vw,0,0)
+         translate3d(10vw,0,0)
          rotate(-20deg);
  }
  
  100% {
      -webkit-transform:
-         translate3d(20vw,100vh,0)
+         translate3d(40vw,100vh,0)
          rotate(-190deg);
  }
 }
@@ -504,13 +510,13 @@ overflow-x: hidden;
 @keyframes falling3 {
      0% {
         -webkit-transform:
-            translate3d(10vw,0,0)
+            translate3d(-20vw,0,0)
             rotate(-20deg);
     }
     
     100% {
         -webkit-transform:
-            translate3d(-30vw,100vh,0)
+            translate3d(20vw,100vh,0)
             rotate(-70deg);
     }
 }
@@ -819,20 +825,19 @@ overflow-x: hidden;
       font-weight: 200;
       font-size: 50px;
       font-family: 'Montserrat','serif' !important;
-      opacity: 0;
       color: #222;
     }
     .tl-2 {
       letter-spacing: -1.5px;
     }
-    &.active {
-      @for $i from 1 to 6 {
-        .tl-#{$i} {
-          animation: von .5s $i*.2s ease-in-out; 
-          animation-fill-mode: forwards;
-        }
-      }
-    }
+    // &.active {
+    //   @for $i from 1 to 6 {
+    //     .tl-#{$i} {
+    //       animation: von .5s $i*.2s ease-in-out; 
+    //       animation-fill-mode: forwards;
+    //     }
+    //   }
+    // }
   }
   .cal-box {
     width: 100%;
@@ -1059,11 +1064,12 @@ overflow-x: hidden;
 }
 .sec-info {
   border-top: 1px solid #222;
-  padding-top: 150px;
+  padding-top: 50px;
+  padding-bottom: 100px;
   & > p {
     font-size: 16px;
-    line-height: 23px;
-    font-weight: bold;
+    line-height: 24px;
+    // font-weight: bold;
   }
   h2 {
     margin-bottom: 20px;
@@ -1157,7 +1163,6 @@ overflow-x: hidden;
         font-size: 16px;
         font-weight: bold;
         flex-wrap: wrap;;
-        color: rgb(146, 146, 146);
         & > span {
           letter-spacing: .5px;
           margin-left: 3px;
@@ -1248,7 +1253,7 @@ overflow-x: hidden;
 
 h3 {
   font-size: 14px;
-  color: rgb(156, 156, 156);
+  color: rgb(187, 187, 187);
   margin: 50px 0 10px;
 }
 
@@ -1268,7 +1273,7 @@ h3 {
 .footer {
   position: relative;
   background-color: rgb(29, 29, 29);
-  padding:60px 0 40px;
+  padding:75px 0 60px;
   &::after {
     position: absolute;
     content: '';
@@ -1287,10 +1292,23 @@ h3 {
     align-items: center;
     button {
       font-size: 14px;
-      color: #fff;
+      font-weight: bold;
+      color: rgb(136, 136, 136);
       & + button {
-        margin-top: 8px;
+        margin-top: 10px;
       }
+    }
+    .foot-link {
+      height: 30px;
+      padding-left: 28px;
+      background: url(../img/foot-link.png) no-repeat 0 2px;
+      background-size: auto 22px;
+    }
+    .foot-talk {
+      height: 30px;
+      padding-left: 28px;
+      background: url(../img/foot-talk.png) no-repeat 0 2px;
+      background-size: auto 22px;
     }
   }
 }

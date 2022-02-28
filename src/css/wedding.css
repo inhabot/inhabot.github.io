@@ -114,16 +114,15 @@ br.mo {
 }
 
 .t-fx > div {
-	font-size: 27px;
-	font-weight: bold;
+	font-size: 20px;
 	line-height: 32px;
 	margin-left: 8px;
 	opacity: 0;
 }
 
-.t-fx > div.active {
-	animation: von 1s ease;
-	animation-fill-mode: forwards;
+.t-fx > div > span {
+	font-size: 14px;
+	margin-left: 2px;
 }
 
 .h2 {
@@ -141,18 +140,6 @@ br.mo {
 	fill: none;
 }
 
-.svg1.active polyline[class*='cls-2'] {
-	stroke: #222;
-	stroke-miterlimit: 10;
-	stroke-dasharray: 300;
-	stroke-dashoffset: 300;
-	animation: dash 6s 1s ease-in-out;
-	stroke-linejoin: round;
-	stroke-width: 2;
-	stroke-linecap: round;
-	animation-fill-mode: forwards;
-}
-
 .svg2 {
 	padding: 1px;
 	overflow: visible;
@@ -161,23 +148,6 @@ br.mo {
 
 .svg2 .cls-3 {
 	fill: none;
-}
-
-.svg2.active path[class*='cls-3'] {
-	stroke: #222;
-	stroke-miterlimit: 10;
-	stroke-dasharray: 300;
-	stroke-dashoffset: 300;
-	animation-delay: 5s;
-	animation: dash 6s 2s ease-in-out;
-	stroke-linejoin: round;
-	stroke-width: 1.5;
-	stroke-linecap: round;
-	animation-fill-mode: forwards;
-}
-
-.svg2 + .active {
-	animation-delay: 2s;
 }
 
 .svg3 {
@@ -190,21 +160,56 @@ br.mo {
 	fill: none;
 }
 
-.svg3.active path[class*='cls-4'] {
+.map-box.active polyline[class*='cls-2'] {
+	stroke: #222;
+	stroke-miterlimit: 10;
+	stroke-dasharray: 300;
+	stroke-dashoffset: 300;
+	animation: dash 4s 1s ease-in-out;
+	stroke-linejoin: round;
+	stroke-width: 2;
+	stroke-linecap: round;
+	animation-fill-mode: forwards;
+}
+
+.map-box.active path[class*='cls-3'] {
 	stroke: #222;
 	stroke-miterlimit: 10;
 	stroke-dasharray: 300;
 	stroke-dashoffset: 300;
 	animation-delay: 5s;
-	animation: dash 6s 2.5s ease-in-out;
+	animation: dash 6s 2s ease-in-out;
 	stroke-linejoin: round;
 	stroke-width: 1.5;
 	stroke-linecap: round;
 	animation-fill-mode: forwards;
+	animation-delay: 2s;
 }
 
-.svg3 + .active {
-	animation-delay: 4s;
+.map-box.active path[class*='cls-4'] {
+	stroke: #222;
+	stroke-miterlimit: 10;
+	stroke-dasharray: 300;
+	stroke-dashoffset: 300;
+	animation: dash 4s 2.5s ease-in-out;
+	stroke-linejoin: round;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	animation-fill-mode: forwards;
+	animation-delay: 3s;
+}
+
+.map-box.active .pt {
+	animation: von 1s ease;
+	animation-fill-mode: forwards;
+}
+
+.map-box.active .pt2 {
+	animation-delay: 1s;
+}
+
+.map-box.active .pt3 {
+	animation-delay: 2s;
 }
 
 @keyframes dash {
@@ -859,7 +864,7 @@ html, body {
 
 @keyframes falling {
 	0% {
-		-webkit-transform: translate3d(0vw, 0, 0) rotate(0deg);
+		-webkit-transform: translate3d(30vw, 0, 0) rotate(0deg);
 	}
 	100% {
 		-webkit-transform: translate3d(-30vw, 100vh, 0) rotate(90deg);
@@ -877,19 +882,19 @@ html, body {
 
 @keyframes falling4 {
 	0% {
-		-webkit-transform: translate3d(-40vw, 0, 0) rotate(-20deg);
+		-webkit-transform: translate3d(10vw, 0, 0) rotate(-20deg);
 	}
 	100% {
-		-webkit-transform: translate3d(20vw, 100vh, 0) rotate(-190deg);
+		-webkit-transform: translate3d(40vw, 100vh, 0) rotate(-190deg);
 	}
 }
 
 @keyframes falling3 {
 	0% {
-		-webkit-transform: translate3d(10vw, 0, 0) rotate(-20deg);
+		-webkit-transform: translate3d(-20vw, 0, 0) rotate(-20deg);
 	}
 	100% {
-		-webkit-transform: translate3d(-30vw, 100vh, 0) rotate(-70deg);
+		-webkit-transform: translate3d(20vw, 100vh, 0) rotate(-70deg);
 	}
 }
 
@@ -1256,37 +1261,11 @@ html, body {
 	font-weight: 200;
 	font-size: 50px;
 	font-family: 'Montserrat','serif' !important;
-	opacity: 0;
 	color: #222;
 }
 
 .sec-cal h2 .tl-2 {
 	letter-spacing: -1.5px;
-}
-
-.sec-cal h2.active .tl-1 {
-	animation: von 0.5s 0.2s ease-in-out;
-	animation-fill-mode: forwards;
-}
-
-.sec-cal h2.active .tl-2 {
-	animation: von 0.5s 0.4s ease-in-out;
-	animation-fill-mode: forwards;
-}
-
-.sec-cal h2.active .tl-3 {
-	animation: von 0.5s 0.6s ease-in-out;
-	animation-fill-mode: forwards;
-}
-
-.sec-cal h2.active .tl-4 {
-	animation: von 0.5s 0.8s ease-in-out;
-	animation-fill-mode: forwards;
-}
-
-.sec-cal h2.active .tl-5 {
-	animation: von 0.5s 1s ease-in-out;
-	animation-fill-mode: forwards;
 }
 
 .sec-cal .cal-box {
@@ -1563,13 +1542,13 @@ html, body {
 
 .sec-info {
 	border-top: 1px solid #222;
-	padding-top: 150px;
+	padding-top: 50px;
+	padding-bottom: 100px;
 }
 
 .sec-info > p {
 	font-size: 16px;
-	line-height: 23px;
-	font-weight: bold;
+	line-height: 24px;
 }
 
 .sec-info h2 {
@@ -1665,7 +1644,6 @@ html, body {
 	font-size: 16px;
 	font-weight: bold;
 	flex-wrap: wrap;
-	color: #929292;
 }
 
 .acchead + .accbody .inner .b-box > span {
@@ -1770,7 +1748,7 @@ html, body {
 
 h3 {
 	font-size: 14px;
-	color: #9c9c9c;
+	color: #bbbbbb;
 	margin: 50px 0 10px;
 }
 
@@ -1791,7 +1769,7 @@ h3 {
 .footer {
 	position: relative;
 	background-color: #1d1d1d;
-	padding: 60px 0 40px;
+	padding: 75px 0 60px;
 }
 
 .footer::after {
@@ -1819,11 +1797,26 @@ h3 {
 
 .footer .fx-box button {
 	font-size: 14px;
-	color: #fff;
+	font-weight: bold;
+	color: #888888;
 }
 
 .footer .fx-box button + button {
-	margin-top: 8px;
+	margin-top: 10px;
+}
+
+.footer .fx-box .foot-link {
+	height: 30px;
+	padding-left: 28px;
+	background: url(../img/foot-link.png) no-repeat 0 2px;
+	background-size: auto 22px;
+}
+
+.footer .fx-box .foot-talk {
+	height: 30px;
+	padding-left: 28px;
+	background: url(../img/foot-talk.png) no-repeat 0 2px;
+	background-size: auto 22px;
 }
 
 /*# sourceMappingURL=wedding.css.map */
