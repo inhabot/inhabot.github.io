@@ -960,9 +960,8 @@ overflow-x: hidden;
   border-top: 1px solid #222;
   padding-top: 150px;
   & > p {
-    font-size: 15px;
+    font-size: 17px;
     line-height: 23px;
-    text-align: center;
   }
   h2 {
     margin-bottom: 20px;
@@ -989,7 +988,6 @@ overflow-x: hidden;
 
 .accwrap {
   position: relative;
-  margin-top: 110px;
   height: 300px;
   .accbox {
     // background-color: #fff;
@@ -1061,12 +1059,14 @@ overflow-x: hidden;
       animation: accordionIn 0.45s normal ease-in-out both 1; 
     }
   }
-  display: flex;
+  @include flex-box;
   align-items: center;
   justify-content: space-between;
   .tt {
+    display: block;
     font-weight: bold;
     color: #fff;
+    margin-bottom: -4px;
   }
   .arrow {
     width: 30px;
@@ -1114,4 +1114,10 @@ overflow-x: hidden;
        }
 }
 
+
+h3 {
+  font-size: 14px;
+  color: rgb(156, 156, 156);
+  margin: 50px 0 10px;
+}
 
