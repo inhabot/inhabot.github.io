@@ -43,15 +43,26 @@
           <div class="spot-bottom">
             
 
-            <a id="create-kakao-link-btn" href="javascript:;">
-              <img
-                src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_medium.png"
-                alt="카카오링크 보내기 버튼"
-              />
-            </a>
-            <script type="text/javascript">
-              Kakao.Link.createDefaultButton({
-                container: '#create-kakao-link-btn',
+            <script type="text/JavaScript" src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
+          </head>
+          <body>
+              <input type="button" onClick="sendLinkCustom();" value="Custom"/>
+              <input type="button" onClick="sendLinkDefault();" value="Default"/>
+          
+          <script type="text/javascript">
+              function sendLinkCustom() {
+                  Kakao.init("4c199b94451dab5dd3c0b3060fd1abaf");
+                  Kakao.Link.sendCustom({
+                      templateId: 72115
+                  });
+              }
+          </script>
+          
+          <script>
+          try {
+            function sendLinkDefault() {
+              Kakao.init('[Javascript API key]')
+              Kakao.Link.sendDefault({
                 objectType: 'feed',
                 content: {
                   title: '딸기 치즈 케익',
@@ -85,8 +96,10 @@
                   },
                 ],
               })
-            </script>
-
+            }
+          ; window.kakaoDemoCallback && window.kakaoDemoCallback() }
+          catch(e) { window.kakaoDemoException && window.kakaoDemoException(e) }
+          </script>
 
             <p class="time">2022/04/30  12:00</p>
             <p class="map">
