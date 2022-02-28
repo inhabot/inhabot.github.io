@@ -1,3 +1,10 @@
+br.mo {
+  display: none;
+  @include m320 {
+    display: block;
+  }
+}
+
 .t-fx {
   @include flex-box;
   align-items: center;
@@ -149,9 +156,10 @@ overflow-x: hidden;
 }
 
 .btn {
-  margin-top: -4px;
+  margin-top: -3px;
   font-size: 16px;
   line-height: 24px;
+  height: 26px;
   border-radius: 4px;
   padding: 2px 6px 0;
   background-color: #222;
@@ -160,6 +168,7 @@ overflow-x: hidden;
     padding-left: 20px;
     background:#222 url(../img/ico-copy.png) no-repeat 5px 50%;
     background-size: 12px auto;
+    font-size: 14px;
   }
 }
 .layout{
@@ -175,6 +184,8 @@ overflow-x: hidden;
 }
 /* leaf animations */
 .spot {
+  position: relative;
+  width: 100%;
     // min-height: 600px;
     // @include pc {
     //     min-height: 1400px;
@@ -269,6 +280,9 @@ overflow-x: hidden;
         @include pc {
           width: 140px;
         }
+        @include m320 {
+          width: 86px;
+        }
       }
       .name-k {
         position: absolute;
@@ -277,6 +291,9 @@ overflow-x: hidden;
         width: 164px;
         @include pc {
           width: 230px;
+        }
+        @include m320 {
+          width: 140px;
         }
       }
     }
@@ -365,41 +382,75 @@ overflow-x: hidden;
 
 #leaves {position:absolute;top:-100px; right: 0; z-index: 0;
     transform:  scale(2);;
-
+    width: 100%;
  @include pc {
     transform:  scale(3);;
  }
 }
 
 #leaves i {
+    position: absolute;
+    left: 50%;
     display: inline-block;
     transform: skew(20deg);
     z-index: 1;
-    animation: falling 5s 0s infinite;
+    @include m320 {
+      width: 3px !important;
+      height: 6px !important;
+    }
+    @include pc {
+      width: 7px !important;
+      height: 14px !important;
+    }
 }
 
-#leaves i:nth-of-type(2n) { animation: falling2 5s 0s infinite; }
-#leaves i:nth-of-type(3n) { animation: falling3 5s 0s infinite; }
+#leaves i:nth-of-type(n) { animation: falling 7s 0s infinite; }
+#leaves i:nth-of-type(2n) { animation: falling2 12s 1s infinite; }
+#leaves i:nth-of-type(3n) { animation: falling3 10s 2s infinite; }
+#leaves i:nth-of-type(4n) { animation: falling4 8s 0s infinite; }
+#leaves i:nth-of-type(5n) { animation: fallin5 7s 1s infinite; }
+#leaves i:nth-of-type(6n) { animation: falling5 6s 2s infinite; }
+#leaves i:nth-of-type(8n) { animation: falling4 14s 3s infinite; }
+#leaves i:nth-of-type(9n) { animation: falling3 10s 0s infinite; }
+#leaves i:nth-of-type(10n) { animation: falling 7s 0s infinite; }
+#leaves i:nth-of-type(11n) { animation: falling5 14s 0s infinite; }
+#leaves i:nth-of-type(12n) { animation: falling3 7s 0s infinite; }
+#leaves i:nth-of-type(13n) { animation: falling4 8s 0s infinite; }
+#leaves i:nth-of-type(14n) { animation: falling 14s 1s infinite; }
+#leaves i:nth-of-type(15n) { animation: falling5 6s 1s infinite; }
+#leaves i:nth-of-type(16n) { animation: falling4 8s 1s infinite; }
+#leaves i:nth-of-type(17n) { animation: falling2 10s 0s infinite; }
 
-#leaves i:nth-of-type(n)    { height:7px; width:14px; background: #ff4d4d;}
-#leaves i:nth-of-type(2n+1)    { height:7px; width:14px; background: #54b547;}
-#leaves i:nth-of-type(3n+2)  { height:7px; width:14px; background: #ffd44d;}
-#leaves i:nth-of-type(5n+1)  { height:7px; width:14px; background: #4d9aff;}
-#leaves i:nth-of-type(n)   { animation-delay: 1.9s;}
-#leaves i:nth-of-type(2n)  { animation-delay: 3.9s;}
-#leaves i:nth-of-type(3n)  { animation-delay: 2.3s;}
-#leaves i:nth-of-type(4n)  { animation-delay: 4.4s;}
-#leaves i:nth-of-type(5n)  { animation-delay: 5s;  }
-#leaves i:nth-of-type(6n)  { animation-delay: 3.5s;}
-#leaves i:nth-of-type(7n)  { animation-delay: 2.8s;}
-#leaves i:nth-of-type(8n)  { animation-delay: 1.5s;}
-#leaves i:nth-of-type(9n)  { animation-delay: 3.3s;}
-#leaves i:nth-of-type(10n) { animation-delay: 2.5s;}
-#leaves i:nth-of-type(11n) { animation-delay: 1.2s;}
-#leaves i:nth-of-type(12n) { animation-delay: 4.1s;}
-#leaves i:nth-of-type(13n) { animation-delay: 1s;  }
-#leaves i:nth-of-type(14n) { animation-delay: 4.7s;}
-#leaves i:nth-of-type(15n) { animation-delay: 3s;  }
+
+#leaves i:nth-of-type(n)    { height:5px; width:10px; background: #ff4d4d;}
+#leaves i:nth-of-type(2n)    { height:5px; width:10px; background: #54b547;}
+#leaves i:nth-of-type(3n)  { height:5px; width:10px; background: #ffd44d;}
+#leaves i:nth-of-type(4n)  { height:5px; width:10px; background: #4d9aff;}
+#leaves i:nth-of-type(5n)    { height:5px; width:10px; background: #e75656;}
+#leaves i:nth-of-type(6n)    { height:5px; width:10px; background: #18b818;}
+#leaves i:nth-of-type(7n)  { height:5px; width:10px; background: #4d9aff;}
+#leaves i:nth-of-type(8n)  { height:5px; width:10px; background: #ffd44d;}
+#leaves i:nth-of-type(9n)    { height:5px; width:10px; background: #ff4d4d;}
+#leaves i:nth-of-type(10n)  { height:5px; width:10px; background: #ffd44d;}
+#leaves i:nth-of-type(11n)  { height:5px; width:10px; background: #67b35d;}
+#leaves i:nth-of-type(22n)  { height:5px; width:10px; background: #2b808b;}
+#leaves i:nth-of-type(12n)    { height:5px; width:10px; background: #ff4d4d;}
+#leaves i:nth-of-type(13n)  { height:5px; width:10px; background: #4d9aff;}
+#leaves i:nth-of-type(n)   { animation-delay: 1s;}
+#leaves i:nth-of-type(2n)  { animation-delay: 2.9s;}
+#leaves i:nth-of-type(3n)  { animation-delay: 1.3s;}
+#leaves i:nth-of-type(4n)  { animation-delay: 3.4s;}
+#leaves i:nth-of-type(5n)  { animation-delay: 4s;  }
+#leaves i:nth-of-type(6n)  { animation-delay: 2.5s;}
+#leaves i:nth-of-type(7n)  { animation-delay: 1.8s;}
+#leaves i:nth-of-type(8n)  { animation-delay: 0.5s;}
+#leaves i:nth-of-type(9n)  { animation-delay: 2.3s;}
+#leaves i:nth-of-type(10n) { animation-delay: 1.5s;}
+#leaves i:nth-of-type(11n) { animation-delay: 0.2s;}
+#leaves i:nth-of-type(12n) { animation-delay: 3.1s;}
+#leaves i:nth-of-type(13n) { animation-delay: 0;  }
+#leaves i:nth-of-type(14n) { animation-delay: 3.7s;}
+#leaves i:nth-of-type(15n) { animation-delay: 2s;  }
 #leaves i:nth-of-type(n)    { opacity: 1;}
 #leaves i:nth-of-type(3n+1)  { opacity: 1;}
 #leaves i:nth-of-type(3n+2)  { opacity: 1;}
@@ -413,27 +464,53 @@ overflow-x: hidden;
     
     0% {
         -webkit-transform:
-            translate3d(300,0,0)
+            translate3d(0vw,0,0)
             rotate(0deg);
     }
     
     100% {
         -webkit-transform:
-            translate3d(-350px,700px,0)
+            translate3d(-30vw,100vh,0)
             rotate(90deg);
     }
+}
+@keyframes falling5 {
+  0% {
+     -webkit-transform:
+         translate3d(10vw,0,0)
+         rotate(-10deg);
+ }
+ 
+ 100% {
+     -webkit-transform:
+         translate3d(-15vw,100vh,0)
+         rotate(-290deg);
+ }
+}
+@keyframes falling4 {
+  0% {
+     -webkit-transform:
+         translate3d(-40vw,0,0)
+         rotate(-20deg);
+ }
+ 
+ 100% {
+     -webkit-transform:
+         translate3d(20vw,100vh,0)
+         rotate(-190deg);
+ }
 }
 
 @keyframes falling3 {
      0% {
         -webkit-transform:
-            translate3d(0,0,0)
+            translate3d(10vw,0,0)
             rotate(-20deg);
     }
     
     100% {
         -webkit-transform:
-            translate3d(-230px,640px,0)
+            translate3d(-30vw,100vh,0)
             rotate(-70deg);
     }
 }
@@ -441,13 +518,13 @@ overflow-x: hidden;
 @keyframes falling2 {
      0% {
         -webkit-transform:
-            translate3d(0,0,0)
+            translate3d(0vw,0,0)
             rotate(90deg);
     }
     
     100% {
         -webkit-transform:
-            translate3d(-400px,680px,0)
+            translate3d(-20vw,100vh,0)
             rotate(0deg);
     }
 }
@@ -653,6 +730,9 @@ overflow-x: hidden;
     & + .sec-pp {
       padding: 0 0 40px;
     }
+    @include m320 {
+      font-size: 15px;
+    }
   }
   .sign-box {
     opacity: 1;
@@ -736,9 +816,8 @@ overflow-x: hidden;
     color: #222;
     &>span {
       display: inline-block;
-      font-weight: 600;
+      font-weight: 200;
       font-size: 50px;
-      font-weight: 400;
       font-family: 'Montserrat','serif' !important;
       opacity: 0;
       color: #222;
@@ -846,6 +925,10 @@ overflow-x: hidden;
       line-height: 34px;
       margin-bottom: 20px;
       letter-spacing: -3px;
+      font-weight: 300;;
+      @include m320 {
+        font-size: 37px;
+      }
       .gray {
         color: #222;
       }
@@ -910,14 +993,19 @@ overflow-x: hidden;
     }
     .btn-map {
       padding: 20px 0;
-      flex: 0 0 100%;
-      @include pc {
+      // @include pc {
         flex: 0 0 33.3333%;
-      }
-      & + a {
-        margin-top: 2px;
-        @include pc {
-          margin-top: 0
+      // }
+      // & + a {
+        // margin-top: 2px;
+        // @include pc {
+          // margin-top: 0
+        // }
+      // }
+      @include m320 {
+        flex: 0 0 100%;
+        & + a {
+          margin-top: 2px;
         }
       }
     }
@@ -940,15 +1028,26 @@ overflow-x: hidden;
     }
     .link-naver {
       background:#222 url(../img/map-n.png) no-repeat 50% 50%;
-      background-size: auto 26px;
+      background-size: auto 20px;
     }
     .link-kakao {
       background:#222 url(../img/map-k.png) no-repeat 50% 50%;
-      background-size: auto 26px;
+      background-size: auto 20px;
     }
     .link-tmap {
       background:#222 url(../img/map-t.png) no-repeat 50% 50%;
-      background-size: auto 26px;
+      background-size: auto 20px;
+    }
+    @include m320 {
+      .link-naver {
+        background-size: auto 24px;
+      }
+      .link-kakao {
+        background-size: auto 24px;
+      }
+      .link-tmap {
+        background-size: auto 24px;
+      }
     }
     a {
       display: block;
@@ -967,6 +1066,7 @@ overflow-x: hidden;
     margin-bottom: 20px;
   }
   .b-box {
+    margin-top: 5px;
     margin-bottom: 20px;
     padding-bottom: 20px;
   }
@@ -1046,6 +1146,8 @@ overflow-x: hidden;
         color: #444;
       }
       .b-box {
+        @include flex-box;
+        align-items: center;
         &.bd-ddd {
           border-bottom: 1px solid #ddd;
         }
@@ -1053,7 +1155,7 @@ overflow-x: hidden;
     }
   }
   &.active + .accbody {
-    height: 177px;
+    height: 180px;
     transition: height .5s ease-out;
     .inner {
       animation: accordionIn 0.45s normal ease-in-out both 1; 
@@ -1121,3 +1223,45 @@ h3 {
   margin: 50px 0 10px;
 }
 
+.btn-pay {
+  display: block;
+  width: 55px;
+  height: 26px;
+  border-radius: 4px;
+  margin-top: -3px;
+  background:#fde000 url(../img/btn-pay.png) no-repeat 50% 50%;
+  background-size: 60px auto;
+}
+.ml-5 {
+  margin-left: 5px !important;
+}
+
+.footer {
+  position: relative;
+  background-color: rgb(29, 29, 29);
+  padding:60px 0 40px;
+  &::after {
+    position: absolute;
+    content: '';
+    top: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 80px;
+    background: url(../img/conf.png) no-repeat 50% 0;
+    background-size: 800px 50px;
+  }
+  .fx-box {
+    @include flex-box;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    button {
+      font-size: 14px;
+      color: #fff;
+      & + button {
+        margin-top: 8px;
+      }
+    }
+  }
+}
