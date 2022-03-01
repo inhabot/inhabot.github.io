@@ -1,3 +1,82 @@
+.svg {
+  overflow: visible;
+  position: absolute;
+}
+.svg-l {
+  width: 120px;
+  left:0;
+  top: 0;
+  @include pc {
+    width: 160px;
+  }
+}
+.svg-a {
+  width: 20px;
+  top: 30px;
+  left: 130px;
+  @include pc {
+    width: 30px;
+    top: 20px;
+    left: 200px;
+  }
+}
+.svg-k {
+  width: 180px;
+  right: 0;
+  bottom: 0;
+  @include pc {
+    width: 240px;
+  }
+}
+path[class*='cls-9']{
+  stroke:#222;
+  stroke-miterlimit:10;  
+  stroke-dasharray:6000;
+  stroke-dashoffset: 6000;
+  animation: dash3 4s 3s linear;
+  stroke-linejoin: round;
+  stroke-width: 7;
+  stroke-linecap: round;
+  animation-fill-mode:forwards;
+  fill: none;
+  transform: rotate(-2deg);
+}
+path[class*='cls-8']{
+  stroke:#222;
+  stroke-miterlimit:10;  
+  stroke-dasharray:6000;
+  stroke-dashoffset: 6000;
+  animation: dash3 8s 2s linear;
+  stroke-linejoin: round;
+  stroke-width: 6;
+  stroke-linecap: round;
+  animation-fill-mode:forwards;
+  fill: none;
+  @include pc {
+    stroke-width: 5;
+  }
+}
+path[class*='cls-7']{
+  stroke:#222;
+  stroke-miterlimit:10;  
+  stroke-dasharray:6000;
+  stroke-dashoffset: 6000;
+  animation: dash3 4s 0s linear;
+  stroke-linejoin: round;
+  stroke-width: 7;
+  stroke-linecap: round;
+  animation-fill-mode:forwards;
+  fill: none;
+}
+
+@keyframes dash3 {
+  0% {
+    stroke-dashoffset:6000;
+  }
+  100% {
+    stroke-dashoffset:0;
+  }
+}
 br.mo {
   display: none;
   @include m320 {
@@ -267,7 +346,10 @@ overflow-x: hidden;
       max-width: 240px;
       margin: -18px auto 0;
       position: relative;
-      height: 150px;
+      height: 210px;
+      @include pc {
+        height: 240px;
+      }
       img {
         width: 100%;
       }
@@ -307,10 +389,10 @@ overflow-x: hidden;
       position: absolute;
       bottom: 60px;
       .time {
-        font-weight: 800;
+        font-weight: 900;
         margin-bottom: 2px;
         font-size: 16px;
-        letter-spacing: 1px;
+        letter-spacing: 3px;
         .lite {
           font-weight: 600;
         }
@@ -344,7 +426,7 @@ overflow-x: hidden;
         }
         .arrow {
           border: 1px solid #222;  
-          border-width: 0px 0px 2px 2px;
+          border-width: 0px 0px 3px 3px;
           width: 12px;
           height: 12px;
           position: absolute;
@@ -708,6 +790,19 @@ overflow-x: hidden;
   padding-top: 20vw;
   padding-bottom: 11.5vw;
   text-align: center;
+  position: relative;
+  .bg-line {
+    position: absolute;
+    top: 0;
+    left: 0px;
+    width: 5000px;
+    height: 10px;
+    background:url(../img/bg-line.png) repeat-x;
+    // left: 50%;
+    // transform: translateX(-50%);
+    background-size: auto 10px;
+  }
+   
   @include pc {
     padding-top: 10vw;
   }
@@ -715,21 +810,15 @@ overflow-x: hidden;
     font-size: 16px;
     line-height: 32px;
     padding: 100px 0 20px;
-    // font-family: 'Gowun Batang', serif !important;
     opacity: 0;
     &.active {
       animation: von 1s ease-in-out;
       animation-fill-mode: forwards;
       & + .sign-box {
+        opacity: 0;
         margin-top: 40px;
-      .sign-l::before {
-        animation: width 1s 2s ease;
+        animation: von 1s ease-in-out;
         animation-fill-mode: forwards;
-      }
-      .sign-k::before {
-        animation: width 1s 3s ease;
-        animation-fill-mode: forwards;
-      }
       }
     }
     @include pc {
@@ -743,16 +832,7 @@ overflow-x: hidden;
     }
   }
   .sign-box {
-    opacity: 1;
     padding-bottom: 100px;
-    @keyframes width {
-      0% {
-        width: 100%;
-      }
-      100% {
-        width: 0;
-      }
-    }
   }
   .name-box {
     // font-family: 'Gowun Batang', serif !important;
@@ -771,14 +851,6 @@ overflow-x: hidden;
     div[class*='sign']{
       width: 90px;
       position: relative;
-      &::before{
-        content: '';
-        position: absolute;
-        right: 0;
-        width: 100%;
-        height: 100%;
-        background-color: #fff;
-      } 
       img {
         display: inline-block;
         vertical-align: top;
@@ -1300,13 +1372,13 @@ h3 {
     .foot-link {
       height: 30px;
       padding-left: 28px;
-      background: url(../img/foot-link.png) no-repeat 0 2px;
+      background: url(../img/foot-link.png) no-repeat 0 3px;
       background-size: auto 22px;
     }
     .foot-talk {
       height: 30px;
       padding-left: 28px;
-      background: url(../img/foot-talk.png) no-repeat 0 2px;
+      background: url(../img/foot-talk.png) no-repeat 0 3px;
       background-size: auto 22px;
     }
   }

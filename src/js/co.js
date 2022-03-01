@@ -31,7 +31,7 @@ gsap.fromTo(".text,.a-top2", {
   opacity: -0.5,
   duration: .5,
 });
-gsap.fromTo(".marquee_text", {
+gsap.fromTo(".bg-line", {
   left: -250
 }, {
   scrollTrigger: {
