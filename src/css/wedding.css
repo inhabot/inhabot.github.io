@@ -1229,10 +1229,20 @@ html, body {
 	position: absolute;
 	top: 0;
 	left: 0px;
-	width: 5000px;
-	height: 10px;
+	width: 2000px;
+	height: 13px;
 	background: url(../img/bg-line.png) repeat-x;
-	background-size: auto 10px;
+	background-size: auto 13px;
+}
+
+@media (min-width: 1024px) {
+	.sec-p .bg-line {
+		height: 16px;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 2000vw;
+		background-size: auto 16px;
+	}
 }
 
 @media (min-width: 1024px) {

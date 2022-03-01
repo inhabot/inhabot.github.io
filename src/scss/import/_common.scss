@@ -795,12 +795,19 @@ overflow-x: hidden;
     position: absolute;
     top: 0;
     left: 0px;
-    width: 5000px;
-    height: 10px;
+    width: 2000px;
+    height: 13px;
     background:url(../img/bg-line.png) repeat-x;
     // left: 50%;
     // transform: translateX(-50%);
-    background-size: auto 10px;
+    background-size: auto 13px;
+    @include pc {
+      height: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2000vw;  
+      background-size: auto 16px;
+    }
   }
    
   @include pc {
