@@ -964,7 +964,9 @@ html, body {
 }
 
 .sec-photo h2 {
+	font-size: 40px;
 	padding-bottom: 5px;
+	font-weight: 300;
 }
 
 .mySwiper2 {
@@ -1014,11 +1016,11 @@ html, body {
 
 .mySwiper .swiper-wrapper .swiper-slide {
 	opacity: 0;
-	flex: 1 1 auto;
+	flex: 0 1 auto;
 	cursor: pointer;
 	position: relative;
 	height: 50px;
-	overflow: hidden;
+	overflow: hidden !important;
 }
 
 .mySwiper .swiper-wrapper .swiper-slide img {
@@ -1285,7 +1287,7 @@ html, body {
 
 .sec-cal .cal-box .ball.active {
 	opacity: 0;
-	animation: ball 3s .5s ease-in-out;
+	animation: ball 2.4s 0s ease-in-out;
 	animation-fill-mode: forwards;
 }
 
@@ -1332,12 +1334,6 @@ html, body {
 	position: absolute;
 	width: 1px;
 	background-color: #222;
-}
-
-@media (min-width: 1024px) {
-	.sec-cal .cal-box i[class*='bl-'] {
-		width: 2px;
-	}
 }
 
 .sec-cal .cal-box .bl-1 {
