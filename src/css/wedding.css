@@ -351,9 +351,11 @@ html, body {
 	/* required to prevent rogue scrollbars */
 	overflow: hidden;
 	/* cosmetic stuff: */
+	background-color: #fff;
 }
 
 .wrap {
+	background-color: #fff;
 	position: fixed;
 	top: 0;
 	left: 0;

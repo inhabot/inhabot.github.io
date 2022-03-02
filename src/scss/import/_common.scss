@@ -222,8 +222,10 @@ html,body {
     overflow: hidden;
     /* cosmetic stuff: */
     // background-color:#5AE;
+    background-color: #fff;
 }
 .wrap {
+  background-color: #fff;
   position:fixed;
   top:0;
   left:0;
@@ -767,6 +769,7 @@ overflow-x: hidden;
         }
       }
       &.img-h {
+        
         img {
           height: 100%;
           width: auto;
@@ -798,8 +801,6 @@ overflow-x: hidden;
     width: 2000px;
     height: 13px;
     background:url(../img/bg-line.png) repeat-x;
-    // left: 50%;
-    // transform: translateX(-50%);
     background-size: auto 13px;
     @include pc {
       height: 16px;
