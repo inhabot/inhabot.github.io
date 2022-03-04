@@ -258,3 +258,17 @@ function sendLinkCustom() {
     };
   } catch (e) {};
 }
+
+function sendLinkCustom2() {
+  try {
+    if (!Kakao.isInitialized()) {
+      Kakao.init('4c199b94451dab5dd3c0b3060fd1abaf');
+    }
+
+    if (Kakao) {
+      Kakao.Link.sendCustom({
+        templateId: 72466
+      });
+    };
+  } catch (e) {};
+}
