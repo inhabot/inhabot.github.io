@@ -1916,4 +1916,37 @@ h3 {
 	background-size: auto 22px;
 }
 
+.iinner {
+	padding: 10px 12px;
+	font-size: 12px;
+	letter-spacing: 1.2px;
+	line-height: 1.6;
+}
+
+.iinner * {
+	font-size: 14px;
+	word-break: keep-all;
+}
+
+.iinner h2 {
+	margin-bottom: 20px;
+}
+
+.iinner h3 {
+	font-size: 12px;
+	color: #adadad;
+}
+
+.iinner .nar {
+	color: #4e89e2;
+}
+
+.iinner .bold {
+	font-weight: bold;
+}
+
+h1 {
+	font-size: 20px !important;
+}
+
 /*# sourceMappingURL=wedding.css.map */

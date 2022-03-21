@@ -1,0 +1,26 @@
+.iinner {
+    padding: 10px 12px;
+    font-size: 12px;
+    letter-spacing: 1.2px;
+    line-height: 1.6;
+    * {
+        font-size: 14px;
+        word-break: keep-all;
+    }
+    h2 {
+        margin-bottom: 20px;
+    }
+    h3 {
+        font-size: 12px;
+        color: rgb(173, 173, 173);
+    }
+    .nar {
+        color: rgb(78, 137, 226);
+    }
+    .bold {
+        font-weight: bold;
+    }
+}
+h1 {
+    font-size: 20px !important;
+}
