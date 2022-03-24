@@ -1302,12 +1302,12 @@ overflow-x: hidden;
 @keyframes accordionIn {
   0% {
     opacity: 0;
-    transform:scale(0.9) rotateX(-60deg);
+    // transform:scale(0.9) rotateX(-20deg);
     transform-origin: 50% 0;
   }
   100% {
     opacity:1;
-    transform:scale(1);
+    // transform:scale(1);
   }
 }
 @keyframes height {
@@ -1321,11 +1321,11 @@ overflow-x: hidden;
 @keyframes accordionOut {
     0% {
        opacity: 1;
-       transform:scale(1);
+      //  transform:scale(1);
      }
      100% {
           opacity:0;
-           transform:scale(0.9) rotateX(-60deg);
+          //  transform:scale(0.9) rotateX(-20deg);
        }
 }
 
