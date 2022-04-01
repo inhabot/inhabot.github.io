@@ -194,6 +194,12 @@ var swiper2 = new Swiper(".mySwiper2", {
   thumbs: {
     swiper: swiper
   },
+  autoplay: {
+    delay: 3999,
+    disableOnInteraction: true,
+    // reverseDirection: true,
+  },
+  loop: 'true'
 });
 
 var swiper3 = new Swiper(".mySwiper3", {
@@ -201,12 +207,6 @@ var swiper3 = new Swiper(".mySwiper3", {
   spaceBetween: 1,
   centeredSlides: true,
   slidesPerView: 1,
-  autoplay: {
-    delay: 1800,
-    disableOnInteraction: false,
-    reverseDirection: true,
-  },
-  loop: 'infinity',
   mousewheel: {},
 });
 
