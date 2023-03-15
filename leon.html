@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="format-detection" content="telephone=no">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://ihyh.kr">
+    <meta property="og:title" content="이인하·김유현 결혼합니다.">
+    <meta property="og:image" content="src/img/og.jpg">
+    <meta property="og:description" content="4월 30일 낮 12시 · 원주 빌라드아모르">
+    <meta property="og:site_name" content="Site Name">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <link rel="stylesheet" href="src/css/wedding.css">
+    <link rel="stylesheet" href="src/css/swiper.css">
+    <script type="text/JavaScript" src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
+    <style>
+      html, body {
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          outline: 0;
+          margin: 0;
+          padding: 0;
+          background-color: #f0f0f0;
+          cursor: move;
+      }
+  </style>
+  </head>
+  <body>
+    <!-- <div class="wrap">
+        <label for="input-main">메인이미지 업로드</label>
+        <input id="input-main"type="file" accept="image/jpeg, image/png, image/jpg" multiple>
+        <output class="img-ouput"></output>
+        <button id="imageDeleteAllBtn" onclick="imageDeleteAll()">전체삭제</button>
+         
+        <div>
+          <textarea type="textarea" id="inputtext"></textarea>
+          <div id="outputtext"></div>
+        </div>
+    </div> -->
+    <script src="src/js/jq.js"></script>
+    <script src="src/js/sp.js"></script>
+    <script src="src/js/gs.js"></script>
+    <script src="src/js/st.js"></script>
+    <script src="src/js/co.js"></script>
+    <script src="src/js/leon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.6/dat.gui.js"></script>
+    <script>
+      const pixelRatio = 2;
+let isDown = false, moveX = 0, moveY = 0, offsetX = 0, offsetY = 0;
+let canvas, ctx;
+let renderer, stage;
+let sw = document.body.clientWidth;
+let sh = document.body.clientHeight;
+
+function generateCanvas() {
+    canvas = document.createElement('canvas');
+    document.body.appendChild(canvas);
+    ctx = canvas.getContext("2d");
+
+    window.addEventListener('resize', canvasResize, false);
+    canvasResize();
+
+    moveEvent(canvas);
+}
+
+function canvasResize() {
+    sw = document.body.clientWidth;
+    sh = document.body.clientHeight;
+
+    canvas.width = sw * pixelRatio;
+    canvas.height = sh * pixelRatio;
+    canvas.style.width = sw + 'px';
+    canvas.style.height = sh + 'px';
+    ctx.scale(pixelRatio, pixelRatio);
+}
+
+function generatePixi(bgcolor) {
+    renderer = new PIXI.Renderer({
+        width: sw,
+        height: sh,
+        antialias: true,
+        transparent: false,
+        autoDensity: true,
+        resolution: pixelRatio,//window.devicePixelRatio > 1 ? 2 : 1,
+        powerPreference: "high-performance",
+        backgroundColor: bgcolor
+    });
+    document.body.appendChild(renderer.view);
+    stage = new PIXI.Container();
+
+    window.addEventListener('resize', pixiResize, false);
+    pixiResize();
+
+    moveEvent(renderer.view);
+}
+
+function pixiResize() {
+    sw = document.body.clientWidth;
+    sh = document.body.clientHeight;
+
+    renderer.resize(sw, sh);
+}
+
+function moveEvent(canvas) {
+    const hammer = new Hammer(canvas);
+    hammer.add(new Hammer.Pan({direction: Hammer.DIRECTION_ALL, threshold: 0}));
+    hammer.on("pan", (e) => {                
+        moveX = e.deltaX + offsetX;
+        moveY = e.deltaY + offsetY;
+        if (e.isFinal) {
+            offsetX = moveX;
+            offsetY = moveY;
+        }
+    });
+}
+
+function getSize(size) {
+    let ratio = Math.sqrt(sw * sw + sh * sh) / 1800;
+    if (ratio > 1) ratio = 1;
+    else if (ratio < 0.5) ratio = 0.5;
+    return size * ratio;
+}
+    </script>
+    <script>
+      let leon, controll;
+
+      function init() {
+          generateCanvas();
+
+          controll = {
+              align: {},
+              box: false,
+              grids: false,
+              points: false,
+              drawing: () => {
+                  let i, total = leon.drawing.length;
+                  for (i = 0; i < total; i++) {
+                      TweenMax.killTweensOf(leon.drawing[i]);
+                      TweenMax.fromTo(leon.drawing[i], 2, {
+                          value: 0
+                      }, {
+                          value: 1,
+                          ease: Power3.easeOut
+                      });
+                  }
+              }
+          };        
+
+          leon = new LeonSans({
+              text: 'abcdefghijklmn\nopqrstuvwxyz\nABCDEFGHIJK\nLMNOPQRST\nUVWXYZ\n0123456789\n?!$^&*@#%:;\n(){}[]<>«»~_\n\'"·+=-×÷¿¡,.\nÀÁÂÃÄÅĂĄÆ\nÞßĆĈĊČÇĤÝ\nĎĐÈÉÊËĒĔĖĚ\nĜĞĠĢÙÚÛÜŬ\nŜŞĴÑÌÍÎÏ\nàáâãåäăąæ\nþćĉċčçĥýÿ\nďđèéêëēĕėě\nĝğġģùúûüŭ\nŝşĵñìíîï',
+              color: ['#342f2e'],
+              size: getSize(90),
+              weight: 200,
+              tracking: 2,
+              leading: 2, 
+              align: 'center'
+          });
+
+          const gui = new dat.GUI();
+           gui.add(leon, 'text');
+          gui.add(leon, 'size', 20, 1000);
+          gui.add(leon, 'weight', 1, 900);
+          gui.add(leon, 'tracking', -3, 10);
+          gui.add(leon, 'leading', -8, 10);
+          gui.add(controll, 'drawing');
+          gui.add(controll, 'box');
+          gui.add(controll, 'grids');
+          gui.add(controll, 'points');
+
+          requestAnimationFrame(animate);
+      }
+
+      function animate(t) {
+          requestAnimationFrame(animate);
+
+          ctx.clearRect(0, 0, sw, sh);
+
+          const x = (sw - leon.rect.w) / 2;
+          let y = (sh - leon.rect.h) / 2;
+          if (y < 0) y = 0;
+          leon.position(x + moveX, y + moveY);
+
+          ctx.save();
+          if (controll.grids) leon.grid(ctx);
+          if (controll.box) leon.box(ctx);
+          ctx.restore();
+
+          ctx.save();
+          leon.draw(ctx);
+          ctx.restore();
+
+          if (controll.points) {
+              ctx.save();
+              leon.point(ctx);
+              ctx.restore();
+          }
+      }
+
+      window.onload = () => {
+          init();
+      };
+  </script>
+  </body>
+
+
+  </html>

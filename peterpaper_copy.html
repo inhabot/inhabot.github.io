@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="format-detection" content="telephone=no">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://ihyh.kr">
+    <meta property="og:title" content="이인하·김유현 결혼합니다.">
+    <meta property="og:image" content="src/img/og.jpg">
+    <meta property="og:description" content="4월 30일 낮 12시 · 원주 빌라드아모르">
+    <meta property="og:site_name" content="Site Name">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <link rel="stylesheet" href="src/css/wedding.css">
+    <link rel="stylesheet" href="src/css/swiper.css">
+    <script type="text/JavaScript" src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
+    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4c199b94451dab5dd3c0b3060fd1abaf&libraries=services"></script>
+
+
+  </head>
+  <body>
+    <div class="" style="padding-top: 100px">
+        <label for="input-main">메인이미지 업로드</label>
+        <input id="input-main"type="file" accept="image/jpeg, image/png, image/jpg" multiple>
+        <output class="img-ouput"></output>
+        <button id="imageDeleteAllBtn" onclick="imageDeleteAll()">전체삭제</button>
+         
+        <div>
+          <textarea type="textarea" id="inputtext"></textarea>
+          <div id="outputtext"></div>
+        </div>
+    </div>
+    <div class="">
+      <form id="form">
+        <label for="input">신랑 이름:</label>
+        <input type="text" id="inputtext2" name="input">
+        <label for="input2">신부 이름:</label>
+        <input type="text" id="inputtext3" name="input2">
+        <button type="submit">Submit</button>
+      </form>
+        <div id="leon-canvas"></div>
+      <!-- <input type="text" id="address_kakao" name="address" readonly />
+      <div id="map" style="width:100%;height:350px;"></div> -->
+    </div>
+    <script src="src/js/jq.js"></script>
+    <script src="src/js/sp.js"></script>
+    <script src="src/js/gs.js"></script>
+    <script src="src/js/st.js"></script>
+    <!-- <script src="src/js/co.js"></script> -->
+    <script src="src/js/leon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
+
+    <script>
+      // img
+      const input = document.querySelector("input")
+      const output = document.querySelector("output")
+      var deleted = document.getElementsByClassName('image-delete')
+      
+      let imagesArray = []
+
+      input.addEventListener("change", () => {
+        const file = input.files;
+        for (i=0; i<file.length; i++) {
+          imagesArray.push(file[i])
+        }
+        displayImages();
+      })
+      function displayImages() {
+        let images = ""
+        imagesArray.forEach((image, index) => {
+        images += `<div class="image">
+          <img src="${URL.createObjectURL(image)}" alt="image">
+          <button onclick="deleteImage(${index})">삭제</button>
+          </div>`
+      })
+      output.innerHTML = images
+      }
+
+      function deleteImage(index) {
+        imagesArray.splice(index, 1)
+        displayImages()
+      }
+      function imageDeleteAll() {
+        imagesArray = [];
+        displayImages();
+      }
+      // text
+      const inputtext = document.getElementById('inputtext');
+      const outputtext = document.getElementById('outputtext');
+
+      inputtext.addEventListener('input', (event) => {
+        outputtext.innerHTML =  event.target.value.replace(/\n/g, '<br/>');
+      });
+
+      //text leon 
+     
+    </script>
+
+    <script>
+      let leon, canvas, ctx;
+
+      const leonCanvas= document.getElementById('leon-canvas');
+      const sw = 600;
+      const sh = 600;
+      const pixelRatio = 2;
+
+      function init() {
+        canvas = document.createElement('canvas');
+        leonCanvas.appendChild(canvas);
+        ctx = canvas.getContext("2d");
+
+        canvas.width = sw * pixelRatio;
+        canvas.height = sh * pixelRatio;
+        canvas.style.width = sw + 'px';
+        canvas.style.height = sh + 'px';
+        ctx.scale(pixelRatio, pixelRatio);
+
+        leon = new LeonSans({
+          text: 'name1\n&\nname2',
+          color: ['#49a9db'],
+          colorful: ['#c5d73f', '#9d529c', '#49a9db', '#fec330', '#5eb96e', '#fc5356', '#f38f31'],
+          size: 80,
+          weight: 500
+        });
+       
+        requestAnimationFrame(animate);
+      }
+
+      function animate(t) {
+        requestAnimationFrame(animate);
+
+        ctx.clearRect(0, 0, sw, sh);
+
+        const x = (sw - leon.rect.w) / 2;
+        const y = (sh - leon.rect.h) / 2;
+        leon.position(x, y);
+
+        leon.draw(ctx);
+        
+       
+      }
+
+      function drawnow() {
+        let i, total = leon.drawing.length;
+        for (i = 0; i < total; i++) {
+            TweenMax.fromTo(leon.drawing[i], 3, {
+                value: 0
+            }, {
+                delay: i * 0.05,
+                value: 1,
+                ease: Power4.easeOut
+            });
+        }
+      };
+
+    
+
+      window.onload = () => {
+        init();
+        drawnow();
+      };
+
+      const form = document.getElementById('form');
+      const inputtext2 = document.getElementById('inputtext2');
+      const inputtext3 = document.getElementById('inputtext3');
+          form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            leon.text = inputtext2.value +'\n'+ '&' +'\n' + inputtext3.value;
+            drawnow();
+            // inputtext2.value = '';
+            // inputtext3.value = '';
+        });
+   
+    </script>
+    <!-- 주소 검색 -->
+    <!-- <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+    <script>
+      var userAddress ='';
+      window.onload = function(){
+          document.getElementById("address_kakao").addEventListener("click", function(){ //주소입력칸을 클릭하면
+              //카카오 지도 발생
+              new daum.Postcode({
+                  oncomplete: function(data) { //선택시 입력값 세팅
+                      document.getElementById("address_kakao").value = data.address; // 주소 넣기
+                      close(daum.Postcode());
+                      // document.querySelector("input[name=address_detail]").focus(); //상세입력 포커싱
+                  }
+              }).open();
+          });
+      };
+      const addressinput = document.getElementById('address_kakao');
+      addressinput.addEventListener('input', (event) => {
+        addressinput.value = userAddress;
+        console.log(userAddress);
+      });
+    </script>  -->
+    <!-- 지도 -->
+    <!-- <script>
+      var mapContainer = document.getElementById('map'), // 지도를 표시할 div 
+        mapOption = {
+          center: new kakao.maps.LatLng(33.450701, 126.570667), // 지도의 중심좌표
+          level: 3 // 지도의 확대 레벨
+        };
+
+      // 지도를 생성합니다    
+      var map = new kakao.maps.Map(mapContainer, mapOption);
+
+      // 주소-좌표 변환 객체를 생성합니다
+      var geocoder = new kakao.maps.services.Geocoder();
+
+      // 주소로 좌표를 검색합니다
+      geocoder.addressSearch(userAddress, function (result, status) {
+
+        // 정상적으로 검색이 완료됐으면 
+        if (status === kakao.maps.services.Status.OK) {
+
+          var coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+
+          // 결과값으로 받은 위치를 마커로 표시합니다
+          var marker = new kakao.maps.Marker({
+            map: map,
+            position: coords
+          });
+
+          // 인포윈도우로 장소에 대한 설명을 표시합니다
+          var infowindow = new kakao.maps.InfoWindow({
+            content: '<div style="width:150px;text-align:center;padding:6px 0;">결혼식장소</div>'
+          });
+          infowindow.open(map, marker);
+
+          // 지도의 중심을 결과값으로 받은 위치로 이동시킵니다
+          map.setCenter(coords);
+        }
+      });
+    </script> -->
+   
+  </body>
+
+
+  </html>
