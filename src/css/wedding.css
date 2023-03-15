@@ -1985,4 +1985,14 @@ h1 {
 	position: relative;
 }
 
+#leon-canvas canvas {
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
+#address_kakao {
+	border: 1px solid #000;
+}
+
 /*# sourceMappingURL=wedding.css.map */

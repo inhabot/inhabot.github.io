@@ -36,4 +36,14 @@
   height: 600px;
   margin-top: 40px;
   position: relative;
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+}
+
+#address_kakao {
+  border: 1px solid #000;
+  
 }

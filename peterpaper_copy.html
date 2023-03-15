@@ -39,14 +39,16 @@
         <button type="submit">Submit</button>
       </form>
         <div id="leon-canvas"></div>
-      <!-- <input type="text" id="address_kakao" name="address" readonly />
-      <div id="map" style="width:100%;height:350px;"></div> -->
+        주소검색
+      <input type="text" id="address_kakao" name="address" readonly />
+      <a href="#" id="my-link" target="_blank">카카오네비 리그</a>
+      <div id="map" style="width:100%;height:350px;"></div>
     </div>
     <script src="src/js/jq.js"></script>
     <script src="src/js/sp.js"></script>
     <script src="src/js/gs.js"></script>
     <script src="src/js/st.js"></script>
-    <!-- <script src="src/js/co.js"></script> -->
+    <script src="src/js/co.js"></script>
     <script src="src/js/leon.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 
@@ -158,6 +160,7 @@
       window.onload = () => {
         init();
         drawnow();
+        addressSearch();
       };
 
       const form = document.getElementById('form');
@@ -173,30 +176,9 @@
         });
    
     </script>
-    <!-- 주소 검색 -->
-    <!-- <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
-    <script>
-      var userAddress ='';
-      window.onload = function(){
-          document.getElementById("address_kakao").addEventListener("click", function(){ //주소입력칸을 클릭하면
-              //카카오 지도 발생
-              new daum.Postcode({
-                  oncomplete: function(data) { //선택시 입력값 세팅
-                      document.getElementById("address_kakao").value = data.address; // 주소 넣기
-                      close(daum.Postcode());
-                      // document.querySelector("input[name=address_detail]").focus(); //상세입력 포커싱
-                  }
-              }).open();
-          });
-      };
-      const addressinput = document.getElementById('address_kakao');
-      addressinput.addEventListener('input', (event) => {
-        addressinput.value = userAddress;
-        console.log(userAddress);
-      });
-    </script>  -->
+
     <!-- 지도 -->
-    <!-- <script>
+    <script>
       var mapContainer = document.getElementById('map'), // 지도를 표시할 div 
         mapOption = {
           center: new kakao.maps.LatLng(33.450701, 126.570667), // 지도의 중심좌표
@@ -209,31 +191,70 @@
       // 주소-좌표 변환 객체를 생성합니다
       var geocoder = new kakao.maps.services.Geocoder();
 
-      // 주소로 좌표를 검색합니다
-      geocoder.addressSearch(userAddress, function (result, status) {
+    </script>
+        <!-- 주소 검색 -->
+        <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+        <script>
+          // 주소 변수 선언
+          var userAddress ='';
+         
+          function addressSearch() {
+            document.getElementById("address_kakao").addEventListener("click", function(){ 
+                  //주소입력칸을 클릭하면
+                  //카카오 지도 발생
+                  new daum.Postcode({
+                      oncomplete: function(data) { //선택시 입력값 세팅
+                          document.getElementById("address_kakao").value = data.address; // 주소값 input에 넣기
+                          userAddress = data.address; // 주소 변수에 넣기
+                          // 주소 변수로 검색
+                          geocoder.addressSearch(userAddress, function (result, status) {
+                          // 정상적으로 검색이 완료됐으면 
+                            if (status === kakao.maps.services.Status.OK) {
 
-        // 정상적으로 검색이 완료됐으면 
-        if (status === kakao.maps.services.Status.OK) {
+                              var coords = new kakao.maps.LatLng(result[0].y, result[0].x);
 
-          var coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                              // 결과값으로 받은 위치를 마커로 표시합니다
+                              var marker = new kakao.maps.Marker({
+                                map: map,
+                                position: coords
+                              });
 
-          // 결과값으로 받은 위치를 마커로 표시합니다
-          var marker = new kakao.maps.Marker({
-            map: map,
-            position: coords
-          });
+                              // 인포윈도우로 장소에 대한 설명을 표시합니다
+                              // var infowindow = new kakao.maps.InfoWindow({
+                              //   content: '<div style="width:150px;text-align:center;padding:6px 0;">결혼식장소</div>'
+                              // });
+                              // infowindow.open(map, marker);
 
-          // 인포윈도우로 장소에 대한 설명을 표시합니다
-          var infowindow = new kakao.maps.InfoWindow({
-            content: '<div style="width:150px;text-align:center;padding:6px 0;">결혼식장소</div>'
-          });
-          infowindow.open(map, marker);
+                              // 지도의 중심을 결과값으로 받은 위치로 이동시킵니다
+                              map.setCenter(coords);
 
-          // 지도의 중심을 결과값으로 받은 위치로 이동시킵니다
-          map.setCenter(coords);
-        }
-      });
-    </script> -->
+                              //카카오 길찾기 주소 반영
+                              const userAddressKakaoNavi = `${userAddress},${coords.La},${coords.Ma}`;
+                              const myLink = document.getElementById('my-link');
+                              myLink.addEventListener('click', (event) => {
+                                event.preventDefault();
+                                const myUrl = `https://map.kakao.com/link/to/${userAddressKakaoNavi}`; // Your URL with variable here
+                                window.window.open('about:blank').location.href = myUrl;
+                              });
+                            }
+                          });
+                      },
+                      onclose: function(state) {
+                          //state는 우편번호 찾기 화면이 어떻게 닫혔는지에 대한 상태 변수 이며, 상세 설명은 아래 목록에서 확인하실 수 있습니다.
+                          if(state === 'FORCE_CLOSE'){
+                              //사용자가 브라우저 닫기 버튼을 통해 팝업창을 닫았을 경우, 실행될 코드를 작성하는 부분입니다.
+    
+                          } else if(state === 'COMPLETE_CLOSE'){
+                              //사용자가 검색결과를 선택하여 팝업창이 닫혔을 경우, 실행될 코드를 작성하는 부분입니다.
+                              //oncomplete 콜백 함수가 실행 완료된 후에 실행됩니다.
+                          }
+                      }
+                  }).open();
+              });
+          };
+
+          
+        </script> 
    
   </body>
 
