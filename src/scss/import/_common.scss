@@ -399,14 +399,14 @@ overflow-x: hidden;
           font-weight: 600;
         }
       }
-      .map {
+      #map {
         font-weight: 600;
         letter-spacing: -1.5px;
         font-size: 16px;
       }
       @include pc {
         bottom: 80px;
-        .time,.map {
+        .time,#map {
           font-size: 20px;
         }
       }
@@ -1031,7 +1031,7 @@ overflow-x: hidden;
     }
    
   }
-  .map {
+  #map {
     margin-top: 80px;
     width: 100%;
     height: 100%;
@@ -1104,12 +1104,13 @@ overflow-x: hidden;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      & > div {
+      & > input#copy-kakao {
         padding-right: 20px;
         background:#222 url(../img/ico-copy.png) no-repeat 100% 0;
         background-size: 12px auto;
         font-size: 14px;
         margin-bottom: -2px;
+        color: #fff;
       }
     }
     .link-naver {

@@ -168,7 +168,7 @@ function copyB04() {
   toastAni();
 }
 function copyPlace() {
-  var copyText = document.getElementById("place");
+  var copyText = document.getElementById("copy-kakao");
   copyText.select();
   document.execCommand("Copy");
   toastAni();

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="format-detection" content="telephone=no">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://ihyh.kr">
+    <meta property="og:title" content="이인하·김유현 결혼합니다.">
+    <meta property="og:image" content="src/img/og.jpg">
+    <meta property="og:description" content="4월 30일 낮 12시 · 원주 빌라드아모르">
+    <meta property="og:site_name" content="Site Name">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <link rel="stylesheet" href="src/css/wedding.css">
+    <link rel="stylesheet" href="src/css/swiper.css">
+    <script type="text/JavaScript" src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
+    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=4c199b94451dab5dd3c0b3060fd1abaf&libraries=services"></script>
+
+
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="spot layout" id="top">
+        <div class="spot-box">
+        </div>
+        <div class="center">
+          <div id="leon-canvas"></div>
+          <div id="outputImage"></div>
+          <div class="spot-bottom">
+            <p class="time font-mont">Wedding day<br> 2022.04.30  PM12:00</p>
+            <a href="#top2" class="a-top2">
+              <span class="blind">아래로</span>
+              <div class="arrow arrow-first"></div>
+              <div class="arrow arrow-second"></div>
+            </a>
+          </div>
+        </div>
+        <div id="leaves">
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i> <i></i>
+          <i></i>
+          <i></i><i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i> <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+        </div>
+      </div>
+      <div class="inner sec-p">
+        <div class="bg-line"></div>
+        <p class="sec-pp ani" id="outputtext">
+          <!-- 영화관 아르바이트 동료로 처음 만나 <br>
+          팝콘만 튀겼어야 했는데 사랑도 튀겼습니다.<br>
+          그렇게 행복한 4년을 함께하고<br class="mo"> 드디어 결혼합니다.<br>
+          지금처럼 재미있게 살겠습니다.
+          <br>
+          따듯한 마음으로 축복해주시면<br class="mo"> 감사하겠습니다. -->
+        </p>
+        <div class="sign-box">
+          <div class="name-box">
+            <p>이상훈 · 양미경의 차남</p>
+            <div class="sign-l">
+              <img src="src/img/sign_l.png" alt="이인하">
+            </div>
+          </div>
+          <div class="name-box">
+            <p>김정태 · 정계신의 장녀</p>
+            <div class="sign-k">
+              <img src="src/img/sign_k.png" alt="이인하">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="inner sec-photo">
+        <h2 class="font-mont">Gallery</h2>
+        <div class="swiper mySwiper2 ani">
+          <div class="swiper-wrapper">
+            <div class="swiper-slide">
+              <img src="src/img/p-01.jpg">
+            </div>
+            <div class="swiper-slide">
+              <img src="src/img/p-02.jpg">
+            </div>
+            <div class="swiper-slide">
+              <img src="src/img/p-03.jpg">
+            </div>
+            <div class="swiper-slide">
+              <img src="src/img/p-04.jpg">
+            </div>
+            <div class="swiper-slide">
+              <img src="src/img/p-05.jpg">
+            </div>
+            <div class="swiper-slide">
+              <img src="src/img/p-06.jpg">
+            </div>
+            <div class="swiper-slide">
+              <img src="src/img/p-07.jpg">
+            </div>
+          </div>
+        </div>
+        <div class="thumb_swiper">
+          <div thumbsslider="" class="swiper mySwiper ani swiper-container-initialized swiper-container-horizontal">
+            <div class="swiper-wrapper" style="transform: translate3d(0px, 0px, 0px);">
+              <div class="swiper-slide slide-1">
+                <img src="src/img/p-01.jpg">
+              </div>
+              <div class="swiper-slide img-h slide-2">
+                <img src="src/img/p-02.jpg">
+              </div>
+              <div class="swiper-slide slide-3">
+                <img src="src/img/p-03.jpg">
+              </div>
+              <div class="swiper-slide slide-4">
+                <img src="src/img/p-04.jpg">
+              </div>
+              <div class="swiper-slide slide-5">
+                <img src="src/img/p-05.jpg">
+              </div>
+              <div class="swiper-slide slide-6">
+                <img src="src/img/p-06.jpg">
+              </div>
+              <div class="swiper-slide img-h slide-7">
+                <img src="src/img/p-07.jpg">
+              </div>
+            </div>
+            <span class="swiper-notification" aria-live="assertive" aria-atomic="true"></span>
+          </div>
+        </div>
+      </div>
+      <div class="inner sec-cal" style="position: relative;">
+        <h2 class="ani"><span class="tl-1">2022</span>년 <br><span class="tl-2">04</span>월 <br><span class="tl-3">30</span>일 <br>낮 <span class="tl-4">12</span>시  <span class="tl-5">00</span>분</h2>
+        <div class="cal-box">
+          <i class="bl bl-1"></i>
+          <i class="bl bl-2"></i>
+          <i class="bl bl-3"></i>
+          <i class="bl bl-4"></i>
+          <i class="bl bl-5"></i>
+          <i class="bl bl-6"></i>
+          <div class="ball ani">
+            <svg viewBox="0 0 159.29 159.29">
+              <defs>
+                  <style>
+                      .cls-1 {
+                          fill: #fff;
+                      }
+                  </style>
+              </defs>
+              <g id="Layer_2" data-name="Layer 2">
+                  <g id="Layer_1-2" data-name="Layer 1">
+                      <circle class="cls-1" cx="79.64" cy="79.64" r="79.64" />
+                  </g>
+              </g>
+            </svg>
+          </div>1
+          <img src="src/img/cal.png" alt="" style="background-color: #fff;">
+        </div>
+      </div>
+      <div class="inner sec-map">
+        <div class="map-box ani">
+          <h2>원주 빌라 드 아모르</h2>
+         
+      
+  
+          <div id="map" style="height:300px"></div>
+          <div class="link-box">
+            <div class="address">
+              <input id="copy-kakao" onclick="copyPlace()" readonly>
+              </input>
+            </div>
+            <button id="my-link" class="link-kakao btn-map"><span class="blind">카카오지도</span></button>
+            <a href="https://m.place.naver.com/place/1984016486/location?subtab=location" target="_blank"
+              class="link-naver btn-map"><span class="blind">네이버지도</span></a>
+            <a href="https://surl.tmap.co.kr/63b6f5ac" target="_blank" class="link-tmap btn-map"><span class="blind">티맵</span></a>
+          </div>
+        </div>
+      </div>
+      <div class="inner sec-info">
+        <h3>화환안내</h3>
+        <p>환경보호와 예식장 내 원활한 통행을 위해<br>축하 화환은 정중히 사양합니다.<br>
+          좋은 마음만 감사히 받겠습니다.
+          </p>
+        <h3>COVID -19</h3>
+        <p>코로나 바이러스가 확산되는 중<br class="mo"> 진행하는 예식이<br> 혹여 부담으로 전해지지는 않을까<br class="mo"> 마음이 무겁습니다.</p>
+        <p>무리해서 참석해주시지 않으셔도 괜찮습니다.</p>
+    <p>축하의 마음만으로도 덧없는 기쁨입니다.</p>
+        <h3>계좌번호</h3>
+        <div class="accwrap">
+          <div class="accbox">
+            <div class="acc acc1">
+              <div class="acchead"><span class="tt">신랑측</span><span class="arrow"></span></div>
+              <div class="accbody">
+                <div class="inner">
+                  <span class="b-t">혼주 </span><span>양미경</span>
+                  <div class="b-box bd-ddd">NH농협 <span>261-02-138045</span><input id="b01" value="26102138045" readonly
+                      class="blind">
+                      <div class="b-full">
+                        <button onclick="copyB01()" class="btn btn-copy">복사</button>
+                      </div>
+                  </div>
+                  <span class="b-t">신랑 </span><span>이인하</span>
+                  <div class="b-box">KB국민 <span>301201-04-386015</span><input id="b03" value="30120104386015" readonly
+                      class="blind">
+                      <div class="b-full">
+                        <button onclick="copyB03()" class="btn btn-copy">복사</button>
+                        <a href="https://qr.kakaopay.com/Ej7ojU1sy" target="_blank" class="btn-pay ml-5"></a>
+                      </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="acc acc2">
+              <div class="acchead"><span class="tt">신부측</span><span class="arrow"></span></div>
+              <div class="accbody">
+                <div class="inner">
+                  <span class="b-t">혼주 </span><span>김정태</span>
+                  <div class="b-box bd-ddd">NH농협 <span>307022-52-047705</span><input id="b02" value="30702252047705" readonly
+                      class="blind">
+                      <div class="b-full">
+                        <button onclick="copyB02()" class="btn btn-copy">복사</button>
+                      </div>
+                  </div>
+                  <span class="b-t">신부 </span><span>김유현</span>
+                  <div class="b-box">우리 <span>1002-549-442646</span><input id="b04" value="1002549442646" readonly
+                      class="blind">
+                      <div class="b-full">
+                        <button onclick="copyB04()" class="btn btn-copy">복사</button>
+                        <a href="https://qr.kakaopay.com/FTBbDSfJi" target="_blank" class="btn-pay ml-5"></a>
+                      </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+     
+      </div>
+      <div class="footer">
+        <input id="thislink" value="ihyh.kr" readonly class="blind">
+        <div class="fx-box">
+          <button onclick="copyLink()" class="copy-link foot-link">청첩장 주소 복사</button>
+          <button onclick="sendLinkCustom();" class="foot-talk">카카오톡 공유하기</button>
+        </div>
+      </div>
+      <div class="toast">복사되었습니다!</div>
+    </div>
+    <!-- custom -->
+    <div class="custom-form">
+      <div class="">
+        <label for="inputImage">메인이미지 업로드</label>
+        <input id="inputImage" type="file" accept="image/jpeg, image/png, image/jpg" multiple>
+        <button id="imageDeleteAllBtn" onclick="imageDeleteAll()">전체삭제</button>
+         
+        <div>
+          <textarea type="textarea" id="inputtext"></textarea>
+          <!-- <div id="outputtext"></div> -->
+        </div>
+      </div>
+      <div class="">
+        <form id="form">
+          <label for="input">신랑 이름:</label>
+          <input type="text" id="inputtext2" name="input">
+          <label for="input2">신부 이름:</label>
+          <input type="text" id="inputtext3" name="input2">
+          <button type="submit">Submit</button>
+        </form>
+          
+          주소검색
+        <input type="text" id="address-kakao" name="address" readonly />
+        <a href="#" id="my-link" target="_blank">카카오네비 리그</a>
+      </div>
+    </div>
+  
+    <script src="src/js/jq.js"></script>
+    <script src="src/js/sp.js"></script>
+    <script src="src/js/gs.js"></script>
+    <script src="src/js/st.js"></script>
+    <script src="src/js/co.js"></script>
+    <script src="src/js/leon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
+
+    <script>
+      // img
+      const inputImage = document.getElementById("inputImage")
+      const outputImage = document.getElementById("outputImage")
+      var deleted = document.getElementsByClassName('image-delete')
+      
+      let imagesArray = []
+
+      inputImage.addEventListener("change", () => {
+        const file = inputImage.files;
+        for (i=0; i<file.length; i++) {
+          imagesArray.push(file[i])
+        }
+        displayImages();
+      })
+      function displayImages() {
+        let images = ""
+        imagesArray.forEach((image, index) => {
+        images += `<div class="image">
+          <img src="${URL.createObjectURL(image)}" alt="image">
+          <button onclick="deleteImage(${index})">삭제</button>
+          </div>`
+      })
+      outputImage.innerHTML = images
+      }
+
+      function deleteImage(index) {
+        imagesArray.splice(index, 1)
+        displayImages()
+      }
+      function imageDeleteAll() {
+        imagesArray = [];
+        displayImages();
+      }
+      // text
+      const inputtext = document.getElementById('inputtext');
+      const outputtext = document.getElementById('outputtext');
+
+      inputtext.addEventListener('input', (event) => {
+        outputtext.innerHTML =  event.target.value.replace(/\n/g, '<br/>');
+      });
+
+      //text leon 
+     
+    </script>
+
+    <script>
+      let leon, canvas, ctx;
+
+      const leonCanvas= document.getElementById('leon-canvas');
+      const sw = 600;
+      const sh = 600;
+      const pixelRatio = 2;
+
+      function init() {
+        canvas = document.createElement('canvas');
+        leonCanvas.appendChild(canvas);
+        ctx = canvas.getContext("2d");
+
+        canvas.width = sw * pixelRatio;
+        canvas.height = sh * pixelRatio;
+        canvas.style.width = sw + 'px';
+        canvas.style.height = sh + 'px';
+        ctx.scale(pixelRatio, pixelRatio);
+
+        leon = new LeonSans({
+          text: 'name1\n&\nname2',
+          colorful: ['#c5d73f', '#9d529c', '#49a9db', '#fec330', '#5eb96e', '#fc5356', '#f38f31'],
+          size: 40,
+          weight: 800,
+          align: 'center',
+        });
+       
+        requestAnimationFrame(animate);
+      }
+
+      function animate(t) {
+        requestAnimationFrame(animate);
+
+        ctx.clearRect(0, 0, sw, sh);
+
+        const x = (sw - leon.rect.w) / 2;
+        const y = (sh - leon.rect.h) / 2;
+        leon.position(x, y);
+
+        leon.draw(ctx);
+        
+       
+      }
+
+      function drawnow() {
+        let i, total = leon.drawing.length;
+        for (i = 0; i < total; i++) {
+            TweenMax.fromTo(leon.drawing[i], 3, {
+                value: 0
+            }, {
+                delay: i * 0.05,
+                value: 1,
+                ease: Power4.easeOut
+            });
+        }
+      };
+
+    
+
+      window.onload = () => {
+        init();
+        drawnow();
+        addressSearch();
+      };
+
+      const form = document.getElementById('form');
+      const inputtext2 = document.getElementById('inputtext2');
+      const inputtext3 = document.getElementById('inputtext3');
+          form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            leon.text = inputtext2.value +'\n'+ '&' +'\n' + inputtext3.value;
+            drawnow();
+            // inputtext2.value = '';
+            // inputtext3.value = '';
+        });
+   
+    </script>
+
+    <!-- 지도 -->
+    <script>
+      var mapContainer = document.getElementById('map'), // 지도를 표시할 div 
+        mapOption = {
+          center: new kakao.maps.LatLng(33.450701, 126.570667), // 지도의 중심좌표
+          level: 3 // 지도의 확대 레벨
+        };
+
+      // 지도를 생성합니다    
+      var map = new kakao.maps.Map(mapContainer, mapOption);
+
+      // 주소-좌표 변환 객체를 생성합니다
+      var geocoder = new kakao.maps.services.Geocoder();
+
+    </script>
+        <!-- 주소 검색 -->
+        <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+        <script>
+          // 주소 변수 선언
+          
+          var userAddress ='';
+          function addressSearch() {
+            document.getElementById("address-kakao").addEventListener("click", function(){ 
+                  //주소입력칸을 클릭하면
+                  //카카오 지도 발생
+                  new daum.Postcode({
+                      oncomplete: function(data) { //선택시 입력값 세팅
+                          document.getElementById("address-kakao").value = data.address; // 주소값 input에 넣기
+                          document.getElementById("copy-kakao").value = data.address;
+                          userAddress = data.address; // 주소 변수에 넣기
+                          // 주소 변수로 검색
+                          geocoder.addressSearch(userAddress, function (result, status) {
+                          // 정상적으로 검색이 완료됐으면 
+                            if (status === kakao.maps.services.Status.OK) {
+
+                              var coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+
+                              // 결과값으로 받은 위치를 마커로 표시합니다
+                              var marker = new kakao.maps.Marker({
+                                map: map,
+                                position: coords
+                              });
+
+                              // 인포윈도우로 장소에 대한 설명을 표시합니다
+                              // var infowindow = new kakao.maps.InfoWindow({
+                              //   content: '<div style="width:150px;text-align:center;padding:6px 0;">결혼식장소</div>'
+                              // });
+                              // infowindow.open(map, marker);
+
+                              // 지도의 중심을 결과값으로 받은 위치로 이동시킵니다
+                              map.setCenter(coords);
+
+                              //카카오 길찾기 주소 반영
+                              const userAddressKakaoNavi = `${userAddress},${coords.La},${coords.Ma}`;
+                              const myLink = document.getElementById('my-link');
+                              myLink.addEventListener('click', (event) => {
+                                event.preventDefault();
+                                const myUrl = `https://map.kakao.com/link/to/${userAddressKakaoNavi}`; // Your URL with variable here
+                                window.window.open('about:blank').location.href = myUrl;
+                              });
+                            }
+                          });
+                      },
+                      onclose: function(state) {
+                          //state는 우편번호 찾기 화면이 어떻게 닫혔는지에 대한 상태 변수 이며, 상세 설명은 아래 목록에서 확인하실 수 있습니다.
+                          if(state === 'FORCE_CLOSE'){
+                              //사용자가 브라우저 닫기 버튼을 통해 팝업창을 닫았을 경우, 실행될 코드를 작성하는 부분입니다.
+    
+                          } else if(state === 'COMPLETE_CLOSE'){
+                              //사용자가 검색결과를 선택하여 팝업창이 닫혔을 경우, 실행될 코드를 작성하는 부분입니다.
+                              //oncomplete 콜백 함수가 실행 완료된 후에 실행됩니다.
+                          }
+                      }
+                  }).open();
+              });
+          };
+
+          
+        </script> 
+   
+  </body>
+
+
+  </html>
