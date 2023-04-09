@@ -26,6 +26,7 @@
         <div class="center">
           <div id="leon-canvas"></div>
           <div id="outputImage"></div>
+          <div id="outputImageMain"></div>
           <div class="spot-bottom">
             <p class="time font-mont">Wedding day<br> 2022.04.30  PM12:00</p>
             <a href="#top2" class="a-top2">
@@ -273,13 +274,16 @@
     <!-- custom -->
     <div class="custom-form">
       <div class="">
-        <label for="inputImage">메인이미지 업로드</label>
+        <label for="inputImageMain">메인이미지 업로드</label>
+        <input id="inputImageMain" type="file" accept="image/jpeg, image/png, image/jpg">
+        <button id="imageDeleteMainBtn" onclick="imageDeleteMain()">메인이미지삭제</button>
+
+
+        <label for="inputImage">여러이미지 업로드</label>
         <input id="inputImage" type="file" accept="image/jpeg, image/png, image/jpg" multiple>
         <button id="imageDeleteAllBtn" onclick="imageDeleteAll()">전체삭제</button>
-         
         <div>
           <textarea type="textarea" id="inputtext"></textarea>
-          <!-- <div id="outputtext"></div> -->
         </div>
       </div>
       <div class="">
@@ -306,39 +310,84 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 
     <script>
-      // img
+      // img main 
+      const inputImageMain = document.getElementById("inputImageMain")
+      const outputImageMain = document.getElementById("outputImageMain")
+      // var deleted = document.getElementsByClassName('image-delete')
+      
+      let mainImageArray = []
+
+      inputImageMain.addEventListener("change", () => {
+        const file = inputImageMain.files;
+        displayImage();
+      })
+      function displayImage() {
+        let mainImage = ""
+        mainImageArray.forEach((image, index) => {
+        mainImage += `<div class="image">
+          <img src="${URL.createObjectURL(mainImage)}" alt="image">
+          </div>`
+      })
+      outputImageMain.innerHTML = images
+      }
+
+      function imageDeleteMain() {
+        mainImageArray = [];
+        displayImage();
+      }
+
+
+
+
+      // img multi
       const inputImage = document.getElementById("inputImage")
       const outputImage = document.getElementById("outputImage")
       var deleted = document.getElementsByClassName('image-delete')
       
       let imagesArray = []
 
-      inputImage.addEventListener("change", () => {
-        const file = inputImage.files;
-        for (i=0; i<file.length; i++) {
-          imagesArray.push(file[i])
+      inputImage.addEventListener("change", (e) => {
+        const files = inputImage.files;
+        
+        for (let i = 0; i < files.length; i++) {
+          const image = files[i];
+
+          image.url = URL.createObjectURL(image);
+          imagesArray.push(image);
         }
         displayImages();
-      })
+        e.target.value = '';
+      });
+
       function displayImages() {
         let images = ""
         imagesArray.forEach((image, index) => {
         images += `<div class="image">
-          <img src="${URL.createObjectURL(image)}" alt="image">
+          <img src="${image.url}" alt="image">
           <button onclick="deleteImage(${index})">삭제</button>
           </div>`
       })
-      outputImage.innerHTML = images
+        outputImage.innerHTML = images
       }
 
       function deleteImage(index) {
-        imagesArray.splice(index, 1)
-        displayImages()
+        // Revoke object URL for deleted image
+        URL.revokeObjectURL(imagesArray[index].url);
+        imagesArray.splice(index, 1);
+        displayImages();
       }
+
       function imageDeleteAll() {
+        // Revoke all object URLs
+        imagesArray.forEach(image => URL.revokeObjectURL(image.url));
         imagesArray = [];
         displayImages();
       }
+
+
+
+
+
       // text
       const inputtext = document.getElementById('inputtext');
       const outputtext = document.getElementById('outputtext');

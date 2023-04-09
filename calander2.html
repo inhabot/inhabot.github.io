@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar</title>
+    <style>
+        body {
+    font-family: Arial, sans-serif;
+}
+
+.calendar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+
+.input-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+input, select, button {
+    margin: 5px;
+}
+
+#result {
+    font-size: 24px;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+.event-calendar {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 400px;
+    border: 1px solid #ccc;
+    margin-top: 20px;
+}
+
+.days, .dates {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.day, .date {
+    width: 14%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    border-right: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
+}
+
+.date.selected {
+    background-color: #007BFF;
+    color: #fff;
+}
+
+.day:last-child, .date:last-child {
+    border-right: none;
+}
+
+    </style>
+</head>
+<body>
+    <div class="calendar">
+        <div class="input-container">
+            <input type="number" id="year" placeholder="4자리 숫자">
+            <label for="year">년</label><br>
+            <input type="number" id="month" placeholder="1~12">
+            <label for="month">월</label><br>
+            <input type="number" id="day" placeholder="1~31">
+            <label for="day">일</label><br>
+            <select id="ampm">
+                <option value="오전">오전</option>
+                <option value="오후">오후</option>
+            </select>
+            <input type="number" id="hour" placeholder="1~12">
+            <label for="hour">시</label><br>
+            <input type="number" id="minute" placeholder="0~59">
+            <label for="minute">분</label><br>
+       
+            <button onclick="showTime()">Show Time</button>
+        </div>
+        <div id="result"></div>
+        <div class="event-calendar">
+            <div class="days">
+                <div class="day">일</div>
+                <div class="day">월</div>
+                <div class="day">화</div>
+                <div class="day">수</div>
+                <div class="day">목</div>
+                <div class="day">금</div>
+                <div class="day">토</div>
+            </div>
+            <div class="dates" id="dates"></div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('dates').innerHTML = '<p>커스텀페이지에서 일정을 저장해주세요</p>'
+        function showTime() {
+            const year = document.getElementById('year').value;
+            const month = document.getElementById('month').value;
+            const day = document.getElementById('day').value;
+            const ampm = document.getElementById('ampm').value;
+            const hour = document.getElementById('hour').value;
+            const minute = document.getElementById('minute').value;
+
+            const errorMessage = validateInputs(year, month, day, hour, minute);
+            if (errorMessage) {
+                alert(errorMessage);
+                return;
+            }
+
+            const date = new Date(year, month - 1, day, ampm === 'PM' ? hour % 12 + 12 : hour % 12, minute);
+            const formattedDate = date.toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            const formattedTime = date.toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            const paddedHour = String(hour).padStart(2, '0');
+            const paddedMinute = String(minute).padStart(2, '0');
+            document.getElementById('result').innerText = `${year}년 ${month}월 ${day}일  ${ampm} ${paddedHour}시 ${paddedMinute}분`;
+
+            displayMonth(year, month, day);
+        }
+        function insertHyphenBetweenNumbers(str) {
+           return str.replace(/\d(?=\d)/g, '$&-');
+        }
+        function validateInputs(year, month, day, hour, minute) {
+            if (!year || !month || !day || !hour || !minute) {
+                return 'Please fill in all the fields.';
+            }
+
+            if (year.length !== 4 || isNaN(year)) {
+                return 'Year should be a 4-digit number.';
+            }
+
+            if (isNaN(month) || month < 1 || month > 12) {
+                return 'Month should be a number between 1 and 12.';
+            }
+
+            if (isNaN(day) || day < 1 || day > 31) {
+                return 'Day should be a number.';
+            }
+
+            if (isNaN(hour) || hour < 1 || hour > 12) {
+                return 'Hour should be a number between 1 and 12.';
+            }
+
+            if (isNaN(minute) || minute < 0 || minute >= 60) {
+                return 'Minute should be a number between 0 and 59.';
+            }
+
+            return '';
+        }
+        function displayMonth(year, month, selectedDay) {
+            const datesContainer = document.getElementById('dates');
+            datesContainer.innerHTML = '';
+
+            const firstDay = new Date(year, month - 1, 1).getDay();
+            const lastDay = new Date(year, month, 0).getDate();
+
+            for (let i = 0; i < firstDay; i++) {
+                const emptyDate = document.createElement('div');
+                emptyDate.classList.add('date');
+                datesContainer.appendChild(emptyDate);
+            }
+
+            for (let i = 1; i <= lastDay; i++) {
+                const date = document.createElement('div');
+                date.classList.add('date');
+                if (i === parseInt(selectedDay)) {
+                    date.classList.add('selected');
+                }
+                date.textContent = i;
+                datesContainer.appendChild(date);
+            }
+        }
+    </script>
+</body>
+</html>
