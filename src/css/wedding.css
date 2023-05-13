@@ -2044,6 +2044,12 @@ h1 {
 
 .compobox .compo2 .content {
 	overflow-y: auto;
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+}
+
+.compobox .compo2 .content::-webkit-scrollbar {
+	display: none;
 }
 
 @media (max-width: 1023px) {
