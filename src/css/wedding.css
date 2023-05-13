@@ -2030,9 +2030,16 @@ h1 {
 }
 
 .compobox .compo2 .top, .compobox .compo2 .bottom {
-	height: 50px;
 	background-color: #333;
 	color: #fff;
+}
+
+.compobox .compo2 .top {
+	flex: 0 0 57px;
+}
+
+.compobox .compo2 .bottom {
+	flex: 0 0 64px;
 }
 
 .compobox .compo2 .content {
