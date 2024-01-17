@@ -296,7 +296,7 @@
     const elements = Array.from(marqueeContent.children);
 
     let currentTranslateX = 0.0;
-    let speed = window.innerWidth <= 720 ? 0.5 : 1; // 스크린 너비에 따라 속도 조절
+    let speed = window.innerWidth <= 720 ? 0.7 : 1; // 스크린 너비에 따라 속도 조절
 
     function updateMarquee() {
         currentTranslateX -= speed;
@@ -327,6 +327,23 @@
     
 
 
+    </script>
+    <script src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js"></script>
+    <script>
+      WebFont.load({
+        google: {
+          families: ['Noto Sans KR','Nanum Gothic']
+        }
+      });
+
+      font.load().then(function() {
+
+      document.fonts.add(font);
+      document.body.style.fontFamily = "Banana Font, serif";
+
+      const content = document.getElementsByTagName("body");
+      content.style.visibility = "visible";
+      });
     </script>
   </body>
 
