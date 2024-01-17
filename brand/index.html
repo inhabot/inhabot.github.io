@@ -102,7 +102,7 @@
             </div>
             <div class="text-box">
               <h3>늘어가는 스마트폰 사용 시간<span class="comma">,</span><br>
-                시각자극 없이는 집중 못하는 아이들.</h3>
+                시각자극 없이는<br class="m400"/> 집중 못하는 아이들.</h3>
               <p>금쪽이스피커와 보호자용 앱으로<br>
                 교육부터 놀이까지 스크린 타임을 줄여보세요.</p>
             </div>
@@ -113,15 +113,13 @@
         <div class="inner">
           <div class="text-box ani">
             <h3>개인 맞춤형 대화로<br/>자연스로운 교육.</h3>
-            <p class="text">금쪽이 스피커는 보호자용 앱을 통해 챗봇을 연결해 대화할 수 있어요.<br/>
-            다양한 챗봇들을 상황에 맞게 연결하여 대화를 통한 교육을 실현하세요. 
+            <p class="text">금쪽이 스피커는 보호자용 앱에서<br class="m400"/> 챗봇을 연결해 대화할 수 있어요.<br/>
+            다양한 챗봇들을 상황에 맞게 연결하여<br class="m400"/> 대화를 통한 교육을 실현하세요. 
             </p>
           </div>
           <div class="flex">
             <div class="img-box">
-              <div class="img-box">
-                <img src="src/img/img-bubble.jpg" alt="">
-              </div>
+              <img src="src/img/img-bubble.jpg" alt="">
             </div>
             <div class="bubble-box ani">
           
@@ -226,7 +224,7 @@
             <div class="text-box">
               <div class="ani">
                 <h3>전 세계가 주목하는 ChatGPT<span class="comma">,</span><br/>간단한 입력으로 시작하세요.</h3>
-                <p class="text">금쪽이스피커에게 다양한 역할을 부여하고 대화해보세요.<br/>미래에 꼭 필요한 기술<span class="comma">,</span> 프롬프트 엔지니어링을 쉽게 배울 수 있어요.</p>
+                <p class="text">금쪽이스피커에게 다양한 역할을 부여하고 대화해보세요.<br/>미래에 꼭 필요한 기술<span class="comma">,</span> 프롬프트 엔지니어링을<br class="m400"/> 쉽게 배울 수 있어요.</p>
               </div>
               <div class="img-box img-prompt">
                 <img src="src/img/img-prompt.jpg" alt="">
@@ -272,7 +270,10 @@
       </div>
       <div class="section-client">
         <div class="inner">
-          <h3></h3>
+          <h3>
+            금쪽이 스피커의 교육성 입증 
+          </h3>
+          <p>ddddd</p>
         </div>
       </div>
     </div>
@@ -295,7 +296,7 @@
     const elements = Array.from(marqueeContent.children);
 
     let currentTranslateX = 0.0;
-    const speed = 1; // 속도 조절
+    let speed = window.innerWidth <= 720 ? 0.5 : 1; // 스크린 너비에 따라 속도 조절
 
     function updateMarquee() {
         currentTranslateX -= speed;
@@ -315,8 +316,14 @@
         requestAnimationFrame(updateMarquee);
     }
 
+    // 창 크기 변경 시 속도 업데이트
+    window.addEventListener('resize', function() {
+        speed = window.innerWidth <= 720 ? 0.5 : 1;
+    });
+
     updateMarquee();
 });
+
     
 
 

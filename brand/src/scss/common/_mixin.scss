@@ -98,6 +98,11 @@
 		@content;
 	}
 }
+@mixin m720 {
+	@media (max-width: 720px) {
+		@content;
+	}
+}
 @mixin m320 {
 	@media (max-width: 320px) {
 		@content;
