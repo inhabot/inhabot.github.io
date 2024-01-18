@@ -32,6 +32,16 @@ gsap.fromTo(".spot", {
   duration: .5,
 });
 
+gsap.fromTo(".screen-inner", {
+  opacity: 1
+}, {
+  scrollTrigger: {
+    scrub: 0.1,
+  },
+  opacity: -0.5,
+  duration: .1,
+});
+
 // 달력 세로 선 차례로 내려오는거
 gsap.fromTo(".bl-1", {
   height: "0"
