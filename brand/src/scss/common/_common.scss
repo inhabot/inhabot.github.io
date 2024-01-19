@@ -10,6 +10,9 @@
 h3,p,span {
   word-break: keep-all;
 }
+.bold {
+  font-weight: 600 !important;
+}
 h3 {
   font-size: 30px;
   line-height: 1.2;
@@ -35,6 +38,12 @@ br {
     display: none;
     @media (max-width: 400px) {
       display: block;
+    }
+  }
+  &.n720 {
+    display: block;
+    @include m720 {
+      display: none;
     }
   }
 }
@@ -407,7 +416,7 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
       }
     }
     @include m720 {
-      padding: 60px 0;
+      padding: 80px 0;
       .flex {
         flex-direction: column;
         align-items: center;
@@ -504,7 +513,7 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
           padding-left: 20px;
         }
         &.ment2 {
-          margin-left: 20px;
+          margin-left: 40px;
           padding-right: 20px;
         }
       }
@@ -513,6 +522,8 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
         flex: 0 0 auto;
         border-left: 1px solid #fff;
         padding-left: 8px;
+        margin-right: 20px;
+        margin-left: 20px;
         color: #fff;
         em {
           font-size: 20px;
@@ -553,6 +564,9 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
           }
           .ment-desc {
             font-size: 12px;
+          }
+          &.ment2 {
+            margin-left: 20px;
           }
         }
         .expert {
@@ -1038,56 +1052,68 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
 }
 
 .section-pack {
-  background-color: #0b7fa9ee;
+  // background-color: rgb(27, 154, 180);
+  background-color: #E6F2F8;
+  padding: 0 40px 120px 40px;
+  @include m720 {
+    padding: 0 20px 80px 20px;
+  }
   .inner {
+    background-color: rgb(47, 80, 118);
+    border-radius: 20px;
     margin: 0 auto;
     max-width : 1140px;
-    padding: 120px 0 120px;
+    padding: 60px 0 60px;
     .text-box {
       margin-bottom: 44px;
       p {
         color: #fff;
         text-align: center;
       }
+      @include m720 {
+        padding: 0 20px;
+      }
     }
     .img-box {
       position: relative;
-      width: 300px;
-      height: 300px;
-      margin: 0 auto;
+      width: 200px;
+      height: 200px;
+      margin: 60px auto 0;
       img {
         position: absolute;
-        width: 160px;
         height: auto;
         z-index: 1;
-        left: -64px;
       }
       .img-doll {
-        opacity: 0.5;
+        opacity: 1;
+        left: -40px;
+        bottom: 0;
+        transform: rotate(7deg);
+        width: 160px;
       }
       .img-pack {
         position: absolute;
-        width: 210px;
-        height: auto;
+        width: 180px;
+        height: 170px;
         z-index: 0;
-        top: 14px;
+        // top: 14px;
         .relative {
           position:  relative;
           .img-speaker {
-            width: 210px;
+            width: 180px;
             height: auto;
           }
           .wifi-box {
-            width: 54px;
+            width: 34px;
             height: 42px;
             position: absolute;
-            top: -20px;
+            top: 0px;
             left: 50%;
             transform: translateX(-50%);
-            margin-left: -2px;
+            margin-left: -1px;
             z-index: 2;
             img {
-              width: 54px;
+              width: 34px;
               height: auto;
             }
             .img-wifi1 {
@@ -1146,4 +1172,164 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
   100% {opacity:0;}
 }
 
- 
+.section-client {
+  .inner {
+    padding: 120px 0;
+    max-width: 1160px;
+    margin: 0 auto;
+    @include m720 {
+      padding: 80px 0;
+    }
+    p {
+      color: $gray;
+      text-align: center;
+      &.desc {
+        padding: 0 20px;
+      }
+    }
+    .client-list {
+      margin-top: 40px;
+      .flex {
+        align-items: flex-start;
+        & > div {
+          width: 250px;
+          @include flex-box;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          flex: 0 0 auto;
+          strong {
+            font-weight: 600;
+            line-height: 60px;
+            font-size: 30px;
+            letter-spacing: 4px;
+          }
+          p {
+            font-size: 12px;
+            color: #7b8a97;
+          }
+          & + div {
+            margin-left: 54px;
+          }
+        }
+        img {
+          height: 60px;
+          width: auto;
+         
+        }
+        & + .flex {
+          margin-top: 40px;
+          p {
+            margin-top: 8px;
+          }
+          img {
+            height: 44px;
+          }
+        }
+      }
+   
+    }
+    @include m820 {
+      max-width: 720px;
+      .client-list {
+        .flex {
+          flex-wrap: wrap;
+          & > div {
+            margin-bottom: 10px;
+            & + div {
+              margin-left: 0;
+            }
+          }
+          & + .flex {
+            margin-top: 0px;
+            & > div {
+              margin-top: 20px;
+            }
+          }
+        } 
+      }
+    }
+    @include m720 {
+      max-width: 680px;
+      .client-list {
+        .flex {
+          flex-wrap: wrap;
+          & > div {
+            margin-bottom: 10px;
+            width: 200px;
+            & + div {
+              margin-left: 0;
+            }
+            img {
+              height: 40px;
+            }
+            strong {
+              font-size: 20px;
+              line-height: 40px;
+            }
+            p {
+              font-size: 10px;
+            }
+          }
+          & + .flex {
+            margin-top: 0px;
+            & > div {
+              margin-top: 20px;
+              img {
+                height: 30px;
+              }
+              p {
+                margin-top: 4px;
+              }
+            }
+          }
+        } 
+      }
+    }
+  }
+}
+
+.footer {
+  background-color: #01061e;
+  color: #fff;
+  .inner {
+    width: 100%;
+    max-width: 1140px;
+    margin: 0 auto;
+    padding: 60px 24px;
+    .flex {
+      justify-content: flex-start;
+      * {
+        font-size: 15px;
+      }
+      strong {
+        font-weight: 600;
+        color: #b0b8c1;
+        display: block;
+        margin-bottom: 2px;
+      }
+      p {
+        color: #6b7684;
+        font-weight: 300;
+        margin-top: 10px;
+      }
+      div + div {
+        margin-left: 40px;
+      }
+    }
+  }
+  @include m720 {
+    .flex {
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 0 20px;
+      * {
+        font-size: 13px !important;
+      }
+      div + div {
+        margin-left: 0 !important; 
+        margin-top: 40px;
+      }
+    }
+  }
+}

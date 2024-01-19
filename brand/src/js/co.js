@@ -125,12 +125,14 @@ $('.floating-button.active').click(function () {
 // pack
 gsap.fromTo(".img-pack", {
   left: 0,
+  bottom: 0,
 }, {
   scrollTrigger: {
     trigger: ".section-pack",
     scrub: 1,
   },
-  left: 390,
+  left: 100,
+  bottom: 100,
   duration: .2,
 });
 
