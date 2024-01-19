@@ -1064,6 +1064,13 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
     margin: 0 auto;
     max-width : 1140px;
     padding: 60px 0 60px;
+    &.pack-inner {
+      opacity: 0;
+      &.active {  
+        animation: text-up 1s ease;
+        animation-fill-mode: forwards;
+      }
+    }
     .text-box {
       margin-bottom: 44px;
       p {

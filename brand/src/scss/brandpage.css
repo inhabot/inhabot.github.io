@@ -1215,6 +1215,13 @@ br.n720 {
   max-width: 1140px;
   padding: 60px 0 60px;
 }
+.section-pack .inner.pack-inner {
+  opacity: 0;
+}
+.section-pack .inner.pack-inner.active {
+  animation: text-up 1s ease;
+  animation-fill-mode: forwards;
+}
 .section-pack .inner .text-box {
   margin-bottom: 44px;
 }
