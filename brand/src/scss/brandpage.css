@@ -508,7 +508,7 @@ br.n720 {
 }
 .section-screentime .inner {
   margin: 0 auto;
-  padding: 200px 0 200px;
+  padding: 30px 0 200px;
   background-color: #01061e;
 }
 .section-screentime .inner .screen-back {
@@ -1545,4 +1545,10 @@ br.n720 {
     margin-left: 0 !important;
     margin-top: 40px;
   }
+}
+
+.gradient {
+  height: 120px;
+  width: 100%;
+  background: linear-gradient(180deg, #FFF 0%, #01061E 100%);
 }/*# sourceMappingURL=brandpage.css.map */

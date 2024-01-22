@@ -379,7 +379,7 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
   .inner {
     margin: 0 auto;
     // max-width : 1140px;
-    padding: 200px 0 200px;
+    padding: 30px 0 200px;
     background-color: #01061e;
     .screen-back {
       padding-bottom: 60px;
@@ -1339,4 +1339,9 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
       }
     }
   }
+}
+.gradient {
+  height: 120px;
+  width: 100%;
+  background: linear-gradient(180deg, #FFF 0%, #01061E 100%);
 }
