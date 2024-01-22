@@ -1344,4 +1344,6 @@ filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#01061e",endCo
   height: 120px;
   width: 100%;
   background: linear-gradient(180deg, #FFF 0%, #01061E 100%);
+  background: -moz-linear-gradient(180deg, #FFF 0%, #01061E 100%);
+  background: -webkit-linear-gradient(180deg, #FFF 0%, #01061E 100%);
 }
