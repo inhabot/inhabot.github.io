@@ -48,7 +48,9 @@ body::before {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -124,6 +126,11 @@ pre {
   gap: 18px;
 }
 
+.tab-page {
+  display: grid;
+  gap: 18px;
+}
+
 .site-footer {
   padding: 18px 8px 0;
 }
@@ -150,8 +157,13 @@ pre {
   box-shadow: var(--shadow);
 }
 
+.studio-panel {
+  padding: 20px 24px 24px;
+}
+
 .upload-panel,
-.result-panel {
+.result-panel,
+.compose-panel {
   padding: 26px;
 }
 
@@ -167,6 +179,48 @@ pre {
   margin: 0;
   color: var(--muted);
   font-size: 0.95rem;
+}
+
+.panel-title {
+  margin: 0;
+  max-width: 18ch;
+  font-size: clamp(1.8rem, 4.5vw, 3rem);
+  line-height: 1.08;
+}
+
+.tablist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tab-button {
+  appearance: none;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.tab-button[data-active="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.tab-button:hover {
+  transform: translateY(-1px);
+}
+
+.tab-button:focus-visible,
+.text-input:focus-visible,
+.markdown-editor:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.34);
+  outline-offset: 2px;
 }
 
 .dropzone {
@@ -237,6 +291,10 @@ pre {
   margin-top: 24px;
 }
 
+.cta-row-compact {
+  margin-top: 0;
+}
+
 .button {
   appearance: none;
   border: 0;
@@ -272,6 +330,12 @@ pre {
   color: var(--ink);
 }
 
+.file-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -291,6 +355,111 @@ pre {
 .results {
   display: grid;
   gap: 14px;
+}
+
+.compose-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.compose-main,
+.compose-side {
+  display: grid;
+  gap: 16px;
+}
+
+.field-group {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.field-help,
+.editor-meta,
+.generator-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.text-input,
+.markdown-editor {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--ink);
+}
+
+.text-input {
+  min-height: 52px;
+  padding: 0 16px;
+}
+
+.markdown-editor {
+  min-height: 420px;
+  padding: 16px 18px;
+  resize: vertical;
+  font-family: "JetBrains Mono", monospace;
+  line-height: 1.7;
+}
+
+.generator-result {
+  display: grid;
+}
+
+.generator-card {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.generator-card h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.generator-card-processing {
+  border-color: rgba(15, 118, 110, 0.2);
+}
+
+.generator-card-done {
+  border-color: rgba(11, 143, 83, 0.18);
+  background: rgba(241, 255, 248, 0.78);
+}
+
+.generator-card-error {
+  border-color: rgba(180, 35, 24, 0.18);
+  background: rgba(255, 246, 244, 0.88);
+}
+
+.generator-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.metric-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--accent-strong);
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 
 .result-row {
@@ -416,13 +585,20 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .tablist,
+  .compose-grid {
+    grid-template-columns: 1fr;
+  }
+
   .shell {
     width: min(100% - 20px, 1120px);
     padding-top: 22px;
   }
 
   .upload-panel,
-  .result-panel {
+  .result-panel,
+  .compose-panel,
+  .studio-panel {
     padding: 18px;
   }
 
