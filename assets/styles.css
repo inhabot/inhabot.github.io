@@ -18,6 +18,10 @@
   --radius-xl: 28px;
   --radius-lg: 20px;
   --radius-md: 14px;
+  --bg-orb-left: rgba(15, 118, 110, 0.18);
+  --bg-orb-right: rgba(244, 114, 36, 0.14);
+  --bg-start: #fbf6ec;
+  --bg-end: #f5efe4;
 }
 
 html,
@@ -27,12 +31,31 @@ body {
 }
 
 body {
-  font-family: "IBM Plex Sans KR", sans-serif;
+  font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 34%),
-    radial-gradient(circle at top right, rgba(244, 114, 36, 0.14), transparent 28%),
-    linear-gradient(180deg, #fbf6ec 0%, var(--bg) 100%);
+    radial-gradient(circle at top left, var(--bg-orb-left), transparent 34%),
+    radial-gradient(circle at top right, var(--bg-orb-right), transparent 28%),
+    linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
+  transition: background 260ms ease, color 220ms ease;
+}
+
+body[data-mode="generate"] {
+  --bg: #f4ece2;
+  --paper: rgba(255, 248, 240, 0.9);
+  --paper-strong: #fff8f1;
+  --ink: #261a14;
+  --muted: #6f5b50;
+  --line: rgba(38, 26, 20, 0.12);
+  --accent: #b45309;
+  --accent-strong: #8f4207;
+  --warn: #9a3412;
+  --success: #0e8b6d;
+  --shadow: 0 28px 80px rgba(58, 40, 28, 0.12);
+  --bg-orb-left: rgba(245, 158, 11, 0.18);
+  --bg-orb-right: rgba(251, 146, 60, 0.16);
+  --bg-start: #fdf7ef;
+  --bg-end: #f4ece2;
 }
 
 body::before {
@@ -56,7 +79,7 @@ textarea {
 
 code,
 pre {
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
 .shell {
@@ -126,6 +149,29 @@ pre {
   gap: 18px;
 }
 
+.mode-switch {
+  display: grid;
+  gap: 14px;
+  padding: 4px 4px 2px;
+}
+
+.mode-description,
+.privacy-note {
+  margin: 0;
+  max-width: 68ch;
+}
+
+.mode-description {
+  font-size: 1.02rem;
+  line-height: 1.75;
+  font-weight: 600;
+}
+
+.privacy-note {
+  color: var(--muted);
+  line-height: 1.72;
+}
+
 .tab-page {
   display: grid;
   gap: 18px;
@@ -155,10 +201,7 @@ pre {
   background: var(--paper);
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
-}
-
-.studio-panel {
-  padding: 20px 24px 24px;
+  transition: background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
 .upload-panel,
@@ -196,20 +239,21 @@ pre {
 
 .tab-button {
   appearance: none;
-  border: 1px solid rgba(15, 118, 110, 0.18);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, white);
   border-radius: 999px;
   padding: 14px 18px;
   background: rgba(255, 255, 255, 0.58);
   color: var(--muted);
   font-weight: 700;
   cursor: pointer;
-  transition: transform 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease;
+  transition: transform 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .tab-button[data-active="true"] {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .tab-button:hover {
@@ -231,19 +275,19 @@ pre {
   min-height: 236px;
   padding: 28px;
   text-align: center;
-  border: 1.5px dashed rgba(15, 118, 110, 0.34);
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 34%, transparent);
   border-radius: calc(var(--radius-xl) - 8px);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.48)),
-    radial-gradient(circle at top, rgba(15, 118, 110, 0.08), transparent 50%);
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent) 8%, transparent), transparent 50%);
   cursor: pointer;
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
 .dropzone[data-dragging="true"] {
   transform: translateY(-2px);
   border-color: var(--accent);
-  box-shadow: 0 18px 36px rgba(15, 118, 110, 0.14);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .dropzone[data-locked="true"] {
@@ -273,9 +317,10 @@ pre {
   gap: 8px;
   padding: 10px 14px;
   border-radius: 999px;
-  background: rgba(15, 118, 110, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, white);
   color: var(--accent-strong);
   font-weight: 700;
+  transition: background 180ms ease, color 180ms ease;
 }
 
 .queue-hint {
@@ -302,7 +347,7 @@ pre {
   padding: 14px 20px;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 180ms ease, opacity 180ms ease, background 180ms ease;
+  transition: transform 180ms ease, opacity 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 
 .button:hover:not(:disabled) {
@@ -322,6 +367,11 @@ pre {
 .button-secondary {
   background: #132522;
   color: white;
+}
+
+body[data-mode="generate"] .button-secondary,
+body[data-mode="generate"] .row-action {
+  background: #3d2417;
 }
 
 .button-ghost {
@@ -409,7 +459,7 @@ pre {
   min-height: 420px;
   padding: 16px 18px;
   resize: vertical;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   line-height: 1.7;
 }
 
@@ -432,7 +482,7 @@ pre {
 }
 
 .generator-card-processing {
-  border-color: rgba(15, 118, 110, 0.2);
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .generator-card-done {
@@ -456,10 +506,11 @@ pre {
   align-items: center;
   padding: 10px 12px;
   border-radius: 999px;
-  background: rgba(15, 118, 110, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, white);
   color: var(--accent-strong);
   font-size: 0.92rem;
   font-weight: 600;
+  transition: background 180ms ease, color 180ms ease;
 }
 
 .result-row {
@@ -565,8 +616,8 @@ pre {
   padding: 12px 14px;
   white-space: pre-wrap;
   border-radius: var(--radius-md);
-  background: rgba(15, 118, 110, 0.06);
-  border: 1px solid rgba(15, 118, 110, 0.12);
+  background: color-mix(in srgb, var(--accent) 6%, white);
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--muted);
 }
 
@@ -597,8 +648,7 @@ pre {
 
   .upload-panel,
   .result-panel,
-  .compose-panel,
-  .studio-panel {
+  .compose-panel {
     padding: 18px;
   }
 

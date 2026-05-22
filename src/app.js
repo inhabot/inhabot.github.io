@@ -5,6 +5,16 @@ const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "modu
 const TAB_PARSE = "parse";
 const TAB_GENERATE = "generate";
 const DEFAULT_OUTPUT_NAME = "document";
+const TAB_COPY = {
+  [TAB_PARSE]: {
+    description: "한글(.hwp, .hwpx) 파일을 업로드해주세요. 여러 파일을 한 번에 Markdown으로 변환할 수 있습니다.",
+    queueHint: "한글(.hwp, .hwpx) 파일을 업로드해주세요. 여러 파일을 한 번에 Markdown으로 바꿀 수 있습니다.",
+  },
+  [TAB_GENERATE]: {
+    description: "Markdown(.md) 파일을 업로드해주세요. 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.",
+    queueHint: "Markdown(.md) 파일을 업로드해주세요. 직접 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.",
+  },
+};
 const MARKDOWN_SAMPLE = `# 주간 업무 보고서
 
 ## 이번 주 요약
@@ -89,6 +99,7 @@ const state = {
 
 const tabButtons = Array.from(document.querySelectorAll("[data-tab-button]"));
 const tabPanels = Array.from(document.querySelectorAll("[data-tab-panel]"));
+const tabDescription = document.querySelector("[data-tab-description]");
 const dropzone = document.querySelector("[data-dropzone]");
 const fileInput = document.querySelector("#fileInput");
 const startButton = document.querySelector("#startButton");
@@ -329,7 +340,7 @@ function setParseRecords(files) {
 
   queueHint.textContent = files.length > 0
     ? `${files.length}개 파일이 준비되었습니다. 변환 시작을 누르면 순서대로 Markdown으로 바뀝니다.`
-    : "HWP 또는 HWPX 파일을 여러 개 올리면 한 번에 변환할 수 있습니다.";
+    : TAB_COPY[TAB_PARSE].queueHint;
 
   renderParse();
 }
@@ -481,6 +492,8 @@ function render() {
 }
 
 function renderTabs() {
+  document.body.dataset.mode = state.activeTab;
+
   for (const button of tabButtons) {
     const active = button.dataset.tab === state.activeTab;
     button.dataset.active = String(active);
@@ -490,6 +503,8 @@ function renderTabs() {
   for (const panel of tabPanels) {
     panel.hidden = panel.dataset.tabPanel !== state.activeTab;
   }
+
+  tabDescription.textContent = TAB_COPY[state.activeTab]?.description ?? TAB_COPY[TAB_PARSE].description;
 }
 
 function renderParse() {
@@ -554,7 +569,7 @@ function renderGenerate() {
   const characters = state.generate.markdown.length;
   markdownMeta.textContent = `${state.generate.sourceLabel} · ${characters.toLocaleString()}자 · ${countLines(state.generate.markdown)}줄`;
   generateHint.textContent = state.generate.sourceLabel === "직접 입력"
-    ? "Markdown을 직접 붙여넣거나 `.md` 파일을 불러온 뒤 HWPX 문서로 저장할 수 있습니다."
+    ? TAB_COPY[TAB_GENERATE].queueHint
     : `최근 불러온 원본: ${state.generate.sourceLabel}`;
 
   markdownInput.disabled = state.generate.processing;
@@ -638,7 +653,7 @@ function resetParseState() {
   state.parse.processing = false;
   state.parse.records = [];
   fileInput.value = "";
-  queueHint.textContent = "HWP 또는 HWPX 파일을 여러 개 올리면 한 번에 변환할 수 있습니다.";
+  queueHint.textContent = TAB_COPY[TAB_PARSE].queueHint;
   renderParse();
 }
 

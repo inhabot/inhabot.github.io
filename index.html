@@ -8,27 +8,13 @@
       name="description"
       content="한글 문서를 Markdown으로 바꾸고, Markdown을 다시 HWPX로 생성하는 브라우저 기반 변환 스튜디오"
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="./assets/styles.css" />
     <script type="module" src="./assets/app.js"></script>
   </head>
   <body>
     <div class="shell">
       <main class="layout">
-        <section class="panel studio-panel">
-          <div class="panel-head">
-            <div>
-              <p class="panel-kicker">kordoc web studio</p>
-              <h1 class="panel-title">한글 문서와 Markdown을 오가는 두 가지 흐름</h1>
-            </div>
-            <p class="support-copy" data-version></p>
-          </div>
-
+        <section class="mode-switch" aria-label="변환 모드 선택">
           <div class="tablist" role="tablist" aria-label="변환 모드 선택">
             <button
               class="tab-button"
@@ -51,6 +37,13 @@
               Markdown -> HWPX
             </button>
           </div>
+
+          <p class="mode-description" data-tab-description>
+            한글(.hwp, .hwpx) 파일을 업로드해주세요. 여러 파일을 한 번에 Markdown으로 변환할 수 있습니다.
+          </p>
+          <p class="privacy-note">
+            모든 변환은 브라우저 안에서 처리되며, 이 페이지의 코드는 업로드한 파일을 서버로 전송하지 않습니다.
+          </p>
         </section>
 
         <div class="tab-page" data-tab-panel="parse">
@@ -58,12 +51,12 @@
             <label class="dropzone" data-dropzone for="fileInput">
               <input id="fileInput" type="file" accept=".hwp,.hwpx" multiple />
               <span class="dropzone-badge">Drag and Drop</span>
-              <strong>여러 파일을 한 번에 올리기</strong>
-              <span>파일을 끌어다 놓거나 클릭해서 선택하세요.</span>
+              <strong>한글(.hwp, .hwpx) 파일 업로드</strong>
+              <span>여러 파일을 끌어다 놓거나 클릭해서 선택하세요.</span>
             </label>
 
             <p class="queue-hint" data-queue-hint>
-              HWP 또는 HWPX 파일을 여러 개 올리면 한 번에 변환할 수 있습니다.
+              한글(.hwp, .hwpx) 파일을 업로드해주세요. 여러 파일을 한 번에 Markdown으로 바꿀 수 있습니다.
             </p>
 
             <div class="cta-row">
@@ -106,7 +99,7 @@
             <div class="panel-head">
               <div>
                 <p class="panel-kicker">1. Markdown 입력</p>
-                <h2>붙여넣기하거나 파일을 불러와서 HWPX로 만들기</h2>
+                <h2>Markdown(.md) 업로드 또는 붙여넣기로 HWPX 만들기</h2>
               </div>
             </div>
 
@@ -142,14 +135,14 @@
                 <div class="field-group">
                   <span class="field-label">빠른 작업</span>
                   <div class="cta-row cta-row-compact">
-                    <label class="button button-ghost file-trigger" for="markdownFileInput">Markdown 불러오기</label>
+                    <label class="button button-ghost file-trigger" for="markdownFileInput">Markdown(.md) 업로드</label>
                     <input id="markdownFileInput" type="file" accept=".md,.markdown,.txt" hidden />
                     <button id="sampleMarkdownButton" class="button button-ghost" type="button">예제 넣기</button>
                   </div>
                 </div>
 
                 <p class="queue-hint" data-generate-hint>
-                  Markdown을 직접 붙여넣거나 `.md` 파일을 불러온 뒤 HWPX 문서로 저장할 수 있습니다.
+                  Markdown(.md) 파일을 업로드해주세요. 직접 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.
                 </p>
 
                 <div class="cta-row">

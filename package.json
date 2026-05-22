@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node ./scripts/build.mjs",
+    "check:privacy": "node ./scripts/check-privacy.mjs",
     "update-upstream": "node ./scripts/update-upstream.mjs"
   },
   "dependencies": {
