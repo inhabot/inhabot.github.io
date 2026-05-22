@@ -1,51 +1,71 @@
-<!DOCTYPE html>
-<html lang="ko"><head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
-    <meta name="format-detection" content="telephone=no">
-    <title>test</title>
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kordoc web converter</title>
+    <meta
+      name="description"
+      content="HWP와 HWPX 파일을 브라우저에서 바로 Markdown으로 변환하고 여러 개를 한 번에 다운로드하는 정적 웹앱"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <script type="module" src="./assets/app.js"></script>
   </head>
   <body>
-    <audio id="myAudio" loop>
-        <source src="src/img/t-trigger.mp3" type="audio/mp3">
-        Your browser does not support the audio element.
-    </audio>
-    <button id="playPauseBtn">일시정지/재생</button>
-    <button >아무 의미없는 버튼</button>
-    
-    <p style="width: 320px; white-space: pre;">브라우저 또는 사용자 설정에 따라 자동재생이 안되는 경우가 있는데 
-이떄는 재생버튼을 2회 눌러야 재생되네요. 
-</p>
-    <script>
-      var myAudio = document.getElementById("myAudio");
-      var playPauseBtn = document.getElementById("playPauseBtn");
-      var volumeControl = document.getElementById("volumeControl");
-      var isPlaying = false;
+    <div class="shell">
+      <main class="layout">
+        <section class="panel upload-panel">
+          <label class="dropzone" data-dropzone for="fileInput">
+            <input id="fileInput" type="file" accept=".hwp,.hwpx" multiple />
+            <span class="dropzone-badge">Drag and Drop</span>
+            <strong>여러 파일을 한 번에 올리기</strong>
+            <span>파일을 끌어다 놓거나 클릭해서 선택하세요.</span>
+          </label>
 
-      // 페이지 로드 시 오디오 재생
-      window.onload = function() {
-          myAudio.play();
-          isPlaying = true;
-      };
+          <p class="queue-hint" data-queue-hint>
+            HWP 또는 HWPX 파일을 여러 개 올리면 한 번에 변환할 수 있습니다.
+          </p>
 
-      // 일시정지/재생 버튼 이벤트 리스너
-      playPauseBtn.addEventListener("click", function() {
-          if (isPlaying) {
-              myAudio.pause();
-          } else {
-              myAudio.play();
-          }
-          isPlaying = !isPlaying;
-      });
+          <div class="cta-row">
+            <button id="startButton" class="button button-primary">변환 시작</button>
+            <button id="downloadAllButton" class="button button-secondary" disabled>다운로드 준비 전</button>
+            <button id="resetButton" class="button button-ghost">초기화</button>
+          </div>
+        </section>
 
+        <section class="stats-grid">
+          <article class="panel stat-card">
+            <p class="panel-kicker">총 파일</p>
+            <strong data-stat-total>0</strong>
+          </article>
+          <article class="panel stat-card">
+            <p class="panel-kicker">변환 완료</p>
+            <strong data-stat-success>0</strong>
+          </article>
+          <article class="panel stat-card">
+            <p class="panel-kicker">실패</p>
+            <strong data-stat-failed>0</strong>
+          </article>
+        </section>
 
-      // 오디오 재생 상태 추적
-      myAudio.onplaying = function() {
-          isPlaying = true;
-      };
-      myAudio.onpause = function() {
-          isPlaying = false;
-      };
-    </script>
-</body>
+        <section class="panel result-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">2. 결과 확인</p>
+              <h2>파일별 상태와 다운로드 버튼</h2>
+            </div>
+            <p class="support-copy" data-version></p>
+          </div>
+
+          <div class="results" data-results></div>
+        </section>
+      </main>
+    </div>
+  </body>
 </html>
