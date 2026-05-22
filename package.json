@@ -1,0 +1,18 @@
+{
+  "name": "inhabot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ./scripts/build.mjs"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.8",
+    "buffer": "^6.0.3",
+    "cfb": "1.2.2",
+    "jszip": "^3.10.1",
+    "pako": "^2.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5"
+  }
+}

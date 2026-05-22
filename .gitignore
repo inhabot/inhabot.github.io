@@ -1,4 +1,4 @@
 node_modules
 logs
 *.map
-package-lock.json
+!package-lock.json
