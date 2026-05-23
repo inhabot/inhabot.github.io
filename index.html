@@ -95,80 +95,50 @@
         </div>
 
         <div class="tab-page" data-tab-panel="generate" hidden>
-          <section class="panel upload-panel generate-upload-panel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">1. Markdown 업로드</p>
-                <h2>Markdown(.md) 파일을 불러오거나 예제로 바로 시작하기</h2>
-              </div>
-            </div>
-
-            <label class="dropzone dropzone-generate" data-generate-dropzone for="markdownFileInput">
-              <input id="markdownFileInput" type="file" accept=".md,.markdown,.txt" />
-              <span class="dropzone-badge">Upload Markdown</span>
+          <section class="panel upload-panel">
+            <label class="dropzone" data-generate-dropzone for="markdownFileInput">
+              <input id="markdownFileInput" type="file" accept=".md,.markdown,.txt" multiple />
+              <span class="dropzone-badge">Drag and Drop</span>
               <strong>Markdown(.md) 파일 업로드</strong>
-              <span>파일을 끌어다 놓거나 클릭해서 불러올 수 있습니다.</span>
+              <span>여러 파일을 끌어다 놓거나 클릭해서 선택하세요.</span>
             </label>
 
-            <div class="cta-row">
-              <button id="sampleMarkdownButton" class="button button-ghost" type="button">예제 넣기</button>
-            </div>
-
-            <p class="queue-hint" data-generate-hint>
-              Markdown(.md) 파일을 업로드해주세요. 직접 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.
+            <p class="queue-hint" data-generate-queue-hint>
+              Markdown(.md) 파일을 업로드해주세요. 여러 파일을 한 번에 HWPX로 바꿀 수 있습니다.
             </p>
+
+            <div class="cta-row">
+              <button id="generateStartButton" class="button button-primary" type="button">변환 시작</button>
+              <button id="generateDownloadAllButton" class="button button-secondary" type="button" disabled>다운로드 준비 전</button>
+              <button id="generateResetButton" class="button button-ghost" type="button">초기화</button>
+            </div>
           </section>
 
-          <section class="panel compose-panel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">2. Markdown 입력</p>
-                <h2>입력 내용을 확인하고 HWPX 문서로 변환하기</h2>
-              </div>
-            </div>
-
-            <div class="compose-grid">
-              <div class="compose-main">
-                <label class="field-label" for="markdownInput">Markdown 원문</label>
-                <textarea
-                  id="markdownInput"
-                  class="markdown-editor"
-                  spellcheck="false"
-                  placeholder="# 업무 보고서&#10;&#10;## 오늘 한 일&#10;- 문서 정리&#10;- 표 작성&#10;&#10;| 항목 | 값 |&#10;| --- | --- |&#10;| 상태 | 완료 |"
-                ></textarea>
-                <p class="editor-meta" data-markdown-meta>직접 입력 · 0자 · 0줄</p>
-              </div>
-
-              <div class="compose-side">
-                <div class="field-group">
-                  <label class="field-label" for="outputNameInput">출력 파일명</label>
-                  <input id="outputNameInput" class="text-input" type="text" value="document" />
-                  <p class="field-help">확장자 `.hwpx`는 자동으로 붙습니다.</p>
-                </div>
-
-                <p class="queue-hint generate-editor-hint">
-                  업로드한 Markdown을 여기서 바로 수정한 뒤 한글 문서로 만들 수 있습니다.
-                </p>
-
-                <div class="cta-row">
-                  <button id="generateButton" class="button button-primary" type="button">HWPX 만들기</button>
-                  <button id="downloadHwpxButton" class="button button-secondary" type="button" disabled>다운로드 대기</button>
-                  <button id="resetMarkdownButton" class="button button-ghost" type="button">초기화</button>
-                </div>
-              </div>
-            </div>
+          <section class="stats-grid">
+            <article class="panel stat-card">
+              <p class="panel-kicker">총 파일</p>
+              <strong data-generate-stat-total>0</strong>
+            </article>
+            <article class="panel stat-card">
+              <p class="panel-kicker">변환 완료</p>
+              <strong data-generate-stat-success>0</strong>
+            </article>
+            <article class="panel stat-card">
+              <p class="panel-kicker">실패</p>
+              <strong data-generate-stat-failed>0</strong>
+            </article>
           </section>
 
           <section class="panel result-panel">
             <div class="panel-head">
               <div>
-                <p class="panel-kicker">3. 출력 확인</p>
-                <h2>생성 상태와 다운로드 준비</h2>
+                <p class="panel-kicker">2. 출력 확인</p>
+                <h2>파일별 상태와 다운로드 버튼</h2>
               </div>
-              <p class="support-copy" data-generate-summary>입력 대기 중</p>
+              <p class="support-copy" data-generate-summary>업로드 대기 중</p>
             </div>
 
-            <div class="generator-result" data-generate-result></div>
+            <div class="results" data-generate-results></div>
           </section>
         </div>
       </main>

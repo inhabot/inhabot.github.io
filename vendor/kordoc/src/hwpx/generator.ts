@@ -71,7 +71,8 @@ export interface MarkdownToHwpxOptions {
 const DEFAULT_TEXT_COLOR = "#000000"
 const TABLE_BORDER_FILL_ID = 1
 const TABLE_BORDER_COLOR = "#000000"
-const TABLE_BORDER_WIDTH = "0.12 mm"
+const TABLE_BORDER_WIDTH = "0.15 mm"
+const TABLE_CELL_SPACING = 30
 
 function resolveTheme(theme?: HwpxTheme) {
   return {
@@ -709,8 +710,8 @@ function generateTable(rows: string[][], theme: ResolvedTheme): string {
       const runs = generateRuns(cell, headerCharPr)
       const p = `<hp:p paraPrIDRef="0" styleIDRef="0">${runs}</hp:p>`
       // <hp:tc> 필수 속성 + subList + cellAddr + cellSpan + cellSz + cellMargin
-      return `<hp:tc name="" header="${isHeaderRow ? 1 : 0}" hasMargin="0" protect="0" editable="1" dirty="0" borderFillIDRef="${TABLE_BORDER_FILL_ID}">`
-        + `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="TOP" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">${p}</hp:subList>`
+      return `<hp:tc name="" header="${isHeaderRow ? 1 : 0}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${TABLE_BORDER_FILL_ID}">`
+        + `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">${p}</hp:subList>`
         + `<hp:cellAddr colAddr="${colIdx}" rowAddr="${rowIdx}"/>`
         + `<hp:cellSpan colSpan="1" rowSpan="1"/>`
         + `<hp:cellSz width="${cellW}" height="${cellH}"/>`
@@ -727,7 +728,7 @@ function generateTable(rows: string[][], theme: ResolvedTheme): string {
     + `<hp:inMargin left="510" right="510" top="141" bottom="141"/>`
     + trElements
 
-  const tbl = `<hp:tbl id="${tblId}" zOrder="0" numberingType="TABLE" pageBreak="CELL" repeatHeader="0" rowCnt="${rowCnt}" colCnt="${colCnt}" cellSpacing="0" borderFillIDRef="${TABLE_BORDER_FILL_ID}" noShading="0">${tblInner}</hp:tbl>`
+  const tbl = `<hp:tbl id="${tblId}" zOrder="1" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${rowCnt}" colCnt="${colCnt}" cellSpacing="${TABLE_CELL_SPACING}" borderFillIDRef="${TABLE_BORDER_FILL_ID}" noAdjust="0">${tblInner}</hp:tbl>`
 
   // 테이블은 paragraph 안의 run → 가 아니라 별도 p로 감쌈 (block-level inline-anchored)
   return `<hp:p paraPrIDRef="0" styleIDRef="0"><hp:run charPrIDRef="0">${tbl}</hp:run></hp:p>`

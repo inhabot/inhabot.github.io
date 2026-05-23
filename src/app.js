@@ -4,7 +4,6 @@ import { KORDOC_VERSION } from "./browser-kordoc.js";
 const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
 const TAB_PARSE = "parse";
 const TAB_GENERATE = "generate";
-const DEFAULT_OUTPUT_NAME = "document";
 const DEFAULT_HWPX_OPTIONS = Object.freeze({});
 const TAB_COPY = {
   [TAB_PARSE]: {
@@ -16,26 +15,6 @@ const TAB_COPY = {
     queueHint: "Markdown(.md) 파일을 업로드해주세요. 직접 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.",
   },
 };
-const MARKDOWN_SAMPLE = `# 주간 업무 보고서
-
-## 이번 주 요약
-- 공문서 초안 검토 완료
-- 회의 메모를 Markdown으로 정리
-- 배포용 문서 변환 절차 점검
-
-## 진행 현황
-| 항목 | 상태 | 비고 |
-| --- | --- | --- |
-| 민원 응답서 | 완료 | 팀장 검토 반영 |
-| 사업 계획서 | 진행 중 | 표 정리 필요 |
-
-> 대외 배포 전에는 마지막으로 표와 제목 계층을 다시 확인합니다.
-
-\`\`\`
-담당자: 홍길동
-검토일: 2026-05-23
-\`\`\`
-`;
 const state = {
   activeTab: TAB_PARSE,
   nextJobId: 1,
@@ -45,12 +24,8 @@ const state = {
     records: [],
   },
   generate: {
-    error: null,
-    markdown: "",
-    outputName: DEFAULT_OUTPUT_NAME,
     processing: false,
-    result: null,
-    sourceLabel: "직접 입력",
+    records: [],
   },
 };
 
@@ -69,17 +44,16 @@ const successStat = document.querySelector("[data-stat-success]");
 const failedStat = document.querySelector("[data-stat-failed]");
 const results = document.querySelector("[data-results]");
 const versionTexts = Array.from(document.querySelectorAll("[data-version]"));
-const markdownInput = document.querySelector("#markdownInput");
 const markdownFileInput = document.querySelector("#markdownFileInput");
-const outputNameInput = document.querySelector("#outputNameInput");
-const generateButton = document.querySelector("#generateButton");
-const downloadHwpxButton = document.querySelector("#downloadHwpxButton");
-const resetMarkdownButton = document.querySelector("#resetMarkdownButton");
-const sampleMarkdownButton = document.querySelector("#sampleMarkdownButton");
-const markdownMeta = document.querySelector("[data-markdown-meta]");
-const generateHint = document.querySelector("[data-generate-hint]");
+const generateStartButton = document.querySelector("#generateStartButton");
+const generateDownloadAllButton = document.querySelector("#generateDownloadAllButton");
+const generateResetButton = document.querySelector("#generateResetButton");
+const generateQueueHint = document.querySelector("[data-generate-queue-hint]");
+const generateTotalStat = document.querySelector("[data-generate-stat-total]");
+const generateSuccessStat = document.querySelector("[data-generate-stat-success]");
+const generateFailedStat = document.querySelector("[data-generate-stat-failed]");
 const generateSummary = document.querySelector("[data-generate-summary]");
-const generateResult = document.querySelector("[data-generate-result]");
+const generateResults = document.querySelector("[data-generate-results]");
 
 for (const versionText of versionTexts) {
   versionText.textContent = `kordoc ${KORDOC_VERSION}`;
@@ -222,56 +196,69 @@ results.addEventListener("click", async (event) => {
   }
 });
 
-markdownInput.addEventListener("input", () => {
-  setGenerateDraft(markdownInput.value, {
-    clearResult: true,
-  });
-});
-
-markdownFileInput.addEventListener("change", async () => {
-  const [file] = Array.from(markdownFileInput.files ?? []).filter(isSupportedMarkdownFile);
-  if (!file) {
+generateResults.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement) || target.dataset.action !== "download-generate") {
     return;
   }
 
-  try {
-    await loadMarkdownFile(file);
-  } catch (error) {
-    state.generate.error = error instanceof Error ? error.message : "Markdown 파일을 읽지 못했습니다.";
-    renderGenerate();
-  } finally {
-    markdownFileInput.value = "";
+  const id = Number(target.dataset.id);
+  const record = state.generate.records.find((item) => item.id === id);
+  if (!record?.result?.success) {
+    return;
   }
+
+  const blob = new Blob([record.result.buffer], { type: "application/hwp+zip" });
+  downloadBlob(blob, record.result.filename);
 });
 
-outputNameInput.addEventListener("input", () => {
-  state.generate.outputName = outputNameInput.value;
-  renderGenerate();
+markdownFileInput.addEventListener("change", () => {
+  if (state.generate.processing) {
+    return;
+  }
+
+  const files = Array.from(markdownFileInput.files ?? []).filter(isSupportedMarkdownFile);
+  setGenerateRecords(files);
 });
 
-sampleMarkdownButton.addEventListener("click", () => {
-  setGenerateDraft(MARKDOWN_SAMPLE, {
-    clearResult: true,
-    outputName: "weekly-briefing",
-    sourceLabel: "예제 텍스트",
-  });
-});
+generateStartButton.addEventListener("click", async () => {
+  if (state.generate.processing || state.generate.records.length === 0) {
+    return;
+  }
 
-generateButton.addEventListener("click", async () => {
   await startHwpxGeneration();
 });
 
-downloadHwpxButton.addEventListener("click", () => {
-  if (!state.generate.result) {
+generateResetButton.addEventListener("click", () => {
+  resetGenerateState();
+});
+
+generateDownloadAllButton.addEventListener("click", async () => {
+  const succeeded = state.generate.records.filter((record) => record.result?.success);
+  if (succeeded.length === 0) {
     return;
   }
 
-  const blob = new Blob([state.generate.result.buffer], { type: "application/hwp+zip" });
-  downloadBlob(blob, currentHwpxFilename());
-});
+  generateDownloadAllButton.disabled = true;
+  generateDownloadAllButton.textContent = "ZIP 준비 중...";
 
-resetMarkdownButton.addEventListener("click", () => {
-  resetGenerateState();
+  try {
+    const zip = new JSZip();
+    const usedNames = new Set();
+
+    for (const record of succeeded) {
+      zip.file(
+        uniqueName(record.result.filename, usedNames),
+        record.result.buffer,
+      );
+    }
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    downloadBlob(blob, `kordoc-hwpx-${timestamp()}.zip`);
+  } finally {
+    generateDownloadAllButton.disabled = false;
+    generateDownloadAllButton.textContent = "모두 ZIP으로 다운로드";
+  }
 });
 
 function setParseRecords(files) {
@@ -349,38 +336,77 @@ async function startParseConversion() {
   }
 }
 
+function setGenerateRecords(files) {
+  state.generate.records = files.map((file, index) => ({
+    file,
+    id: index + 1,
+    message: "변환을 시작하면 이 파일을 HWPX로 생성합니다.",
+    progressText: "대기 중",
+    status: "queued",
+  }));
+
+  markdownFileInput.value = "";
+  generateQueueHint.textContent = files.length > 0
+    ? `${files.length}개 파일이 준비되었습니다. 변환 시작을 누르면 순서대로 HWPX로 바뀝니다.`
+    : "Markdown(.md) 파일을 업로드해주세요. 여러 파일을 한 번에 HWPX로 바꿀 수 있습니다.";
+
+  renderGenerate();
+}
+
 async function startHwpxGeneration() {
   if (state.generate.processing) {
     return;
   }
 
-  if (state.generate.markdown.trim() === "") {
-    state.generate.error = "Markdown을 먼저 입력해 주세요.";
+  if (state.generate.records.length === 0) {
     renderGenerate();
     return;
   }
 
   state.generate.processing = true;
-  state.generate.error = null;
-  state.generate.result = null;
   renderGenerate();
 
   try {
-    const result = await runWorkerJob("markdown-to-hwpx", {
-      markdown: state.generate.markdown,
-      options: DEFAULT_HWPX_OPTIONS,
-    });
+    for (const record of state.generate.records) {
+      record.message = "브라우저 안에서 안전하게 HWPX를 생성하고 있습니다.";
+      record.progressText = "Markdown 읽는 중";
+      record.result = undefined;
+      record.status = "parsing";
+      renderGenerate();
 
-    if (result.success) {
-      state.generate.result = {
-        buffer: result.buffer,
-        byteLength: result.byteLength,
-      };
-    } else {
-      state.generate.error = result.error;
+      try {
+        const markdown = await record.file.text();
+        record.progressText = "HWPX 생성 시작";
+        renderGenerate();
+
+        const result = await runWorkerJob("markdown-to-hwpx", {
+          markdown,
+          options: DEFAULT_HWPX_OPTIONS,
+        });
+
+        if (result.success) {
+          record.status = "done";
+          record.result = {
+            success: true,
+            buffer: result.buffer,
+            byteLength: result.byteLength,
+            filename: `${sanitizeFilename(stripExtension(record.file.name))}.hwpx`,
+          };
+          record.message = `${countLines(markdown)}줄 · ${formatSize(result.byteLength)}`;
+          record.progressText = "HWPX 완료";
+        } else {
+          record.status = "error";
+          record.message = result.error;
+          record.progressText = result.code ?? "오류";
+        }
+      } catch (error) {
+        record.status = "error";
+        record.message = error instanceof Error ? error.message : "HWPX 생성 실패";
+        record.progressText = "오류";
+      }
+
+      renderGenerate();
     }
-  } catch (error) {
-    state.generate.error = error instanceof Error ? error.message : "HWPX 생성 실패";
   } finally {
     state.generate.processing = false;
     renderGenerate();
@@ -498,92 +524,53 @@ function renderParse() {
 }
 
 function renderGenerate() {
-  if (markdownInput.value !== state.generate.markdown) {
-    markdownInput.value = state.generate.markdown;
-  }
+  const doneCount = state.generate.records.filter((record) => record.status === "done").length;
+  const errorCount = state.generate.records.filter((record) => record.status === "error").length;
+  generateTotalStat.textContent = String(state.generate.records.length);
+  generateSuccessStat.textContent = String(doneCount);
+  generateFailedStat.textContent = String(errorCount);
 
-  if (outputNameInput.value !== state.generate.outputName) {
-    outputNameInput.value = state.generate.outputName;
-  }
-
-  const characters = state.generate.markdown.length;
-  markdownMeta.textContent = `${state.generate.sourceLabel} · ${characters.toLocaleString()}자 · ${countLines(state.generate.markdown)}줄`;
-  generateHint.textContent = state.generate.sourceLabel === "직접 입력"
-    ? TAB_COPY[TAB_GENERATE].queueHint
-    : `최근 불러온 원본: ${state.generate.sourceLabel}`;
-
-  markdownInput.disabled = state.generate.processing;
-  markdownFileInput.disabled = state.generate.processing;
-  outputNameInput.disabled = state.generate.processing;
   generateDropzone.dataset.locked = state.generate.processing ? "true" : "false";
-  sampleMarkdownButton.disabled = state.generate.processing;
-  resetMarkdownButton.disabled = state.generate.processing;
-  generateButton.disabled = state.generate.processing;
-  generateButton.textContent = state.generate.processing ? "HWPX 만드는 중..." : "HWPX 만들기";
-  downloadHwpxButton.disabled = state.generate.processing || !state.generate.result;
-  downloadHwpxButton.textContent = state.generate.processing
-    ? "생성 중..."
-    : state.generate.result
-      ? "HWPX 다운로드"
-      : "다운로드 대기";
+  markdownFileInput.disabled = state.generate.processing;
+  generateStartButton.disabled = state.generate.processing || state.generate.records.length === 0;
+  generateStartButton.textContent = state.generate.processing ? "변환 중..." : "변환 시작";
+  generateResetButton.disabled = state.generate.processing;
+  generateDownloadAllButton.disabled = state.generate.processing || doneCount === 0;
+  generateDownloadAllButton.textContent = !state.generate.processing && doneCount > 0
+    ? "모두 ZIP으로 다운로드"
+    : state.generate.processing
+      ? "변환 완료 후 활성화"
+      : "다운로드 준비 전";
 
   if (state.generate.processing) {
     generateSummary.textContent = "HWPX 패키지를 만드는 중";
-  } else if (state.generate.result) {
-    generateSummary.textContent = `${currentHwpxFilename()} · ${formatSize(state.generate.result.byteLength)}`;
-  } else if (state.generate.error) {
+  } else if (doneCount > 0) {
+    generateSummary.textContent = `${doneCount}개 HWPX 준비됨`;
+  } else if (errorCount > 0) {
     generateSummary.textContent = "오류 발생";
-  } else if (state.generate.markdown.trim()) {
-    generateSummary.textContent = `${characters.toLocaleString()}자 입력 준비됨`;
   } else {
-    generateSummary.textContent = "입력 대기 중";
+    generateSummary.textContent = "업로드 대기 중";
   }
 
-  generateResult.innerHTML = renderGenerateCard();
-}
+  generateResults.innerHTML = state.generate.records.map((record) => {
+    const action = record.result?.success
+      ? `<button class="row-action" data-action="download-generate" data-id="${record.id}">HWPX 다운로드</button>`
+      : `<span class="row-action row-action-muted">${record.status === "queued" ? "대기" : "미지원"}</span>`;
 
-function renderGenerateCard() {
-  if (state.generate.processing) {
     return `
-      <article class="generator-card generator-card-processing">
-        <p class="panel-kicker">생성 중</p>
-        <h3>Markdown을 HWPX 패키지로 변환하고 있습니다.</h3>
-        <p class="generator-copy">브라우저 안에서 ZIP 패키지와 문단 스타일을 조합하는 중입니다.</p>
-      </article>
-    `;
-  }
-
-  if (state.generate.error) {
-    return `
-      <article class="generator-card generator-card-error">
-        <p class="panel-kicker">생성 실패</p>
-        <h3>HWPX를 만들지 못했습니다.</h3>
-        <p class="generator-copy">${escapeHtml(state.generate.error)}</p>
-      </article>
-    `;
-  }
-
-  if (state.generate.result) {
-    return `
-      <article class="generator-card generator-card-done">
-        <p class="panel-kicker">생성 완료</p>
-        <h3>${escapeHtml(currentHwpxFilename())}</h3>
-        <p class="generator-copy">문서 패키지가 준비되었습니다. 상단 다운로드 버튼으로 바로 저장할 수 있습니다.</p>
-        <div class="generator-metrics">
-          <span class="metric-pill">출력 ${formatSize(state.generate.result.byteLength)}</span>
-          <span class="metric-pill">입력 ${state.generate.markdown.length.toLocaleString()}자</span>
+      <article class="result-row result-row-${record.status}">
+        <div class="row-main">
+          <div class="row-title-wrap">
+            <h3 class="row-title">${escapeHtml(record.file.name)}</h3>
+            <span class="row-badge row-badge-${record.status}">${generateStatusLabel(record.status)}</span>
+          </div>
+          <p class="row-meta">${formatSize(record.file.size)} · ${escapeHtml(record.progressText)}</p>
+          <p class="row-message">${escapeHtml(record.message)}</p>
         </div>
+        <div class="row-side">${action}</div>
       </article>
     `;
-  }
-
-  return `
-    <article class="generator-card generator-card-idle">
-      <p class="panel-kicker">준비</p>
-      <h3>Markdown을 붙여넣고 HWPX 문서를 생성해 보세요.</h3>
-      <p class="generator-copy">헤딩, 목록, 인용문, 코드블록, 표를 포함한 문서를 브라우저 안에서 바로 패키징합니다.</p>
-    </article>
-  `;
+  }).join("");
 }
 
 function resetParseState() {
@@ -595,28 +582,10 @@ function resetParseState() {
 }
 
 function resetGenerateState() {
-  state.generate.error = null;
-  state.generate.markdown = "";
-  state.generate.outputName = DEFAULT_OUTPUT_NAME;
   state.generate.processing = false;
-  state.generate.result = null;
-  state.generate.sourceLabel = "직접 입력";
+  state.generate.records = [];
   markdownFileInput.value = "";
-  renderGenerate();
-}
-
-function setGenerateDraft(markdown, {
-  clearResult = false,
-  outputName = state.generate.outputName,
-  sourceLabel = state.generate.sourceLabel,
-} = {}) {
-  state.generate.markdown = markdown;
-  state.generate.outputName = outputName;
-  state.generate.sourceLabel = sourceLabel;
-  state.generate.error = null;
-  if (clearResult) {
-    state.generate.result = null;
-  }
+  generateQueueHint.textContent = "Markdown(.md) 파일을 업로드해주세요. 여러 파일을 한 번에 HWPX로 바꿀 수 있습니다.";
   renderGenerate();
 }
 
@@ -626,6 +595,21 @@ function statusLabel(status) {
       return "대기";
     case "parsing":
       return "변환 중";
+    case "done":
+      return "완료";
+    case "error":
+      return "실패";
+    default:
+      return status;
+  }
+}
+
+function generateStatusLabel(status) {
+  switch (status) {
+    case "queued":
+      return "대기";
+    case "parsing":
+      return "생성 중";
     case "done":
       return "완료";
     case "error":
@@ -691,11 +675,6 @@ function timestamp() {
   ].join("");
 }
 
-function currentHwpxFilename() {
-  const raw = state.generate.outputName.trim() || DEFAULT_OUTPUT_NAME;
-  return `${sanitizeFilename(stripExtension(raw))}.hwpx`;
-}
-
 generateDropzone.addEventListener("dragover", (event) => {
   if (state.generate.processing) {
     return;
@@ -709,24 +688,18 @@ generateDropzone.addEventListener("dragleave", () => {
   generateDropzone.dataset.dragging = "false";
 });
 
-generateDropzone.addEventListener("drop", async (event) => {
+generateDropzone.addEventListener("drop", (event) => {
   if (state.generate.processing) {
     return;
   }
 
   event.preventDefault();
   generateDropzone.dataset.dragging = "false";
-  const [file] = Array.from(event.dataTransfer?.files ?? []).filter(isSupportedMarkdownFile);
-  if (!file) {
+  const files = Array.from(event.dataTransfer?.files ?? []).filter(isSupportedMarkdownFile);
+  if (files.length === 0) {
     return;
   }
-
-  try {
-    await loadMarkdownFile(file);
-  } catch (error) {
-    state.generate.error = error instanceof Error ? error.message : "Markdown 파일을 읽지 못했습니다.";
-    renderGenerate();
-  }
+  setGenerateRecords(files);
 });
 
 function downloadBlob(blob, filename) {
@@ -746,15 +719,6 @@ function isSupportedParseFile(file) {
 
 function isSupportedMarkdownFile(file) {
   return /\.(md|markdown|txt)$/i.test(file.name);
-}
-
-async function loadMarkdownFile(file) {
-  const markdown = await file.text();
-  setGenerateDraft(markdown, {
-    clearResult: true,
-    outputName: sanitizeFilename(stripExtension(file.name)),
-    sourceLabel: file.name,
-  });
 }
 
 function escapeHtml(value) {
