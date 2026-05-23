@@ -5,6 +5,7 @@ const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "modu
 const TAB_PARSE = "parse";
 const TAB_GENERATE = "generate";
 const DEFAULT_OUTPUT_NAME = "document";
+const DEFAULT_HWPX_OPTIONS = Object.freeze({});
 const TAB_COPY = {
   [TAB_PARSE]: {
     description: "한글(.hwp, .hwpx) 파일을 업로드해주세요. 여러 파일을 한 번에 Markdown으로 변환할 수 있습니다.",
@@ -35,49 +36,6 @@ const MARKDOWN_SAMPLE = `# 주간 업무 보고서
 검토일: 2026-05-23
 \`\`\`
 `;
-const THEME_PRESETS = {
-  neutral: {
-    label: "기본 잉크",
-    options: {
-      theme: {
-        tableHeaderBold: true,
-      },
-    },
-  },
-  mint: {
-    label: "민트 업무문서",
-    options: {
-      theme: {
-        headingColors: {
-          1: "#0b5b56",
-          2: "#0f766e",
-          3: "#15807b",
-          4: "#2a8c84",
-        },
-        quoteColor: "#31554d",
-        tableHeaderColor: "#0b5b56",
-        tableHeaderBold: true,
-      },
-    },
-  },
-  amber: {
-    label: "따뜻한 브리핑",
-    options: {
-      theme: {
-        headingColors: {
-          1: "#92400e",
-          2: "#b45309",
-          3: "#c97b12",
-          4: "#d18f2c",
-        },
-        quoteColor: "#7c5b1a",
-        tableHeaderColor: "#92400e",
-        tableHeaderBold: true,
-      },
-    },
-  },
-};
-
 const state = {
   activeTab: TAB_PARSE,
   nextJobId: 1,
@@ -93,7 +51,6 @@ const state = {
     processing: false,
     result: null,
     sourceLabel: "직접 입력",
-    themePreset: "neutral",
   },
 };
 
@@ -101,6 +58,7 @@ const tabButtons = Array.from(document.querySelectorAll("[data-tab-button]"));
 const tabPanels = Array.from(document.querySelectorAll("[data-tab-panel]"));
 const tabDescription = document.querySelector("[data-tab-description]");
 const dropzone = document.querySelector("[data-dropzone]");
+const generateDropzone = document.querySelector("[data-generate-dropzone]");
 const fileInput = document.querySelector("#fileInput");
 const startButton = document.querySelector("#startButton");
 const resetButton = document.querySelector("#resetButton");
@@ -114,7 +72,6 @@ const versionTexts = Array.from(document.querySelectorAll("[data-version]"));
 const markdownInput = document.querySelector("#markdownInput");
 const markdownFileInput = document.querySelector("#markdownFileInput");
 const outputNameInput = document.querySelector("#outputNameInput");
-const themePresetSelect = document.querySelector("#themePresetSelect");
 const generateButton = document.querySelector("#generateButton");
 const downloadHwpxButton = document.querySelector("#downloadHwpxButton");
 const resetMarkdownButton = document.querySelector("#resetMarkdownButton");
@@ -278,12 +235,7 @@ markdownFileInput.addEventListener("change", async () => {
   }
 
   try {
-    const markdown = await file.text();
-    setGenerateDraft(markdown, {
-      clearResult: true,
-      outputName: sanitizeFilename(stripExtension(file.name)),
-      sourceLabel: file.name,
-    });
+    await loadMarkdownFile(file);
   } catch (error) {
     state.generate.error = error instanceof Error ? error.message : "Markdown 파일을 읽지 못했습니다.";
     renderGenerate();
@@ -294,13 +246,6 @@ markdownFileInput.addEventListener("change", async () => {
 
 outputNameInput.addEventListener("input", () => {
   state.generate.outputName = outputNameInput.value;
-  renderGenerate();
-});
-
-themePresetSelect.addEventListener("change", () => {
-  state.generate.themePreset = themePresetSelect.value;
-  state.generate.result = null;
-  state.generate.error = null;
   renderGenerate();
 });
 
@@ -421,10 +366,9 @@ async function startHwpxGeneration() {
   renderGenerate();
 
   try {
-    const preset = THEME_PRESETS[state.generate.themePreset] ?? THEME_PRESETS.neutral;
     const result = await runWorkerJob("markdown-to-hwpx", {
       markdown: state.generate.markdown,
-      options: preset.options,
+      options: DEFAULT_HWPX_OPTIONS,
     });
 
     if (result.success) {
@@ -562,10 +506,6 @@ function renderGenerate() {
     outputNameInput.value = state.generate.outputName;
   }
 
-  if (themePresetSelect.value !== state.generate.themePreset) {
-    themePresetSelect.value = state.generate.themePreset;
-  }
-
   const characters = state.generate.markdown.length;
   markdownMeta.textContent = `${state.generate.sourceLabel} · ${characters.toLocaleString()}자 · ${countLines(state.generate.markdown)}줄`;
   generateHint.textContent = state.generate.sourceLabel === "직접 입력"
@@ -575,7 +515,7 @@ function renderGenerate() {
   markdownInput.disabled = state.generate.processing;
   markdownFileInput.disabled = state.generate.processing;
   outputNameInput.disabled = state.generate.processing;
-  themePresetSelect.disabled = state.generate.processing;
+  generateDropzone.dataset.locked = state.generate.processing ? "true" : "false";
   sampleMarkdownButton.disabled = state.generate.processing;
   resetMarkdownButton.disabled = state.generate.processing;
   generateButton.disabled = state.generate.processing;
@@ -603,8 +543,6 @@ function renderGenerate() {
 }
 
 function renderGenerateCard() {
-  const preset = THEME_PRESETS[state.generate.themePreset] ?? THEME_PRESETS.neutral;
-
   if (state.generate.processing) {
     return `
       <article class="generator-card generator-card-processing">
@@ -633,7 +571,6 @@ function renderGenerateCard() {
         <p class="generator-copy">문서 패키지가 준비되었습니다. 상단 다운로드 버튼으로 바로 저장할 수 있습니다.</p>
         <div class="generator-metrics">
           <span class="metric-pill">출력 ${formatSize(state.generate.result.byteLength)}</span>
-          <span class="metric-pill">테마 ${escapeHtml(preset.label)}</span>
           <span class="metric-pill">입력 ${state.generate.markdown.length.toLocaleString()}자</span>
         </div>
       </article>
@@ -664,7 +601,6 @@ function resetGenerateState() {
   state.generate.processing = false;
   state.generate.result = null;
   state.generate.sourceLabel = "직접 입력";
-  state.generate.themePreset = "neutral";
   markdownFileInput.value = "";
   renderGenerate();
 }
@@ -760,6 +696,39 @@ function currentHwpxFilename() {
   return `${sanitizeFilename(stripExtension(raw))}.hwpx`;
 }
 
+generateDropzone.addEventListener("dragover", (event) => {
+  if (state.generate.processing) {
+    return;
+  }
+
+  event.preventDefault();
+  generateDropzone.dataset.dragging = "true";
+});
+
+generateDropzone.addEventListener("dragleave", () => {
+  generateDropzone.dataset.dragging = "false";
+});
+
+generateDropzone.addEventListener("drop", async (event) => {
+  if (state.generate.processing) {
+    return;
+  }
+
+  event.preventDefault();
+  generateDropzone.dataset.dragging = "false";
+  const [file] = Array.from(event.dataTransfer?.files ?? []).filter(isSupportedMarkdownFile);
+  if (!file) {
+    return;
+  }
+
+  try {
+    await loadMarkdownFile(file);
+  } catch (error) {
+    state.generate.error = error instanceof Error ? error.message : "Markdown 파일을 읽지 못했습니다.";
+    renderGenerate();
+  }
+});
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -777,6 +746,15 @@ function isSupportedParseFile(file) {
 
 function isSupportedMarkdownFile(file) {
   return /\.(md|markdown|txt)$/i.test(file.name);
+}
+
+async function loadMarkdownFile(file) {
+  const markdown = await file.text();
+  setGenerateDraft(markdown, {
+    clearResult: true,
+    outputName: sanitizeFilename(stripExtension(file.name)),
+    sourceLabel: file.name,
+  });
 }
 
 function escapeHtml(value) {

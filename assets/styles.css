@@ -210,6 +210,14 @@ pre {
   padding: 26px;
 }
 
+.generate-upload-panel .panel-head {
+  margin-bottom: 18px;
+}
+
+.generate-upload-panel .dropzone {
+  min-height: 200px;
+}
+
 .panel-head {
   display: flex;
   justify-content: space-between;
@@ -409,7 +417,7 @@ body[data-mode="generate"] .row-action {
 
 .compose-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.9fr);
   gap: 20px;
   align-items: start;
 }
@@ -436,6 +444,12 @@ body[data-mode="generate"] .row-action {
 .field-help,
 .editor-meta,
 .generator-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.generate-editor-hint {
   margin: 0;
   color: var(--muted);
   line-height: 1.7;

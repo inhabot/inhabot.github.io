@@ -95,11 +95,35 @@
         </div>
 
         <div class="tab-page" data-tab-panel="generate" hidden>
+          <section class="panel upload-panel generate-upload-panel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">1. Markdown 업로드</p>
+                <h2>Markdown(.md) 파일을 불러오거나 예제로 바로 시작하기</h2>
+              </div>
+            </div>
+
+            <label class="dropzone dropzone-generate" data-generate-dropzone for="markdownFileInput">
+              <input id="markdownFileInput" type="file" accept=".md,.markdown,.txt" />
+              <span class="dropzone-badge">Upload Markdown</span>
+              <strong>Markdown(.md) 파일 업로드</strong>
+              <span>파일을 끌어다 놓거나 클릭해서 불러올 수 있습니다.</span>
+            </label>
+
+            <div class="cta-row">
+              <button id="sampleMarkdownButton" class="button button-ghost" type="button">예제 넣기</button>
+            </div>
+
+            <p class="queue-hint" data-generate-hint>
+              Markdown(.md) 파일을 업로드해주세요. 직접 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.
+            </p>
+          </section>
+
           <section class="panel compose-panel">
             <div class="panel-head">
               <div>
-                <p class="panel-kicker">1. Markdown 입력</p>
-                <h2>Markdown(.md) 업로드 또는 붙여넣기로 HWPX 만들기</h2>
+                <p class="panel-kicker">2. Markdown 입력</p>
+                <h2>입력 내용을 확인하고 HWPX 문서로 변환하기</h2>
               </div>
             </div>
 
@@ -122,27 +146,8 @@
                   <p class="field-help">확장자 `.hwpx`는 자동으로 붙습니다.</p>
                 </div>
 
-                <div class="field-group">
-                  <label class="field-label" for="themePresetSelect">문서 테마</label>
-                  <select id="themePresetSelect" class="text-input">
-                    <option value="neutral">기본 잉크</option>
-                    <option value="mint">민트 업무문서</option>
-                    <option value="amber">따뜻한 브리핑</option>
-                  </select>
-                  <p class="field-help">헤딩과 표 헤더의 색감을 빠르게 바꿀 수 있습니다.</p>
-                </div>
-
-                <div class="field-group">
-                  <span class="field-label">빠른 작업</span>
-                  <div class="cta-row cta-row-compact">
-                    <label class="button button-ghost file-trigger" for="markdownFileInput">Markdown(.md) 업로드</label>
-                    <input id="markdownFileInput" type="file" accept=".md,.markdown,.txt" hidden />
-                    <button id="sampleMarkdownButton" class="button button-ghost" type="button">예제 넣기</button>
-                  </div>
-                </div>
-
-                <p class="queue-hint" data-generate-hint>
-                  Markdown(.md) 파일을 업로드해주세요. 직접 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.
+                <p class="queue-hint generate-editor-hint">
+                  업로드한 Markdown을 여기서 바로 수정한 뒤 한글 문서로 만들 수 있습니다.
                 </p>
 
                 <div class="cta-row">
@@ -157,7 +162,7 @@
           <section class="panel result-panel">
             <div class="panel-head">
               <div>
-                <p class="panel-kicker">2. 출력 확인</p>
+                <p class="panel-kicker">3. 출력 확인</p>
                 <h2>생성 상태와 다운로드 준비</h2>
               </div>
               <p class="support-copy" data-generate-summary>입력 대기 중</p>

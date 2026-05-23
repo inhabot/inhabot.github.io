@@ -69,6 +69,9 @@ export interface MarkdownToHwpxOptions {
 }
 
 const DEFAULT_TEXT_COLOR = "#000000"
+const TABLE_BORDER_FILL_ID = 1
+const TABLE_BORDER_COLOR = "#000000"
+const TABLE_BORDER_WIDTH = "0.12 mm"
 
 function resolveTheme(theme?: HwpxTheme) {
   return {
@@ -137,7 +140,7 @@ interface MdBlock {
 }
 
 function parseMarkdownToBlocks(md: string): MdBlock[] {
-  const lines = md.split("\n")
+  const lines = md.split(/\r?\n/)
   const blocks: MdBlock[] = []
   let i = 0
 
@@ -176,17 +179,19 @@ function parseMarkdownToBlocks(md: string): MdBlock[] {
       i++; continue
     }
 
-    // 테이블
-    if (line.trimStart().startsWith("|")) {
-      const tableRows: string[][] = []
-      while (i < lines.length && lines[i].trimStart().startsWith("|")) {
-        const row = lines[i]
-        if (/^[\s|:\-]+$/.test(row)) { i++; continue }
-        const cells = row.split("|").slice(1, -1).map(c => c.trim())
-        if (cells.length > 0) tableRows.push(cells)
-        i++
-      }
-      if (tableRows.length > 0) blocks.push({ type: "table", rows: tableRows })
+    // HTML 테이블
+    const htmlTable = collectHtmlTable(lines, i)
+    if (htmlTable) {
+      blocks.push({ type: "table", rows: htmlTable.rows })
+      i = htmlTable.nextIndex
+      continue
+    }
+
+    // Markdown 파이프 테이블
+    const pipeTable = collectPipeTable(lines, i)
+    if (pipeTable) {
+      blocks.push({ type: "table", rows: pipeTable.rows })
+      i = pipeTable.nextIndex
       continue
     }
 
@@ -218,6 +223,163 @@ function parseMarkdownToBlocks(md: string): MdBlock[] {
   }
 
   return blocks
+}
+
+function collectPipeTable(
+  lines: string[],
+  startIndex: number,
+): { rows: string[][]; nextIndex: number } | null {
+  if (startIndex + 1 >= lines.length) {
+    return null
+  }
+
+  const headerLine = lines[startIndex]
+  const delimiterLine = lines[startIndex + 1]
+  if (!lineHasUnescapedPipe(headerLine)) {
+    return null
+  }
+
+  const headerCells = splitTableRow(headerLine)
+  const delimiterCells = splitTableRow(delimiterLine)
+  if (headerCells.length < 2 || delimiterCells.length < 2) {
+    return null
+  }
+
+  if (!isTableDelimiterRow(delimiterCells)) {
+    return null
+  }
+
+  const rows: string[][] = [headerCells]
+  let nextIndex = startIndex + 2
+
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex]
+    if (!line.trim()) {
+      break
+    }
+    if (!lineHasUnescapedPipe(line)) {
+      break
+    }
+
+    const cells = splitTableRow(line)
+    if (cells.length < 2) {
+      break
+    }
+
+    rows.push(cells)
+    nextIndex += 1
+  }
+
+  return rows.length > 0 ? { rows, nextIndex } : null
+}
+
+function splitTableRow(line: string): string[] {
+  let content = line.trim()
+  if (content.startsWith("|")) {
+    content = content.slice(1)
+  }
+  if (content.endsWith("|")) {
+    content = content.slice(0, -1)
+  }
+
+  const cells: string[] = []
+  let current = ""
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i]
+    if (char === "\\" && content[i + 1] === "|") {
+      current += "|"
+      i += 1
+      continue
+    }
+
+    if (char === "|") {
+      cells.push(current.trim())
+      current = ""
+      continue
+    }
+
+    current += char
+  }
+
+  cells.push(current.trim())
+  return cells
+}
+
+function lineHasUnescapedPipe(line: string): boolean {
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === "|" && line[i - 1] !== "\\") {
+      return true
+    }
+  }
+  return false
+}
+
+function isTableDelimiterRow(cells: string[]): boolean {
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")))
+}
+
+function collectHtmlTable(
+  lines: string[],
+  startIndex: number,
+): { rows: string[][]; nextIndex: number } | null {
+  if (!/<table\b/i.test(lines[startIndex])) {
+    return null
+  }
+
+  let html = lines[startIndex]
+  let nextIndex = startIndex + 1
+  while (!/<\/table>/i.test(html) && nextIndex < lines.length) {
+    html += `\n${lines[nextIndex]}`
+    nextIndex += 1
+  }
+
+  if (!/<\/table>/i.test(html)) {
+    return null
+  }
+
+  const rows = parseHtmlTableRows(html)
+  return rows.length > 0 ? { rows, nextIndex } : null
+}
+
+function parseHtmlTableRows(html: string): string[][] {
+  const rows: string[][] = []
+  const rowRegex = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi
+
+  for (const rowMatch of html.matchAll(rowRegex)) {
+    const cells: string[] = []
+    const rowInner = rowMatch[1]
+    const cellRegex = /<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi
+
+    for (const cellMatch of rowInner.matchAll(cellRegex)) {
+      const normalized = decodeHtmlEntities(
+        cellMatch[1]
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<[^>]+>/g, "")
+          .replace(/[ \t]+\n/g, "\n")
+          .replace(/\n[ \t]+/g, "\n")
+          .replace(/[ \t]{2,}/g, " ")
+          .trim(),
+      )
+      cells.push(normalized)
+    }
+
+    if (cells.length > 0) {
+      rows.push(cells)
+    }
+  }
+
+  return rows
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
 }
 
 // ─── 인라인 마크다운 → 멀티 run ─────────────────────
@@ -439,21 +601,21 @@ function generateHeaderXml(theme: ResolvedTheme): string {
       <hh:borderFill id="0" threeD="0" shadow="0" centerLine="0" breakCellSeparateLine="0">
         <hh:slash type="NONE" Crooked="0" isCounter="0"/>
         <hh:backSlash type="NONE" Crooked="0" isCounter="0"/>
-        <hh:leftBorder type="NONE" width="0.1 mm" color="#000000"/>
-        <hh:rightBorder type="NONE" width="0.1 mm" color="#000000"/>
-        <hh:topBorder type="NONE" width="0.1 mm" color="#000000"/>
-        <hh:bottomBorder type="NONE" width="0.1 mm" color="#000000"/>
-        <hh:diagonal type="NONE" width="0.1 mm" color="#000000"/>
+        <hh:leftBorder type="NONE" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
+        <hh:rightBorder type="NONE" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
+        <hh:topBorder type="NONE" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
+        <hh:bottomBorder type="NONE" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
+        <hh:diagonal type="NONE" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
         <hh:fillInfo/>
       </hh:borderFill>
-      <hh:borderFill id="1" threeD="0" shadow="0" centerLine="0" breakCellSeparateLine="0">
+      <hh:borderFill id="${TABLE_BORDER_FILL_ID}" threeD="0" shadow="0" centerLine="0" breakCellSeparateLine="0">
         <hh:slash type="NONE" Crooked="0" isCounter="0"/>
         <hh:backSlash type="NONE" Crooked="0" isCounter="0"/>
-        <hh:leftBorder type="SOLID" width="0.12 mm" color="#000000"/>
-        <hh:rightBorder type="SOLID" width="0.12 mm" color="#000000"/>
-        <hh:topBorder type="SOLID" width="0.12 mm" color="#000000"/>
-        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#000000"/>
-        <hh:diagonal type="NONE" width="0.1 mm" color="#000000"/>
+        <hh:leftBorder type="SOLID" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
+        <hh:rightBorder type="SOLID" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
+        <hh:topBorder type="SOLID" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
+        <hh:bottomBorder type="SOLID" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
+        <hh:diagonal type="NONE" width="${TABLE_BORDER_WIDTH}" color="${TABLE_BORDER_COLOR}"/>
         <hh:fillInfo/>
       </hh:borderFill>
     </hh:borderFills>
@@ -547,7 +709,7 @@ function generateTable(rows: string[][], theme: ResolvedTheme): string {
       const runs = generateRuns(cell, headerCharPr)
       const p = `<hp:p paraPrIDRef="0" styleIDRef="0">${runs}</hp:p>`
       // <hp:tc> 필수 속성 + subList + cellAddr + cellSpan + cellSz + cellMargin
-      return `<hp:tc name="" header="${isHeaderRow ? 1 : 0}" hasMargin="0" protect="0" editable="1" dirty="0" borderFillIDRef="1">`
+      return `<hp:tc name="" header="${isHeaderRow ? 1 : 0}" hasMargin="0" protect="0" editable="1" dirty="0" borderFillIDRef="${TABLE_BORDER_FILL_ID}">`
         + `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="TOP" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">${p}</hp:subList>`
         + `<hp:cellAddr colAddr="${colIdx}" rowAddr="${rowIdx}"/>`
         + `<hp:cellSpan colSpan="1" rowSpan="1"/>`
@@ -565,7 +727,7 @@ function generateTable(rows: string[][], theme: ResolvedTheme): string {
     + `<hp:inMargin left="510" right="510" top="141" bottom="141"/>`
     + trElements
 
-  const tbl = `<hp:tbl id="${tblId}" zOrder="0" numberingType="TABLE" pageBreak="CELL" repeatHeader="0" rowCnt="${rowCnt}" colCnt="${colCnt}" cellSpacing="0" borderFillIDRef="1" noShading="0">${tblInner}</hp:tbl>`
+  const tbl = `<hp:tbl id="${tblId}" zOrder="0" numberingType="TABLE" pageBreak="CELL" repeatHeader="0" rowCnt="${rowCnt}" colCnt="${colCnt}" cellSpacing="0" borderFillIDRef="${TABLE_BORDER_FILL_ID}" noShading="0">${tblInner}</hp:tbl>`
 
   // 테이블은 paragraph 안의 run → 가 아니라 별도 p로 감쌈 (block-level inline-anchored)
   return `<hp:p paraPrIDRef="0" styleIDRef="0"><hp:run charPrIDRef="0">${tbl}</hp:run></hp:p>`
