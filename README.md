@@ -7,7 +7,7 @@
 
 > *대한민국에서 둘째가라면 서러울 문서지옥. 거기서 7년 버틴 공무원이 만들었습니다.*
 
-HWP 3.x/5.x, HWPX, PDF, XLS, XLSX, DOCX — 관공서에서 쏟아지는 모든 문서를 파싱하고, 비교하고, 분석하고, 생성합니다.
+HWP 3.x/5.x, HWPX, HWPML, PDF, XLS, XLSX, DOCX — 관공서에서 쏟아지는 모든 문서를 파싱하고, 비교하고, 분석하고, 생성합니다.
 
 [English](./README-EN.md)
 
