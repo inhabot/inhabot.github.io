@@ -312,6 +312,25 @@ const result = await parse(buffer, {
 })
 ```
 
+### PDF 텍스트 품질 신호 (v2.9.0+)
+
+PDF는 텍스트층이 있어도 ToUnicode/CMap이 깨졌거나 NUL 등 제어문자가 섞이는 경우가 많다. `parsePdf` 결과는 페이지별 품질 신호를 함께 반환한다.
+
+```typescript
+const r = await parsePdf(buffer)
+if (r.success && r.qualitySummary?.needsOcr) {
+  // OCR 큐로 라우팅 (kordoc은 OCR을 기본 탑재하지 않음)
+  await routeToOcr(buffer, r.qualitySummary.ocrCandidatePages)
+}
+
+// 페이지 단위 신호
+for (const p of r.pageQuality ?? []) {
+  if (p.needsOcr) console.log(`p${p.page} 검토 필요: ${p.ocrReason}`)
+}
+```
+
+신호 키: `textChars`, `hangulRatio`, `controlCharRatio`, `replacementCharRatio`, `puaRatio` / `needsOcr` (페이지·문서 단위) / `ocrReason` (`low_text` | `high_pua` | `high_control` | `high_replacement`).
+
 ## CLI
 
 ```bash

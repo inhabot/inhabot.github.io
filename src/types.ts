@@ -214,6 +214,36 @@ export interface ParseSuccess extends ParseResultBase {
   warnings?: ParseWarning[]
   /** 추출된 이미지 목록 — 마크다운에서 파일명으로 참조됨 */
   images?: ExtractedImage[]
+  /** 페이지별 텍스트 품질 신호 — PDF에서만 제공 */
+  pageQuality?: PageQuality[]
+  /** 문서 단위 품질 요약 — PDF에서만 제공 */
+  qualitySummary?: DocumentQualitySummary
+}
+
+/** 페이지별 텍스트 품질 신호 (PDF 전용). 자세한 설명은 src/pdf/quality.ts */
+export interface PageQuality {
+  page: number
+  textChars: number
+  hangulRatio: number
+  controlCharRatio: number
+  replacementCharRatio: number
+  puaRatio: number
+  needsOcr: boolean
+  ocrReason?: "low_text" | "high_pua" | "high_control" | "high_replacement"
+}
+
+/** 문서 단위 품질 요약 (PDF 전용). */
+export interface DocumentQualitySummary {
+  totalPages: number
+  totalTextChars: number
+  avgHangulRatio: number
+  avgControlCharRatio: number
+  avgReplacementCharRatio: number
+  avgPuaRatio: number
+  lowTextPageCount: number
+  highPuaPageCount: number
+  needsOcr: boolean
+  ocrCandidatePages: number[]
 }
 
 /** 추출된 이미지 — ParseSuccess.images에 포함 */
@@ -319,4 +349,8 @@ export interface InternalParseResult {
   images?: ExtractedImage[]
   /** PDF 전용: 이미지 기반 PDF 여부 */
   isImageBased?: boolean
+  /** PDF 전용: 페이지별 품질 신호 */
+  pageQuality?: PageQuality[]
+  /** PDF 전용: 문서 단위 품질 요약 */
+  qualitySummary?: DocumentQualitySummary
 }

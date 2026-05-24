@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-05-24 — PDF 텍스트 품질 신호 + OCR 필요 판정
+
+### Added
+
+- **PDF 페이지별 품질 신호** — `ParseSuccess`에 `pageQuality?: PageQuality[]`, `qualitySummary?: DocumentQualitySummary` 신규 필드. PDF 파서가 페이지마다 다음 메트릭을 산출한다.
+  - `textChars`, `hangulRatio`, `controlCharRatio`, `replacementCharRatio`, `puaRatio`
+  - `needsOcr: boolean`, `ocrReason?: "low_text" | "high_pua" | "high_control" | "high_replacement"`
+- **문서 단위 OCR 권장 판정** — `DocumentQualitySummary.needsOcr` / `ocrCandidatePages`. 페이지 중 30% 이상이 OCR 후보면 문서 전체에 OCR 권장.
+- **신규 모듈 `src/pdf/quality.ts`** — 메트릭 계산/요약 순수 함수. 임계치 상수 (`LOW_TEXT_THRESHOLD=20`, `HIGH_PUA_THRESHOLD=0.2`, `HIGH_CONTROL_THRESHOLD=0.05`, `HIGH_REPLACEMENT_THRESHOLD=0.05`) 명시.
+
+### Changed
+
+- **PDF 블록/마크다운에서 비표시 제어문자 제거** — C0(NUL 등, tab/lf/cr 제외) + DEL + C1 strip. PUA는 신호 보존을 위해 그대로 둔다 (사용자가 글꼴 매핑 실패를 시각적으로 확인 가능). 품질 메트릭은 strip 전 raw text에서 계산되어 신호가 보존된다.
+
+### 동기
+
+전국 지자체 주요업무계획 PDF 대량 처리(190건, 45,399쪽) 중 발견된 패턴:
+1. 텍스트층은 있는데 ToUnicode/CMap이 불완전해 한글이 깨진 글리프로 떨어지는 PDF
+2. NUL/제어문자가 본문에 섞이는 PDF
+3. 페이지마다 품질이 다른 혼합형 PDF
+
+기존 `isImageBased` 만으로는 위 케이스를 분류할 수 없어, OCR 큐로 자동 라우팅하기 어려웠다. 본 릴리스는 OCR을 기본 탑재하지 않고, 호출자가 후속 OCR 라우팅을 결정할 수 있도록 **품질 신호만 노출**한다.
+
+```ts
+const r = await parsePdf(buf)
+if (r.success && r.qualitySummary?.needsOcr) {
+  // 사용자 측에서 OCR 파이프라인 호출
+  await routeToOcr(buf, r.qualitySummary.ocrCandidatePages)
+}
+```
+
 ## [2.8.0] - 2026-05-17 — `markdownToHwpx` 테마 옵션
 
 ### Added

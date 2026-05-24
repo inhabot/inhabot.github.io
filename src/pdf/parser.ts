@@ -12,6 +12,7 @@ import { parsePageRange } from "../page-range.js"
 import { blocksToMarkdown } from "../table/builder.js"
 import { extractLines, preprocessLines, filterPageBorderLines, buildTableGrids, extractCells, mapTextToCells, cellTextToString, detectEvenSpacedItems, type TextItem, type TableGrid, type ExtractedCell } from "./line-detector.js"
 import { detectClusterTables, type ClusterItem } from "./cluster-detector.js"
+import { computePageQuality, summarizeDocumentQuality, stripControlChars, type PageQuality } from "./quality.js"
 // polyfill 먼저 (ES 모듈 호이스팅되므로 별도 파일 필수)
 import "./polyfill.js"
 import { getDocument, OPS, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs"
@@ -85,6 +86,7 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
 
     const blocks: IRBlock[] = []
     const warnings: ParseWarning[] = []
+    const pageQuality: PageQuality[] = []
     let totalChars = 0
     let totalTextBytes = 0
     const effectivePageCount = Math.min(pageCount, MAX_PAGES)
@@ -125,12 +127,15 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
         const pageBlocks = extractPageBlocksWithLines(visible, i, opList, viewport.width, viewport.height)
         for (const b of pageBlocks) blocks.push(b)
 
-        // 이미지 기반 PDF 감지 + 크기 제한용 문자 수 집계
+        // 이미지 기반 PDF 감지 + 크기 제한용 문자 수 집계 + 페이지 품질 신호
+        let pageText = ""
         for (const b of pageBlocks) {
           const t = b.text || ""
           totalChars += t.replace(/\s/g, "").length
           totalTextBytes += t.length * 2
+          pageText += pageText ? "\n" + t : t
         }
+        pageQuality.push(computePageQuality(i, pageText))
         if (totalTextBytes > MAX_TOTAL_TEXT) throw new KordocError("텍스트 추출 크기 초과")
         parsedPages++
         options?.onProgress?.(parsedPages, totalTarget)
@@ -149,7 +154,7 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
           const ocrBlocks = await ocrPages(doc, options.ocr, pageFilter, effectivePageCount)
           if (ocrBlocks.length > 0) {
             const ocrMarkdown = ocrBlocks.map(b => b.text || "").filter(Boolean).join("\n\n")
-            return { markdown: ocrMarkdown, blocks: ocrBlocks, metadata, warnings, isImageBased: true }
+            return { markdown: ocrMarkdown, blocks: ocrBlocks, metadata, warnings, isImageBased: true, pageQuality, qualitySummary: summarizeDocumentQuality(pageQuality) }
           }
         } catch {
           // OCR 실패 시 원래 에러 반환
@@ -194,10 +199,21 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
       .filter(b => b.type === "heading" && b.level && b.text)
       .map(b => ({ level: b.level!, text: b.text!, pageNumber: b.pageNumber }))
 
+    // 메트릭 수집 끝났으니 블록 텍스트의 C0/C1 제어문자(NUL 등) 정리
+    sanitizeBlockControlChars(blocks)
+
     // blocksToMarkdown로 통일 — 헤딩 마크다운 반영 (HWP5/HWPX와 일관성)
     let markdown = cleanPdfText(blocksToMarkdown(blocks))
 
-    return { markdown, blocks, metadata, outline: outline.length > 0 ? outline : undefined, warnings: warnings.length > 0 ? warnings : undefined }
+    return {
+      markdown,
+      blocks,
+      metadata,
+      outline: outline.length > 0 ? outline : undefined,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      pageQuality,
+      qualitySummary: summarizeDocumentQuality(pageQuality),
+    }
   } finally {
     await doc.destroy().catch(() => {})
   }
@@ -1331,9 +1347,24 @@ function mergeLineSimple(items: NormItem[]): string {
 
 
 
+/** 블록 트리의 텍스트에서 비표시 제어문자를 in-place로 제거한다. */
+function sanitizeBlockControlChars(blocks: IRBlock[]): void {
+  for (const b of blocks) {
+    if (b.text) b.text = stripControlChars(b.text)
+    if (b.table) {
+      for (const row of b.table.cells) {
+        for (const cell of row) {
+          if (cell.text) cell.text = stripControlChars(cell.text)
+        }
+      }
+    }
+    if (b.children) sanitizeBlockControlChars(b.children)
+  }
+}
+
 export function cleanPdfText(text: string): string {
   return mergeKoreanLines(
-    text
+    stripControlChars(text)
       // 문서 시작 단독 페이지 번호
       .replace(/^\d{1,4}\n/, "")
       // "- 2 -" 스타일 페이지 번호 (독립 라인 및 목록 항목 형태 포함)
