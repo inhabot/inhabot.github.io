@@ -317,6 +317,7 @@ export type { PrintPreset, PrintOptions, PageMargin } from "./print/renderer.js"
 export { detectFormat, detectOle2Format, detectZipFormat, isHwpxFile, isOldHwpFile, isPdfFile, isZipFile } from "./detect.js"
 export type {
   ParseResult, ParseSuccess, ParseFailure, FileType,
+  PageQuality, DocumentQualitySummary,
   IRBlock, IRBlockType, IRTable, IRCell, CellContext,
   BoundingBox, InlineStyle, ImageData, ExtractedImage,
   DocumentMetadata, ParseOptions, ErrorCode,

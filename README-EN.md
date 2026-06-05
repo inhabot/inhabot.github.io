@@ -27,10 +27,35 @@ Beyond simple text extraction, kordoc automates the **entire lifecycle of Korean
 
 ---
 
-## What's New in v2.5.0
+## What's New in v2.9.0
+
+- **📊 PDF Text Quality Signals + OCR Recommendation** — Even PDFs with a text layer often have broken ToUnicode/CMap (Hangul drops as garbled glyphs) or control chars (NUL) mixed into the body. `parsePdf` now returns per-page quality signals (`pageQuality`) and a document summary (`qualitySummary`) — use `needsOcr`/`ocrReason` to auto-route to an OCR queue. kordoc ships **no built-in OCR**; it only exposes the signals. Surfaced while processing 190 municipal work-plan PDFs (45,399 pages).
+
+## What's New in v2.8.0
+
+- **🎨 `markdownToHwpx` Theme Option (#31)** — Specify text colors for headings/body/quotes/table-header cells and table-header boldness. New export types `HwpxTheme`, `MarkdownToHwpxOptions`. Defaults to black (baseline backward-compatible) when unset.
+
+<details>
+<summary>v2.7.2 changes</summary>
+
+- **🐛 HWPX Form-Fill Empty-Cell Fix (#29, #30)** — Fixed a false-positive where empty value cells (`<hp:run>` self-closing without `<hp:t>`) in Hancom-converted HWP→HWPX forms reported success without actually inserting the value. `setRunText` now creates a new `<hp:t>` for runs that lack one. Thanks: @amnotyoung
+
+</details>
+
+<details>
+<summary>v2.7.1 changes</summary>
+
+- **🕰️ HWP 3.0 (Legacy) Parser** — Text extraction for the single-binary format Hancom used in 1996–2002 (`"HWP Document File V3.00"` signature). Old judgments/government docs that kordoc previously rejected are now indexable. Commercial Johab → Unicode + 5,893 Hanja/symbol lookup, recursive nested-paragraph extraction from table cells/headers/footnotes. Ported from [@edwardkim/rhwp](https://github.com/edwardkim/rhwp)'s Rust implementation to TypeScript.
+
+</details>
+
+<details>
+<summary>v2.5.0 changes</summary>
 
 - **🏛️ macOS Hancom Compatibility Fix (#4)** — Fixed `markdownToHwpx()` output being rejected by macOS Hancom Office as "corrupted". Table XML rewritten from minimal skeleton to full HWPX-spec form — all 10 required `<hp:tbl>` attributes + `<hp:sz>`/`<hp:pos>`/`<hp:outMargin>`/`<hp:inMargin>`, each `<hp:tc>` wrapped in `<hp:subList>` with `<hp:cellAddr>`/`<hp:cellSpan>`/`<hp:cellSz>`/`<hp:cellMargin>`, paragraph-anchored placement. Added `Preview/PrvText.txt` + `borderFill` id=1 (SOLID 0.12mm).
 - **🔓 HWP 5.x Distribution COM Fallback (#25)** — `.hwp` binaries that only return the "상위 버전의 배포용 문서입니다..." warning placeholder now automatically retry via `HWPFrame.HwpObject` COM API on Windows + Hancom Office. Extends v2.4.0's HWPX DRM fallback infrastructure to `.hwp` files.
+
+</details>
 
 <details>
 <summary>v2.4.0 changes</summary>
@@ -328,11 +353,13 @@ npx kordoc watch ./docs --webhook https://api/hook # webhook notification
 | `parse(buffer, options?)` | Auto-detect format, parse to Markdown + IRBlock[] |
 | `parseHwpx(buffer, options?)` | HWPX only |
 | `parseHwp(buffer, options?)` | HWP 5.x only |
+| `parseHwp3(buffer, options?)` | HWP 3.x (1996–2002 legacy) only |
 | `parsePdf(buffer, options?)` | PDF only |
 | `parseXlsx(buffer, options?)` | XLSX only |
+| `parseXls(buffer, options?)` | XLS (Excel 97–2003, BIFF8) only |
 | `parseDocx(buffer, options?)` | DOCX only |
 | `parseHwpml(buffer, options?)` | HWPML (XML-based HWP) only |
-| `detectFormat(buffer)` | Returns `"hwpx" \| "hwp" \| "hwpml" \| "pdf" \| "xlsx" \| "docx" \| "unknown"` |
+| `detectFormat(buffer)` | Returns `"hwpx" \| "hwp" \| "hwp3" \| "hwpml" \| "pdf" \| "xlsx" \| "xls" \| "docx" \| "unknown"` |
 
 ### Advanced
 
@@ -343,7 +370,10 @@ npx kordoc watch ./docs --webhook https://api/hook # webhook notification
 | `fillForm(buffer, values, options?)` | Fill form template (markdown/hwpx/hwpx-preserve) |
 | `fillFormFields(blocks, values)` | IRBlock[]-based field value replacement |
 | `fillHwpx(buffer, values)` | Direct HWPX XML manipulation (style-preserving) |
-| `markdownToHwpx(markdown)` | Markdown → HWPX reverse conversion |
+| `markdownToHwpx(markdown, options?)` | Markdown → HWPX reverse conversion (theme option supported) |
+| `markdownToPdf(markdown, options?)` | Markdown → PDF generation (Print Renderer) |
+| `blocksToPdf(blocks, options?)` | IRBlock[] → PDF generation |
+| `renderHtml(blocks, options?)` | IRBlock[] → print-ready HTML |
 | `blocksToMarkdown(blocks)` | IRBlock[] → Markdown string |
 
 ### Types
@@ -351,11 +381,14 @@ npx kordoc watch ./docs --webhook https://api/hook # webhook notification
 ```typescript
 import type {
   ParseResult, ParseSuccess, ParseFailure, FileType,
+  PageQuality, DocumentQualitySummary,
   IRBlock, IRBlockType, IRTable, IRCell, CellContext,
   BoundingBox, InlineStyle, OutlineItem, ParseWarning, WarningCode,
   DocumentMetadata, ParseOptions, ErrorCode,
   DiffResult, BlockDiff, CellDiff, DiffChangeType,
-  FormField, FormResult, FillResult, HwpxFillResult, FillOutputFormat,
+  FormField, FormResult, FillResult, HwpxFillResult, FillOutputFormat, FillFormOutput,
+  HwpxTheme, MarkdownToHwpxOptions,
+  PrintPreset, PrintOptions, PageMargin,
   OcrProvider, WatchOptions,
 } from "kordoc"
 ```
@@ -366,9 +399,11 @@ import type {
 |--------|--------|----------|
 | **HWPX** (한컴 2020+) | ZIP + XML DOM | Manifest, nested tables, merged cells, broken ZIP recovery |
 | **HWP 5.x** (한컴 Legacy) | OLE2 + CFB | Distribution decryption, corrupted CFB recovery, footnotes/hyperlinks, 21 control chars, image extraction |
+| **HWP 3.x** (1996–2002) | Single binary | Commercial Johab → Unicode, 5,893 Hanja/symbol lookup, nested paragraph extraction |
 | **HWPML 2.x** (XML-based HWP) | XML DOM | HeadingType-based heading detection, merged cells, DoS protection |
-| **PDF** | pdfjs-dist | Line-based table detection, XY-Cut reading order, heading detection, hidden text filter, OCR |
+| **PDF** | pdfjs-dist | Line-based table detection, XY-Cut reading order, heading detection, OCR, text quality signals |
 | **XLSX** (Excel) | ZIP + XML DOM | Shared strings, merged cells, multi-sheet, formula display |
+| **XLS** (Excel 97–2003) | OLE2 + BIFF8 | Workbook stream, SST shared strings, cell/sheet extraction |
 | **DOCX** (Word) | ZIP + XML DOM | Style headings, numbering, footnotes, image extraction |
 
 ## Security

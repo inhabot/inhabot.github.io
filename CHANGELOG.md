@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-06-05 — PageQuality 타입 export 수정 + 문서 현행화
+
+### Fixed
+
+- **`PageQuality` / `DocumentQualitySummary` 타입 export 누락** — v2.9.0에서 추가된 PDF 품질 신호 타입이 `index.ts`의 public re-export 목록에서 빠져 `import type { PageQuality } from "kordoc"`가 동작하지 않던 문제 수정. (타입이 `ParseSuccess` 필드로만 인라인돼 named import 불가였음.)
+
+### Docs
+
+- **README / README-EN 현행화** — v2.8.0/v2.9.0 변경사항 추가, `parseHwp3`·`parseXls`·Print Renderer(`markdownToPdf`/`blocksToPdf`/`renderHtml`) API, HWP 3.x/XLS 지원 포맷, `detectFormat` 반환 타입(`hwp3`/`xls`) 정정.
+
 ## [2.9.0] - 2026-05-24 — PDF 텍스트 품질 신호 + OCR 필요 판정
 
 ### Added
