@@ -508,7 +508,7 @@
         <div class="top-copy">
           <p class="eyebrow">새봄 TEST</p>
           <h1 class="top-title">원본학습</h1>
-          <p class="top-subtitle">시험 범위 파일별 실제 원문 모음</p>
+          <p class="top-subtitle" id="topSubtitle">시험 범위 파일별 실제 원문 모음</p>
         </div>
         <div class="top-actions">
           <a class="nav-link-btn" href="./sb01.html">문제로 이동</a>
@@ -545,7 +545,7 @@
           <div class="chip-row">
             <span class="hero-chip">모바일 우선</span>
             <span class="hero-chip">파일별 전체 원문</span>
-            <span class="hero-chip">시험 범위 15개 파일</span>
+            <span class="hero-chip" id="sourceCountChip">시험 범위 0개 파일</span>
             <span class="hero-chip">문제 페이지와 왕복 가능</span>
           </div>
           <div class="playbook">
@@ -574,6 +574,8 @@
       const menuButton = document.getElementById("menuButton");
       const drawerClose = document.getElementById("drawerClose");
       const sectionsRoot = document.getElementById("sections");
+      const topSubtitle = document.getElementById("topSubtitle");
+      const sourceCountChip = document.getElementById("sourceCountChip");
 
       function escapeHtml(text) {
         return String(text)
@@ -651,15 +653,34 @@
       }
 
       const preparedDeck = sourceStudyDeck.map((file, index) => {
-        const outline = extractOutline(file.body);
+        const outline =
+          Array.isArray(file.outline) && file.outline.length ? file.outline : extractOutline(file.body);
+        const preview =
+          typeof file.preview === "string" && file.preview.trim()
+            ? file.preview
+            : outline.slice(0, 2).join(" · ") || "실제 원문 중심 학습";
 
         return {
           ...file,
           label: `FILE ${index + 1}`,
           outline,
-          preview: outline.slice(0, 2).join(" · ") || "실제 원문 중심 학습",
+          preview,
         };
       });
+
+      function updateSummary() {
+        const fileCount = preparedDeck.length;
+
+        if (topSubtitle) {
+          topSubtitle.textContent = fileCount
+            ? `시험 범위 ${fileCount}개 파일 실제 원문 모음`
+            : "시험 범위 파일별 실제 원문 모음";
+        }
+
+        if (sourceCountChip) {
+          sourceCountChip.textContent = `시험 범위 ${fileCount}개 파일`;
+        }
+      }
 
       function renderEmptyState() {
         sectionsRoot.innerHTML = `
@@ -797,6 +818,7 @@
         }
       });
 
+      updateSummary();
       renderDrawer();
       renderSections();
     </script>
