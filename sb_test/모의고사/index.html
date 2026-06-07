@@ -1,0 +1,2654 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>SB 모의고사</title>
+    <style>
+      :root {
+        --bg: #d9d0bf;
+        --bg-soft: #efe5d2;
+        --paper: #fbf6eb;
+        --paper-strong: #fffdf7;
+        --ink: #1f1a17;
+        --ink-soft: #62574d;
+        --line: rgba(70, 54, 40, 0.14);
+        --line-strong: rgba(110, 77, 49, 0.22);
+        --accent: #8f2f22;
+        --accent-soft: rgba(143, 47, 34, 0.1);
+        --stamp: #b7492f;
+        --shadow: 0 18px 40px rgba(54, 41, 29, 0.16);
+        --radius-lg: 28px;
+        --radius-md: 20px;
+        --radius-sm: 14px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "MaruBuri", "KoPubWorldBatang", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.42), transparent 28%),
+          linear-gradient(180deg, #e8dfcf 0%, var(--bg) 100%);
+      }
+
+      a,
+      button,
+      summary {
+        font: inherit;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      code {
+        font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+        font-size: 0.92em;
+      }
+
+      .shell {
+        position: relative;
+        width: 100%;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: calc(env(safe-area-inset-top) + 14px) 16px 14px;
+        background: rgba(251, 246, 235, 0.92);
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid rgba(70, 54, 40, 0.08);
+      }
+
+      .menu-btn {
+        width: 48px;
+        height: 48px;
+        border: 0;
+        border-radius: 16px;
+        background: var(--paper-strong);
+        box-shadow: 0 10px 22px rgba(54, 41, 29, 0.12);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+
+      .menu-icon {
+        width: 20px;
+        height: 14px;
+        display: grid;
+        gap: 4px;
+      }
+
+      .menu-icon span {
+        display: block;
+        height: 2px;
+        border-radius: 999px;
+        background: var(--ink);
+      }
+
+      .top-copy {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .eyebrow {
+        margin: 0 0 4px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-weight: 800;
+        color: var(--accent);
+      }
+
+      .top-title {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .top-subtitle {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .drawer {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 50;
+        width: min(84vw, 360px);
+        padding: calc(env(safe-area-inset-top) + 18px) 16px 22px;
+        background:
+          linear-gradient(180deg, rgba(249, 241, 226, 0.98), rgba(255, 251, 245, 0.98)),
+          var(--paper);
+        border-right: 1px solid rgba(70, 54, 40, 0.12);
+        box-shadow: 24px 0 50px rgba(54, 41, 29, 0.18);
+        transform: translateX(-102%);
+        transition: transform 220ms ease;
+        overflow-y: auto;
+      }
+
+      .drawer.is-open {
+        transform: translateX(0);
+      }
+
+      .drawer-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .drawer-title {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .drawer-copy {
+        margin: 6px 0 0;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+
+      .drawer-close {
+        width: 42px;
+        height: 42px;
+        border: 0;
+        border-radius: 14px;
+        background: rgba(143, 47, 34, 0.1);
+        color: var(--ink);
+        font-size: 18px;
+        cursor: pointer;
+      }
+
+      .drawer-nav {
+        display: grid;
+        gap: 10px;
+      }
+
+      .drawer-link {
+        display: block;
+        padding: 14px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(70, 54, 40, 0.08);
+        box-shadow: 0 10px 18px rgba(54, 41, 29, 0.08);
+      }
+
+      .drawer-link strong {
+        display: block;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .drawer-link span {
+        display: block;
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 45;
+        background: rgba(28, 22, 17, 0.38);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 220ms ease;
+      }
+
+      .overlay.is-open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      main {
+        padding: 16px 14px 44px;
+      }
+
+      .paper-section {
+        margin-top: 16px;
+        padding: 18px;
+        border-radius: var(--radius-lg);
+        background:
+          linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(249, 244, 235, 0.98)),
+          var(--paper);
+        border: 1px solid rgba(70, 54, 40, 0.1);
+        box-shadow: 0 16px 34px rgba(54, 41, 29, 0.12);
+        scroll-margin-top: 92px;
+      }
+
+      .section-head {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px dashed var(--line-strong);
+      }
+
+      .section-topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .section-label,
+      .section-range,
+      .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .section-label {
+        background: rgba(143, 47, 34, 0.1);
+        color: var(--accent);
+      }
+
+      .section-range {
+        background: rgba(32, 24, 19, 0.06);
+        color: var(--ink-soft);
+      }
+
+      .section-title {
+        margin: 12px 0 10px;
+        font-size: 24px;
+        line-height: 1.28;
+      }
+
+      .section-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .meta-chip {
+        background: rgba(32, 24, 19, 0.05);
+        color: var(--ink-soft);
+        font-weight: 700;
+      }
+
+      .question-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .question-card {
+        padding: 16px;
+        border-radius: 22px;
+        background: var(--paper-strong);
+        border: 1px solid rgba(70, 54, 40, 0.1);
+      }
+
+      .question-head {
+        display: grid;
+        grid-template-columns: 58px 1fr;
+        gap: 14px;
+        align-items: start;
+        margin-bottom: 14px;
+      }
+
+      .question-index {
+        width: 58px;
+        height: 58px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #a43e2c, #81281d);
+        color: #fff9f2;
+        display: grid;
+        place-items: center;
+        font-size: 22px;
+        font-weight: 800;
+        box-shadow: 0 10px 20px rgba(129, 40, 29, 0.2);
+      }
+
+      .question-copy {
+        min-width: 0;
+      }
+
+      .question-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .question-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(143, 47, 34, 0.09);
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .question-badge-subtle {
+        background: rgba(32, 24, 19, 0.06);
+        color: var(--ink-soft);
+      }
+
+      .question-title {
+        margin: 10px 0 0;
+        font-size: 20px;
+        line-height: 1.34;
+      }
+
+      .question-content {
+        font-size: 15px;
+        line-height: 1.84;
+        color: var(--ink);
+      }
+
+      .question-content > *:first-child {
+        margin-top: 0;
+      }
+
+      .question-content > *:last-child {
+        margin-bottom: 0;
+      }
+
+      .question-content h1,
+      .question-content h2,
+      .question-content h3,
+      .question-content h4,
+      .question-content h5,
+      .question-content h6 {
+        margin: 20px 0 10px;
+        font-size: 17px;
+      }
+
+      .question-content p,
+      .question-content ul,
+      .question-content ol,
+      .question-content blockquote {
+        margin: 10px 0;
+      }
+
+      .question-content ul,
+      .question-content ol {
+        padding-left: 20px;
+      }
+
+      .question-content li + li {
+        margin-top: 5px;
+      }
+
+      .question-content blockquote {
+        margin-left: 0;
+        margin-right: 0;
+        padding: 14px 16px;
+        border-left: 4px solid rgba(143, 47, 34, 0.22);
+        border-radius: 0 16px 16px 0;
+        background: rgba(143, 47, 34, 0.05);
+        color: #473d35;
+      }
+
+      .callout {
+        margin: 12px 0;
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid rgba(70, 54, 40, 0.1);
+        background: rgba(255, 251, 244, 0.82);
+      }
+
+      .callout-important {
+        background: rgba(143, 47, 34, 0.06);
+        border-color: rgba(143, 47, 34, 0.16);
+      }
+
+      .callout-label {
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 8px;
+      }
+
+      .callout-body > *:first-child,
+      .answer-body > *:first-child {
+        margin-top: 0;
+      }
+
+      .callout-body > *:last-child,
+      .answer-body > *:last-child {
+        margin-bottom: 0;
+      }
+
+      .answer-toggle {
+        margin: 14px 0 6px;
+        border-radius: 18px;
+        background: rgba(143, 47, 34, 0.05);
+        border: 1px solid rgba(143, 47, 34, 0.12);
+        overflow: hidden;
+      }
+
+      .answer-toggle summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        cursor: pointer;
+        font-weight: 800;
+        color: var(--accent);
+      }
+
+      .answer-toggle summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .summary-caret {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: rgba(143, 47, 34, 0.09);
+        transition: transform 180ms ease;
+      }
+
+      .answer-toggle[open] .summary-caret {
+        transform: rotate(180deg);
+      }
+
+      .answer-body {
+        padding: 0 16px 16px;
+        color: var(--ink);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        margin: 14px 0;
+        border-radius: 18px;
+        border: 1px solid rgba(70, 54, 40, 0.1);
+        background: rgba(255, 253, 247, 0.92);
+      }
+
+      table {
+        width: max-content;
+        min-width: 100%;
+        border-collapse: collapse;
+        border-spacing: 0;
+      }
+
+      th,
+      td {
+        padding: 12px 10px;
+        border: 1px solid rgba(70, 54, 40, 0.08);
+        vertical-align: top;
+        text-align: left;
+        word-break: keep-all;
+      }
+
+      th {
+        background: rgba(143, 47, 34, 0.08);
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      hr {
+        border: 0;
+        border-top: 1px dashed rgba(70, 54, 40, 0.18);
+        margin: 18px 0;
+      }
+
+      @media (min-width: 760px) {
+        main {
+          max-width: 980px;
+          margin: 0 auto;
+          padding: 20px 24px 56px;
+        }
+
+        .topbar {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+
+        .paper-section {
+          padding: 24px;
+        }
+
+        .question-card {
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <button
+          type="button"
+          class="menu-btn"
+          id="menuButton"
+          aria-expanded="false"
+          aria-controls="drawer"
+          aria-label="섹션 이동 메뉴 열기"
+        >
+          <span class="menu-icon" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </button>
+        <div class="top-copy">
+          <p class="eyebrow">SB MOCK EXAM</p>
+          <h1 class="top-title">SB 모의고사</h1>
+          <p class="top-subtitle">7개 파일 · 총 40문항 · 원문 중심</p>
+        </div>
+      </header>
+
+      <aside class="drawer" id="drawer" aria-hidden="true">
+        <div class="drawer-head">
+          <div>
+            <h2 class="drawer-title">섹션 이동</h2>
+            <p class="drawer-copy">파일별 문제 묶음으로 바로 내려갑니다. 각 문제 안의 정답과 해설은 펼쳐서 확인할 수 있습니다.</p>
+          </div>
+          <button type="button" class="drawer-close" id="drawerClose" aria-label="메뉴 닫기">✕</button>
+        </div>
+        <nav class="drawer-nav" id="drawerNav">
+          
+        <a class="drawer-link" href="#01-">
+          <strong>1. 1. 초기불교 - 원문 중심 연습문제</strong>
+          <span>문항 1-6</span>
+        </a>
+      
+        <a class="drawer-link" href="#02-_-">
+          <strong>2. 2~5. 부파불교 &amp; 대승불교 - 원문 중심 연습문제</strong>
+          <span>문항 7-12</span>
+        </a>
+      
+        <a class="drawer-link" href="#03-">
+          <strong>3. 6~8. 중국불교 (화엄·천태·선종) - 원문 중심 연습문제</strong>
+          <span>문항 13-17</span>
+        </a>
+      
+        <a class="drawer-link" href="#04-">
+          <strong>4. 9~11. 한국불교 (원효·의천·지눌) - 원문 중심 연습문제</strong>
+          <span>문항 18-24</span>
+        </a>
+      
+        <a class="drawer-link" href="#05-">
+          <strong>5. 유교사상 연습문제</strong>
+          <span>문항 25-30</span>
+        </a>
+      
+        <a class="drawer-link" href="#06-">
+          <strong>6. 도가사상 연습문제</strong>
+          <span>문항 31-35</span>
+        </a>
+      
+        <a class="drawer-link" href="#07-">
+          <strong>7. 성리학 연습문제</strong>
+          <span>문항 36-40</span>
+        </a>
+      
+        </nav>
+      </aside>
+
+      <div class="overlay" id="overlay" hidden></div>
+
+      <main>
+        
+        <section class="paper-section" id="01-">
+          <header class="section-head">
+            <div class="section-topline">
+              <span class="section-label">SECTION 1</span>
+              <span class="section-range">문항 1~6</span>
+            </div>
+            <h2 class="section-title">1. 초기불교 - 원문 중심 연습문제</h2>
+            <div class="section-meta">
+              <span class="meta-chip">불교사상/초기불교</span>
+              <span class="meta-chip">1. 초기불교.md</span>
+            </div>
+          </header>
+          <div class="question-stack">
+            <article class="question-card" id="q-01">
+              <header class="question-head">
+                <div class="question-index">1</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 1</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 1</span>
+                  </div>
+                  <h3 class="question-title">원문 빈칸 채우기 (6점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 불교 경전의 내용이다. ㉠~㉢에 들어갈 용어를 각각 쓰시오.</p>
+<blockquote>
+<p>&quot;이것이 있음으로 말미암아 저것이 있고, 이것이 생김으로 말미암아 저것이 생긴다.&quot;<br>
+&quot;이것이 없음으로 말미암아 저것이 없고, 이것이 ㉠:( )으로 말미암아 저것이 멸한다.&quot; ＜소부경전＞</p>
+</blockquote>
+<blockquote>
+<p>&quot;비구들이여, ㉡:( )란 무엇일까. 이를테면 생이 있으므로 ㉢:( )가 있다고 하는 이 사실은 내가 이 세상에 나오든 나오지 않든 정해져 있는 일이다. 법으로서 정해지고 확립되어 있는 일이다.&quot; ＜잡아함경＞</p>
+</blockquote>
+<ol>
+<li>㉠, ㉡, ㉢에 해당하는 용어를 각각 쓰시오. (각 1점, 총 3점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>멸함</strong> / ㉡: <strong>연기(緣起)</strong> / ㉢: <strong>노사(老死)</strong></p>
+</div>
+</details>
+<ol start="2">
+<li>㉡의 핵심 의미를 &quot;이것이 있음으로…&quot;의 공식과 연결하여 설명하시오. (3점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>연기(緣起)는 '조건에 의한 발생'으로, 모든 존재는 독립적으로 존재하지 않고 다른 것과의 상호의존 관계 속에서만 존재한다는 법칙이다. &quot;이것이 있으면 저것이 있고, 이것이 없으면 저것도 없다&quot;는 상의성(idappaccayatā)이 그 핵심이다.</p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-02">
+              <header class="question-head">
+                <div class="question-index">2</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 2</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 2</span>
+                  </div>
+                  <h3 class="question-title">원문에서 용어 도출 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음 원문 (가)와 (나)의 ㉠에 공통으로 들어갈 용어를 쓰고, 부정되는 세 가지 요소를 서술하시오.</p>
+<p><strong>(가)</strong> ＜상응부경전＞</p>
+<blockquote>
+<p>&quot;비구들이여, 색(色)은 무상(無常)이다. 무상이면 곧 고(苦)이다. 고면 곧 ㉠:( )이다. ㉠:( )이면 곧 이는 아소(我所)가 아니며, 이는 아(我)가 아니며, 이는 아체(我體)가 아니다.&quot;</p>
+</blockquote>
+<p><strong>(나)</strong> ＜상응부경전＞</p>
+<blockquote>
+<p>&quot;소나여, 무릇 무상이요 고(苦)요 변화하는 색(色)을 두고, '이는 아소(我所)이다. 이는 아(我)이다. 이는 아체(我體)이다.'라고 이를 수 있겠는가?&quot; &quot;대덕(大德)이시여, 그럴 수는 없습니다.&quot;</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>무아(無我)</strong></p>
+<p>무아에서 부정되는 세 가지:</p>
+<ol>
+<li><strong>아소(我所)의 부정</strong>: '나에게 속하고 내 마음이 집착하는 바'의 부정</li>
+<li><strong>아(我)의 부정</strong>: '절대적이고 무제약적인 자아(우파니샤드의 아트만)'의 부정</li>
+<li><strong>아체(我體)의 부정</strong>: '자아의 불변하는 본체가 있다는 태도'의 부정</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-03">
+              <header class="question-head">
+                <div class="question-index">3</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 3</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 3</span>
+                  </div>
+                  <h3 class="question-title">원문과 개념 연결 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 사리불과 외도 잔부카다카의 문답이다. &lt;작성방법&gt;에 따라 서술하시오.</p>
+<blockquote>
+<p>&quot;벗 사리불이여, 열반이란 대체 무엇을 말함인가?&quot;<br>
+&quot;벗이여, 무릇 ㉠:( )의 소멸, ㉡:( )의 소멸, 어리석음의 소멸, 이것을 일컬어 열반이라 한다.&quot; ＜잡아함경＞</p>
+</blockquote>
+<p><strong>＜작성방법＞</strong></p>
+<ol>
+<li>㉠, ㉡에 들어갈 용어를 쓸 것 (각 1점)</li>
+<li>열반에 이르는 구체적 방법(경전 원문 중 언급된 수행 체계)을 쓸 것 (2점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ol>
+<li>㉠: <strong>탐욕</strong>, ㉡: <strong>노여움</strong></li>
+<li>팔정도(八正道): 정견·정사·정어·정업·정명·정정진·정념·정정</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-04">
+              <header class="question-head">
+                <div class="question-index">4</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 4</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 4</span>
+                  </div>
+                  <h3 class="question-title">중도와 거문고 비유 (5점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 붓다가 소나에게 한 말이다. &lt;작성방법&gt;에 따라 서술하시오.</p>
+<blockquote>
+<p>&quot;소나여, 거문고 줄을 너무 팽팽하게 죄면 뜯기에 좋더냐?&quot;<br>
+&quot;대덕이시여, 너무 죄면 적당하지 않습니다.&quot;<br>
+&quot;그러면 소나여, 느슨하게 하면 어떻더냐?&quot;<br>
+&quot;대덕이시여, 그것도 좋지 않습니다.&quot;<br>
+&quot;소나여, 네 말이 옳다. (중략) 이 도(道)의 실천도 역시 마찬가지이니라. 욕망에 사로잡히는 것이나, 자진해서 고행에 열중하는 것이나, 어느 것도 적당하지 못하다. (중략) 소나여, 너는 ㉠:( )을/를 취해야 하느니라.&quot; ＜잡아함경＞</p>
+</blockquote>
+<p><strong>＜작성방법＞</strong></p>
+<ol>
+<li>㉠에 들어갈 용어를 쓸 것 (1점)</li>
+<li>㉠이 의미하는 두 가지 극단을 원문에서 찾아 쓸 것 (2점)</li>
+<li>㉠을 구체화한 수행 체계의 이름과 그 구성 항목(8가지)을 쓸 것 (2점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ol>
+<li><strong>중(中)</strong> (또는 중도)</li>
+<li>① 온갖 욕망에 오로지 집착함 (욕락에 빠짐) / ② 스스로 고행을 일삼는 것</li>
+<li><strong>팔정도(八正道)</strong>: 정견·정사·정어·정업·정명·정정진·정념·정정</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-05">
+              <header class="question-head">
+                <div class="question-index">5</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 5</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 5</span>
+                  </div>
+                  <h3 class="question-title">사성제 원문 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음 원문을 읽고 괄호 안에 들어갈 사성제 각 항목의 이름과 의미를 쓰시오.</p>
+<blockquote>
+<p>&quot;비구들이여, 고의 성제란 이것이다. 생은 고이다. 노는 고이다. 병은 고이다. 사는 고이다.&quot; → <strong>( 고제 )</strong><br>
+&quot;비구들이여, 고의 발생의 성제란 이것이다. 후유(後有)를 일으키고 기쁨과 탐욕을 수반하는 갈애가 그것이다.&quot; → <strong>( 집제 )</strong><br>
+&quot;비구들이여, 고의 소멸의 성제란 이것이다. 이 갈애를 남김없이 멸하고 버리고 떠나는 일이다.&quot; → <strong>( 멸제 )</strong><br>
+&quot;비구들이여, 고의 소멸에 따르는 도의 성제란 이것이다. 성스러운 팔지의 도이니라.&quot; → <strong>( 도제 )</strong> ＜여래소설＞</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><div class="table-wrap"><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>원문</th>
+<th>성제 이름</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&quot;생은 고이다…&quot;</td>
+<td><strong>고제(苦諦)</strong></td>
+<td>인생이 고통이라는 진리</td>
+</tr>
+<tr>
+<td>&quot;갈애가 그것이다&quot;</td>
+<td><strong>집제(集諦)</strong></td>
+<td>고통의 원인(갈애/업/번뇌)</td>
+</tr>
+<tr>
+<td>&quot;갈애를 남김없이 멸하고&quot;</td>
+<td><strong>멸제(滅諦)</strong></td>
+<td>고통의 소멸 = 열반</td>
+</tr>
+<tr>
+<td>&quot;팔지의 도이니라&quot;</td>
+<td><strong>도제(道諦)</strong></td>
+<td>팔정도를 통한 수행</td>
+</tr>
+</tbody>
+</table></div></div>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-06">
+              <header class="question-head">
+                <div class="question-index">6</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 6</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 6</span>
+                  </div>
+                  <h3 class="question-title">삼학(三學) 원문 분석 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 ＜잡아함경＞의 삼학에 관한 경문이다. ①~③에 해당하는 수행 이름과 각 내용을 쓰시오.</p>
+<blockquote>
+<p>&quot;①:( ) 계율 공부란 비구가 계율인 바라제목차(波羅提木叉)에 머물러 위엄 있는 태도와 행동을 원만하게 갖추어서 아주 미세한 죄를 보아도 능히 두려워할 줄을 알게 되고 계를 받아 가지고 공부하는 것이다.&quot;<br>
+&quot;②:( ) 마음 공부란 비구가 악하고 착하지 못한 법을 여의고 초선(初禪)에서 제4선에 원만하게 머무는 것이다.&quot;<br>
+&quot;③:( ) 지혜 공부란 비구가 사성제를 사실 그대로 아는 것이다.&quot;</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>① <strong>증상계학(增上戒學)</strong> → 계(戒): 심신을 조정하고 악을 방비<br>
+② <strong>증상의학(增上意學)</strong> → 정(定): 마음을 통일하는 선정<br>
+③ <strong>증상혜학(增上慧學)</strong> → 혜(慧): 사성제를 바로 아는 지혜</p>
+</div>
+</details></div>
+            </article>
+          </div>
+        </section>
+      
+        <section class="paper-section" id="02-_-">
+          <header class="section-head">
+            <div class="section-topline">
+              <span class="section-label">SECTION 2</span>
+              <span class="section-range">문항 7~12</span>
+            </div>
+            <h2 class="section-title">2~5. 부파불교 &amp; 대승불교 - 원문 중심 연습문제</h2>
+            <div class="section-meta">
+              <span class="meta-chip">불교사상/대승불교</span>
+              <span class="meta-chip">2. 부파불교.md / 3. 대승불교.md / 4. 대승불교(중관학파).md / 5. 대승불교(유식학파).md</span>
+            </div>
+          </header>
+          <div class="question-stack">
+            <article class="question-card" id="q-07">
+              <header class="question-head">
+                <div class="question-index">7</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 7</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 1</span>
+                  </div>
+                  <h3 class="question-title">설일체유부 원문 분석 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 ＜구사론＞의 내용이다. ㉠에 들어갈 학파 이름과, 이 학파의 핵심 학설 이름을 쓰시오.</p>
+<blockquote>
+<p>&quot;삼세의 일체법은 진실로 존재한다. 그 이유는 무엇인가? 경전에서 세존께서 말씀하셨기 때문이다. '비구들이여, 만일 과거의 色이 존재하지 않는다면, 마땅히 여러 제자들은 과거의 색에 대한 염오를 부지런히 닦지 못할 것이다.'&quot; ＜구사론＞</p>
+</blockquote>
+<ol>
+<li>이 주장을 펼친 학파는? (1점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>설일체유부(說一切有部)</strong></p>
+</div>
+</details>
+<ol start="2">
+<li>이 학파의 학설 이름 두 가지를 쓰고, 그 의미를 설명하시오. (3점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ul>
+<li><strong>삼세실유(三世實有)</strong>: 과거·현재·미래의 삼세가 모두 실제로 존재한다</li>
+<li><strong>법체항유설(法體恒有說)</strong>: 법의 본체(자성)는 항상 존재한다<br>
+→ 이 두 학설은 업의 인과론을 설명하기 위한 근거로 제시됨</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-08">
+              <header class="question-head">
+                <div class="question-index">8</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 8</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 2</span>
+                  </div>
+                  <h3 class="question-title">경량부와 설일체유부 비교 (3점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 ＜구사론＞에 나오는 경량부의 반론이다. ㉠에 들어갈 내용을 채우고, 경량부의 학설 이름을 쓰시오.</p>
+<blockquote>
+<p>&quot;[설일체유부]: 만약 과거와 미래가 존재하지 않는다면, 어떻게 해서 과거와 미래가 소연(所緣)이 되는가?&quot;<br>
+&quot;[경량부]: 현재의 색이 인식되는 것처럼, 그와 같이 이 과거의 색을 ㉠:( )해 내는 것이다.&quot; ＜구사론＞</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>기억</strong> (기억해 내는 것)<br>
+경량부 학설: <strong>현재실유 과미무체설(現在實有 過未無體說)</strong> (또는 본무금유 이유환무론)</p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-09">
+              <header class="question-head">
+                <div class="question-index">9</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 9</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 3</span>
+                  </div>
+                  <h3 class="question-title">중관학파 핵심 원문 (5점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 용수(龍樹)의 저작에서 인용한 것이다. &lt;작성방법&gt;에 따라 서술하시오.</p>
+<blockquote>
+<p>&quot;연하지 않고서 발생한 사물은 아무것도 존재하지 않는다.<br>
+그러므로 ㉠:( )이/가 아닌 사물은 아무것도 존재하지 않는다.<br>
+또 여러 사물에 연해서 존재하는 것, 그것을 ㉠:( )이라고 말한다.<br>
+또 여러 사물에 연해서 존재하는 것, 실로 그것이 ㉡:( )인 것이다.&quot; ＜회쟁론＞</p>
+</blockquote>
+<p><strong>＜작성방법＞</strong></p>
+<ol>
+<li>㉠, ㉡에 들어갈 용어를 순서대로 쓸 것 (각 1점)</li>
+<li>중관학파의 중도(中道)를 '무자성→가명→비유비무→중도'의 논리 흐름으로 설명할 것 (3점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ol>
+<li>㉠: <strong>공(空)</strong> / ㉡: <strong>무자성(無自性)</strong></li>
+<li>연기(緣起)인 사물은 모두 고정불변의 독자적 실체(자성)가 없으므로 무자성이다. 무자성이므로 별도로 '공인 것'이 따로 존재하는 것이 아니라 그것은 단지 가명(假名)이다. 따라서 연기인 사물은 존재성도 비존재성도 갖지 못하는 비유비무(非有非無)이며, 이것이 양극단을 떠난 중도(中道)이다.</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-10">
+              <header class="question-head">
+                <div class="question-index">10</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 10</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 4</span>
+                  </div>
+                  <h3 class="question-title">용수의 팔불중도 (3점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 용수의 ＜중송＞ 귀경게이다. 괄호 안에 들어갈 8가지 부정(不)을 순서대로 쓰시오.</p>
+<blockquote>
+<p>&quot;( )이고 ( )인, ( )이고 ( )인,<br>
+( )이고 ( )인, ( )이고 ( )인,<br>
+희론이 적멸하여 길상(吉祥)인 연기(緣起)를 설해 주신 정각자&quot; ＜중송＞, 귀경게</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>불멸(不滅)·불생(不生)·부단(不斷)·불상(不常)·불일(不一)·불이(不二)·불래(不來)·불거(不去)</strong></p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-11">
+              <header class="question-head">
+                <div class="question-index">11</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 11</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 5</span>
+                  </div>
+                  <h3 class="question-title">유식학파 원문 분석 (5점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 ＜해밀심경＞의 내용이다. &lt;작성방법&gt;에 따라 서술하시오.</p>
+<blockquote>
+<p>&quot;자씨보살이 다시 부처님께 여쭈었다. '모든 비발사나와 삼마지 중에서 나타나는 영상은 마땅히 이 마음과 같은 것입니까? 다른 것입니까?'&quot;<br>
+&quot;부처님께서 말씀하셨다. '선남자여, 마땅히 다름이 없다. 왜냐하면 그 영상은 다만 ㉠:( )이기 때문이다. 선남자여, ㉠:( )의 대상은 다만 ㉠:( )이 현현한 것이기 때문이다.'&quot; ＜해밀심경＞</p>
+</blockquote>
+<p><strong>＜작성방법＞</strong></p>
+<ol>
+<li>㉠에 들어갈 용어를 쓸 것 (1점)</li>
+<li>유식학파가 말하는 제8식(㉡)의 이름과 세 가지 역할(능장·소장·집장)을 설명할 것 (4점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ol>
+<li>㉠: <strong>식(識)</strong> (유식무경: 오직 식만 존재하고 외계의 대상은 없음)</li>
+<li>㉡: <strong>아뢰야식(阿賴耶識)</strong>
+<ul>
+<li><strong>능장(能藏)</strong>: 능동적으로 모든 식의 활동을 뒷받침하고 사물을 종자 형태로 내장</li>
+<li><strong>소장(所藏)</strong>: 수동적으로 사물의 움직임에 영향받아 사물에 매여 있음</li>
+<li><strong>집장(執藏)</strong>: 제7식(말나식)에 의해 자아로 오인되고 집착되는 것</li>
+</ul>
+</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-12">
+              <header class="question-head">
+                <div class="question-index">12</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 12</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 6</span>
+                  </div>
+                  <h3 class="question-title">유식학파의 삼성설 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 유식학파의 중도론에서 나온 구절이다. ㉠~㉢에 들어갈 삼성(三性)의 이름을 쓰시오.</p>
+<blockquote>
+<p>&quot;그러므로 일체는 공도 아니고, 불공도 아니라고 말해진다.<br>
+존재이기 때문에, 비존재이기 때문에, 또 존재이기 때문이다. 그것이 곧 중도이다.&quot; ＜중변분별론＞</p>
+</blockquote>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>성(性)</th>
+<th>내용</th>
+<th>유/무</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>㉠:( )</td>
+<td>소취와 능취</td>
+<td>비존재, 공</td>
+</tr>
+<tr>
+<td>㉡:( )</td>
+<td>허망분별(아뢰야식)</td>
+<td>존재, 불공</td>
+</tr>
+<tr>
+<td>㉢:( )</td>
+<td>허망분별에서 소취·능취가 없는 것</td>
+<td>존재, 불공</td>
+</tr>
+</tbody>
+</table></div>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>변계소집성(遍計所執性)</strong> — 실재하지 않는 것을 분별하여 실재하는 것처럼 착각<br>
+㉡: <strong>의타기성(依他起性)</strong> — 인연이 모여 임시적으로 존재하는 것<br>
+㉢: <strong>원성실성(圓成實性)</strong> — 식이 지어내지 않고 세상을 있는 그대로 보는 것</p>
+</div>
+</details></div>
+            </article>
+          </div>
+        </section>
+      
+        <section class="paper-section" id="03-">
+          <header class="section-head">
+            <div class="section-topline">
+              <span class="section-label">SECTION 3</span>
+              <span class="section-range">문항 13~17</span>
+            </div>
+            <h2 class="section-title">6~8. 중국불교 (화엄·천태·선종) - 원문 중심 연습문제</h2>
+            <div class="section-meta">
+              <span class="meta-chip">불교사상/중국불교</span>
+              <span class="meta-chip">6. 중국불교(화엄종).md / 7. 중국불교(천태종).md / 8. 중국불교(선종).md</span>
+            </div>
+          </header>
+          <div class="question-stack">
+            <article class="question-card" id="q-13">
+              <header class="question-head">
+                <div class="question-index">13</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 13</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 1</span>
+                  </div>
+                  <h3 class="question-title">천태종 원문: 삼제원융 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 ＜천태사교의＞의 내용이다. &lt;작성방법&gt;에 따라 서술하시오.</p>
+<blockquote>
+<p>&quot;생각하고 의논할 수 없는 경지를 관조한다. 한 생각이 모자람 없이 3천의 성과 상과 백계와 천여를 갖추고 있다. 이 대상이 ㉠:( )·㉡:( )·㉢:( )이어서, 다시 앞과 뒤로 나눌 것도 없고, 넓고 크고 원만하고, 수직적으로 수평적으로도 자유롭다. 그러므로 ＜법화경＞에서 말하기를 '그 수레가 높고 넓다'라고 하였다.&quot; ＜천태사교의＞</p>
+</blockquote>
+<p><strong>＜작성방법＞</strong></p>
+<ol>
+<li>㉠~㉢에 들어갈 삼제(三諦)의 용어를 순서대로 쓸 것 (각 1점)</li>
+<li>삼제원융(三諦圓融)의 의미를 설명할 것 (1점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ol>
+<li>㉠: <strong>공(空)</strong> / ㉡: <strong>가(假)</strong> / ㉢: <strong>중(中)</strong></li>
+<li>삼제원융이란 공제·가제·중제 셋이 각각 나머지 둘을 포함하여 서로 원융(圓融)하게 하나가 되는 진리의 구조이다. 공 가운데 가·중이 포함되고, 가 가운데 공·중이 포함되며, 중 가운데 공·가가 포함된다.</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-14">
+              <header class="question-head">
+                <div class="question-index">14</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 14</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 2</span>
+                  </div>
+                  <h3 class="question-title">천태종: 일념삼천 계산 (3점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>천태종의 일념삼천(一念三千)에서 삼천이 되는 구성 요소 4가지를 곱셈 공식으로 쓰고, 각 요소를 설명하시오.</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>십법계(十法界) × 십법계호구(十界互具) × 십여시(十如是) × 삼세간(三世間) = 삼천세계</strong></p>
+<ul>
+<li>십법계: 지옥·아귀·축생·아수라·인간·하늘·성문·연각·보살·불의 10가지 세계</li>
+<li>십계호구: 십계 각각에 또 십계가 갖춰져 있음 (100)</li>
+<li>십여시: 상·성·체·력·작·인·연·과·보·본말구경등의 10가지 양상 (1000)</li>
+<li>삼세간: 오음세간·중생세간·국토세간 × 3 = 3000</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-15">
+              <header class="question-head">
+                <div class="question-index">15</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 15</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 3</span>
+                  </div>
+                  <h3 class="question-title">선종: 혜능과 신수의 게송 비교 (5점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음 (가)와 (나)의 게송을 읽고 &lt;작성방법&gt;에 따라 서술하시오.</p>
+<p><strong>(가) 신수의 게송</strong></p>
+<blockquote>
+<p>&quot;육체는 지혜의 나무 / 마음은 밝은 거울과 같으니,<br>
+항상 부지런히 털고 닦아 / 티끌 먼지 묻지 않게 하라.&quot;</p>
+</blockquote>
+<p><strong>(나) 혜능의 게송</strong></p>
+<blockquote>
+<p>&quot;지혜는 본래 나무가 없고 / 밝은 거울 또한 대가 없노라.<br>
+본래 한 물건도 없거니 / 어느 곳에 티끌이 일어나리!&quot;</p>
+</blockquote>
+<p><strong>＜작성방법＞</strong></p>
+<ol>
+<li>(가)에 나타난 수행 방식의 명칭과 그 특징을 쓸 것 (2점)</li>
+<li>(나)에 나타난 수행 방식의 명칭과 그 특징을 쓸 것 (2점)</li>
+<li>두 수행관의 근본적 차이를 '불성(佛性)'에 대한 관점으로 설명할 것 (1점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ol>
+<li><strong>(가) 점수(漸修) — 북종선</strong>: 사람들은 불성을 가지고 있지만 먼지(번뇌)에 가려져 있으므로 계속해서 부지런히 닦아야(점진적 수행) 성불할 수 있다고 봄.</li>
+<li><strong>(나) 돈오(頓悟) — 남종선</strong>: 본래 한 물건도 없으므로(본래무일물) 심성은 본래 청정하고 본래불(本來佛)이며, 자성(自性)의 깨달음을 통해 단번에 진리를 깨칠 수 있다고 봄.</li>
+<li>(가)는 불성이 번뇌에 덮여 있다고 보고 닦아야 드러난다고 보는 반면, (나)는 불성은 본래 청정하여 닦을 대상 자체가 없으며 오직 자성을 깨닫는 것만으로 충분하다고 본다.</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-16">
+              <header class="question-head">
+                <div class="question-index">16</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 16</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 4</span>
+                  </div>
+                  <h3 class="question-title">선종: 혜능의 대경혜용 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 ＜壇經(단경)＞의 내용이다. ㉠, ㉡에 들어갈 용어를 쓰고, 그 의미 차이를 서술하시오.</p>
+<blockquote>
+<p>&quot;혜능이 게를 들어 말하기를: '혜능은 기량이 없어 온갖 생각을 끊지 못했네. 경계를 대하면 마음이 자주 일어나니 깨달음이 어찌 자라겠는가'&quot;<br>
+&quot;불법은 이 세상에 있는 것이기 때문에 이 세상을 떠나서 깨닫는 것이 아니다. 그렇기 때문에 이 세상을 떠나서 깨달음을 찾는 것은 마치 토끼의 뿔을 구하는 것과 같다.&quot; ＜壇經＞</p>
+</blockquote>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>구분</th>
+<th>북종의 ㉠:( )</th>
+<th>남종의 ㉡:( )</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>방식</td>
+<td>좌선으로 청정심을 관찰</td>
+<td>대상 경계 속에서 자성 활용</td>
+</tr>
+<tr>
+<td>강조</td>
+<td>心不起(마음이 일어나지 않음)</td>
+<td>心數起(마음이 일어남)을 통한 혜용</td>
+</tr>
+</tbody>
+</table></div>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>응심입정(凝心入定)</strong><br>
+㉡: <strong>대경혜용(對境慧用)</strong></p>
+<p>차이: 북종은 경계를 막고 마음이 일어나지 않도록 좌선수정하는 방식이고, 남종은 경계를 대하는 일상 속에서 자성의 지혜를 활용하는 방식이다. 혜능은 세상을 떠난 수행이 아닌 현실 속에서의 깨달음을 강조한다.</p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-17">
+              <header class="question-head">
+                <div class="question-index">17</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 17</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 5</span>
+                  </div>
+                  <h3 class="question-title">화엄종: 사법계와 비유 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>화엄종의 사법계(四法界)에서 각 법계의 이름과 의미를 쓰고, '파도와 바닷물' 비유를 활용하여 이사무애법계를 설명하시오.</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><div class="table-wrap"><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>법계</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>사법계(事法界)</strong></td>
+<td>현상의 세계</td>
+</tr>
+<tr>
+<td><strong>이법계(理法界)</strong></td>
+<td>진리(본체)의 세계</td>
+</tr>
+<tr>
+<td><strong>이사무애법계(理事無礙法界)</strong></td>
+<td>현상과 진리가 서로 걸림 없이 교류·융합하는 세계</td>
+</tr>
+<tr>
+<td><strong>사사무애법계(事事無礙法界)</strong></td>
+<td>현상과 현상이 서로 걸림 없이 교류·융합하는 세계</td>
+</tr>
+</tbody>
+</table></div></div>
+<p><strong>파도와 바닷물 비유</strong>: 바닷물(理=진여)이 없이 파도(事=생멸현상)가 있을 수 없고, 파도를 다 퍼내고 나서 바닷물을 찾을 수 없다. 즉 이(理)와 사(事)는 서로 분리될 수 없으며, 이것이 이사무애(理事無礙)의 의미이다.</p>
+</div>
+</details></div>
+            </article>
+          </div>
+        </section>
+      
+        <section class="paper-section" id="04-">
+          <header class="section-head">
+            <div class="section-topline">
+              <span class="section-label">SECTION 4</span>
+              <span class="section-range">문항 18~24</span>
+            </div>
+            <h2 class="section-title">9~11. 한국불교 (원효·의천·지눌) - 원문 중심 연습문제</h2>
+            <div class="section-meta">
+              <span class="meta-chip">불교사상/한국불교</span>
+              <span class="meta-chip">9. 한국불교(원효).md / 10. 한국불교(의천).md / 11. 한국불교(지눌).md</span>
+            </div>
+          </header>
+          <div class="question-stack">
+            <article class="question-card" id="q-18">
+              <header class="question-head">
+                <div class="question-index">18</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 18</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 1</span>
+                  </div>
+                  <h3 class="question-title">원효: 대승기신론소 원문 (5점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 원효의 ＜대승기신론소＞에서 인용한 것이다. &lt;작성방법&gt;에 따라 서술하시오.</p>
+<blockquote>
+<p>&quot;이론을 펼칠 때는 '제한 없고 끝이 없다는'(無量無邊) 뜻을 근본으로 삼고, 이론을 합할 때는 '두 가지 측면/맥락'(㉠: ) 와/과 '하나로 보는 마음자리'(㉡: )라는 도리를 요점으로 삼는다. ㉠:( ) 안에서는 온갖 뜻을 받아들여도 혼란스럽지 않고, 본질이나 실체에 의한 막힘이 없어 한계가 없는 도리는 ㉡:( )에서 섞여 융합된다.&quot; ＜대승기신론소＞</p>
+</blockquote>
+<p><strong>＜작성방법＞</strong></p>
+<ol>
+<li>㉠, ㉡에 들어갈 용어를 한자와 함께 쓸 것 (각 1.5점)</li>
+<li>㉡을 기준으로 원효가 구분한 두 가지 문(門)의 이름과 각각의 의미를 쓸 것 (2점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ol>
+<li>㉠: <strong>이문(二門)</strong> / ㉡: <strong>일심(一心)</strong></li>
+<li></li>
+</ol>
+<ul>
+<li><strong>심진여문(心眞如門)</strong>: 적멸(寂滅), 청정한 진여로서의 일심 → 불생불멸, 본각의 측면</li>
+<li><strong>심생멸문(心生滅門)</strong>: 여래장(如來藏), 염오된 생멸로서의 일심 → 무명에 의해 생멸하는 측면</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-19">
+              <header class="question-head">
+                <div class="question-index">19</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 19</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 2</span>
+                  </div>
+                  <h3 class="question-title">원효: 화쟁론의 원리 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 원효의 화쟁론(和諍論)에 관한 구절이다. ㉠에 들어갈 비유를 완성하고, 화쟁의 원리를 설명하시오.</p>
+<blockquote>
+<p>&quot;저 눈먼 사람들이 각기 ㉠:( )에 대한 설명을 하는 것과 같아서, 비록 전체 모습을 얻지는 못했지만 설명한 것이 아님은 아니다.&quot;<br>
+&quot;만일 한쪽 만을 고집해서 하나같이 그러하다고 말하면, 두 주장들이 모두 맞지 않는다. 그러나 만일 부분적 타당성을 인정하여 그 뜻만 맞는다고 하지 않으면, 두 주장이 모두 맞는다.&quot;</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>코끼리</strong> (눈먼 사람들과 코끼리 비유)</p>
+<p>화쟁(和諍)의 원리: 다양한 불교 학파들이 각각 부분적 진리를 주장하는데, 어느 한 주장에만 집착하면 모두 틀리게 되지만, 각각의 부분적 타당성을 인정하면 모두 맞게 된다. 원효는 일심(一心)이라는 관점에서 다양한 주장들을 포용하여 통합함으로써 불교 내 논쟁을 화해시키려 했다.</p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-20">
+              <header class="question-head">
+                <div class="question-index">20</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 20</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 3</span>
+                  </div>
+                  <h3 class="question-title">의천: 성상겸학 원문 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 의천의 ＜대각국사문집＞에서 인용한 것이다. ㉠에 들어갈 비유를 채우고, 성상겸학의 의미를 설명하시오.</p>
+<blockquote>
+<p>&quot;청량의 말에 '성(性)과 상(相)은 하늘의 ㉠:( )와/과 ㉠:( ), 역의 건(乾)과 곤(坤) 같아서 배움이 두 바퀴자국을 겸해야, 바야흐로 통한 사람이라 말한다'라고 말함에 있어서랴! 따라서 알아라! 『구사론』을 배우지 않으면 소승의 가르침을 알지 못하고, 『유식론』을 배우지 않으면 어찌 시교(始敎)의 종(宗)을 볼 것이며, 『기신론』을 배우지 않으면 어찌 종교(終敎)와 돈교(頓敎)의 뜻을 밝힐 것이며, 『화엄경』을 배우지 않으면 원융의 문에 들어가기 어렵도다.&quot; ＜대각국사문집＞</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>해(日)와 달(月)</strong> (하늘의 해와 달)</p>
+<p>성상겸학(性相兼學): 성종(性宗, 법성종/화엄)과 상종(相宗, 법상종/유식)을 함께 배워야 한다는 의천의 주장. 성(性)의 공부와 상(相)의 공부는 수레의 두 바퀴처럼 모두 필요하며, 어느 한쪽만을 공부하면 온전한 불교 이해에 이를 수 없다.</p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-21">
+              <header class="question-head">
+                <div class="question-index">21</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 21</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 4</span>
+                  </div>
+                  <h3 class="question-title">의천: 교·선 회통 원문 (3점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음 의천의 원문에서 ㉠, ㉡에 들어갈 수행 방식을 쓰고, 의천이 제시하는 이상적 수행 방향을 설명하시오.</p>
+<blockquote>
+<p>&quot;대개 진리[法]는 말이나 형상이 없지만 말이나 형상을 떠나지도 않는다. 말이나 형상을 떠난다면 미혹에 빠진 것이며, 말이나 형상에 집착한다면 진리에 미혹한 것이다. ㉠:( )를 배우는 이들은 내면을 버리고 밖으로만 구하려는 이가 많고, ㉡:( )를 수행하는 이들은 인연을 잊고 내면을 밝히는 것을 좋아한다. 이들은 둘 다 한쪽에만 집착한 것이다.&quot; ＜대각국사문집＞</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>교학(敎學)</strong> / ㉡: <strong>선(禪)</strong></p>
+<p>이상적 방향: 말(교학)에 집착하지도 않고, 말(교학)을 버리지도 않으면서, 교학과 선이 함께 조화를 이루어야 한다. 선정과 지혜가 둘 다 온전하여 자신과 타인이 함께 이익되는 것이 목표이다.</p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-22">
+              <header class="question-head">
+                <div class="question-index">22</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 22</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 5</span>
+                  </div>
+                  <h3 class="question-title">지눌: 불즉시심 원문 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 지눌의 ＜수심결(修心訣)＞과 ＜권수정혜결사문＞에서 인용한 것이다. ㉠에 공통으로 들어갈 핵심 명제를 쓰고, 그 의미를 설명하시오.</p>
+<p><strong>(가)</strong> ＜권수정혜결사문＞</p>
+<blockquote>
+<p>&quot;자기의 '마음'을 바로 보지 못한 나머지 끝없이 번뇌만 일으키고 있는 사람은 중생이고, 자기의 '마음'을 바로 보고서 끝없이 마음을 제대로 잘 쓰고 있는 사람은 부처님이다.&quot;</p>
+</blockquote>
+<p><strong>(나)</strong> ＜수심결(修心訣)＞</p>
+<blockquote>
+<p>&quot;만일 당신이 진정 부처님을 찾는다면 부처님은 다름 아닌 자기의 ㉠:( )임을 알아야 한다. 그렇다면 마음을 어찌 먼데서 찾고 있겠는가? 마음이란 몸을 떠나 따로 있는 것이 아니다.&quot;</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>마음 → 핵심 명제: 불즉시심(佛卽是心)</strong></p>
+<p>의미: 부처는 따로 있는 것이 아니라 자기 마음이 바로 부처이다. 마음을 바로 보면(돈오) 곧 부처이며, 마음을 바로 보지 못하면 중생이다. 이는 혜능의 돈오 사상을 계승한 것이다.</p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-23">
+              <header class="question-head">
+                <div class="question-index">23</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 23</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 6</span>
+                  </div>
+                  <h3 class="question-title">지눌: 돈오점수 원문 (5점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 지눌의 ＜보조법어＞와 ＜법집별행록절요병입사기＞에서 인용한 것이다. &lt;작성방법&gt;에 따라 서술하시오.</p>
+<blockquote>
+<p>&quot;경(經)에 이르듯, ㉠:( )는 갑자기 깨닫는 것으로서 깨달음을 얻음과 더불어 무지는 사라지지만, ㉡:( )는 갑자기 제거되지 않고 단계적으로 없어진다.&quot; ＜보조법어＞<br>
+&quot;미망으로부터 깨어나는 것은 갑작스러우나 범부로부터 성인이 되는 것은 점차적이다.&quot; ＜법집별행록절요병입사기＞</p>
+</blockquote>
+<p><strong>＜작성방법＞</strong></p>
+<ol>
+<li>㉠, ㉡에 들어갈 용어를 한자와 함께 쓸 것 (각 1점)</li>
+<li>지눌이 돈오 이후에도 점수(漸修)가 필요하다고 보는 이유를 원문에서 찾아 서술할 것 (3점)</li>
+</ol>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><ol>
+<li>㉠: <strong>리(理)</strong> / ㉡: <strong>사(事)</strong></li>
+<li>비록 금생에 이르러 갑자기 자기의 본성이 본래 공적하여 부처와 차이가 없음을 깨달아도, 범부들이 시작도 모르는 광대한 겁 이전부터 축적된 &quot;오랜 습관(무명종습)은 갑자기 제거하기 어렵기 때문&quot;이다. 즉 &quot;바람은 그치되 물결은 여전히 솟고 진리는 나타나되 생각은 오히려 침노한다&quot;는 식으로, 이론적 깨달음(해오)과 실천적 완성(증오) 사이의 괴리가 있기 때문에 점수가 필요하다.</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-24">
+              <header class="question-head">
+                <div class="question-index">24</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 24</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 7</span>
+                  </div>
+                  <h3 class="question-title">지눌: 공적영지와 회광반조 (4점)</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 지눌의 ＜수심결＞에서 인용한 것이다. ㉠에 들어갈 핵심 개념을 쓰고, 그 의미를 설명하시오.</p>
+<blockquote>
+<p>&quot;그대가 지금 나에게 묻고 있는 것이 바로 우리의 ㉠:( )한 마음인데, 어찌하여 돌이켜서 비추어 보지(廻光返照) 않고 도리어 밖에서 찾는 것인가?&quot; ＜수심결＞</p>
+</blockquote>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="정답 보기" data-open="답안 및 해설 닫기">정답 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p>㉠: <strong>공적영지(空寂靈知)</strong></p>
+<p>의미: 공적(空寂)은 '텅 비고 고요한' 자성의 체(體)를, 영지(靈知)는 '신령스럽게 밝은' 자성의 용(用)을 의미한다. 체이면서 용이고, 용이면서 체인 것이 공적영지이다. 회광반조(廻光返照)는 밖으로 향하던 마음의 빛을 돌이켜 자기 내면의 불성을 직접 관조하는 수행법이다.</p>
+</div>
+</details></div>
+            </article>
+          </div>
+        </section>
+      
+        <section class="paper-section" id="05-">
+          <header class="section-head">
+            <div class="section-topline">
+              <span class="section-label">SECTION 5</span>
+              <span class="section-range">문항 25~30</span>
+            </div>
+            <h2 class="section-title">유교사상 연습문제</h2>
+            <div class="section-meta">
+              
+              
+            </div>
+          </header>
+          <div class="question-stack">
+            <article class="question-card" id="q-25">
+              <header class="question-head">
+                <div class="question-index">25</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 25</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 1</span>
+                  </div>
+                  <h3 class="question-title">문제 1</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 공자가 정치의 본질에 대해 말한 구절이다.</p>
+<blockquote>
+<p><strong>爲政以德, 譬如北辰, 居其所而㉠衆星共之.</strong><br>
+(덕으로 정치를 하면, 비유컨대 북극성과 같아서, 그 자리에 있으면 ㉠이 것들이 모두 그것을 향한다.)</p>
+</blockquote>
+<p>위 구절에서 ㉠에 들어갈 말을 쓰고, 이 구절의 출처와 핵심 정치 사상을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠에 해당하는 한자 단어를 쓸 것<br>
+◦ 이 구절이 담긴 유교 경전(출처)을 명시할 것<br>
+◦ 공자의 덕치(德治) 개념을 설명하고, 법치(法治)와의 차이를 서술할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 衆星 (중성, 뭇별들)</strong></p>
+<p><strong>출처:</strong> 『논어(論語)』「위정(爲政)」편</p>
+<p><strong>덕치(德治) 설명:</strong></p>
+<ul>
+<li>공자는 정치의 근본을 덕(德)에 두었음. 덕으로 통치하면 모든 사람이 자연스럽게 따르는 것이 북극성 주위를 뭇별들이 도는 것과 같다고 비유함.</li>
+<li>덕치 vs 법치: &quot;道之以政, 齊之以刑, 民免而無恥; 道之以德, 齊之以禮, 有恥且格.&quot;
+<ul>
+<li>법(法)과 형벌(刑)로만 다스리면 백성이 처벌을 피하려 할 뿐 부끄러움이 없음</li>
+<li>덕(德)과 예(禮)로 다스리면 백성이 부끄러움을 알고 스스로 바르게 됨(有恥且格)</li>
+</ul>
+</li>
+<li>내성외왕(內聖外王): 군주 스스로의 도덕적 수양(內聖)이 정치적 실천(外王)으로 확장되는 구조</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-26">
+              <header class="question-head">
+                <div class="question-index">26</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 26</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 2</span>
+                  </div>
+                  <h3 class="question-title">문제 2</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 공자가 통치 원리에 대해 말한 구절이다.</p>
+<blockquote>
+<p><strong>道之以政, 齊之以刑, 民免而㉠無恥; 道之以德, 齊之以禮, 有恥且㉡格.</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 이 구절에 나타난 두 가지 통치 방식의 차이를 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠과 ㉡에 해당하는 한자와 뜻을 각각 쓸 것<br>
+◦ 정치(政)·형(刑)으로 다스리는 방식의 한계를 설명할 것<br>
+◦ 덕(德)·예(禮)로 다스리는 방식의 효과를 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 無恥 (무치) — 부끄러움이 없음</strong><br>
+<strong>㉡: 格 (격) — 바르게 됨/감화됨</strong></p>
+<p><strong>두 통치 방식 비교:</strong></p>
+<div class="table-wrap"><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>통치 방식</th>
+<th>수단</th>
+<th>백성의 반응</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>법(政)·형벌(刑)</td>
+<td>제도·처벌</td>
+<td>처벌 회피만 할 뿐, 수치심 없음 (民免而無恥)</td>
+</tr>
+<tr>
+<td>덕(德)·예(禮)</td>
+<td>도덕·예절</td>
+<td>수치심을 알고 스스로 바르게 됨 (有恥且格)</td>
+</tr>
+</tbody>
+</table></div></div>
+<p><strong>핵심:</strong> 공자는 외적 강제(형벌)보다 내적 도덕 감화(예·덕)를 통한 자발적 복종을 중시함. 수치심(恥)은 도덕 주체의 자기 규율 능력을 가리킴.</p>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-27">
+              <header class="question-head">
+                <div class="question-index">27</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 27</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 3</span>
+                  </div>
+                  <h3 class="question-title">문제 3</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 공자가 사생의 의리에 대해 말한 구절이다.</p>
+<blockquote>
+<p><strong>志士仁人, 無求㉠生以害仁, 有殺身以成㉡仁.</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 이 구절에 담긴 유교적 사생관(死生觀)을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠과 ㉡에 해당하는 한자를 쓸 것<br>
+◦ 이 구절의 출처(경전명과 편명)를 밝힐 것<br>
+◦ '살신성인(殺身成仁)'의 의미와 유교에서 생명보다 중시하는 가치를 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 生 (생, 삶/생명)</strong><br>
+<strong>㉡: 仁 (인, 인仁)</strong></p>
+<p><strong>출처:</strong> 『논어(論語)』「위령공(衛靈公)」편</p>
+<p><strong>살신성인(殺身成仁) 해설:</strong></p>
+<ul>
+<li>뜻있는 선비와 인한 사람은 생명을 구하기 위해 인(仁)을 해치지 않으며, 오히려 몸을 희생하여 인을 이룬다.</li>
+<li>유교적 사생관: 생물학적 생명(生)보다 도덕적 가치(仁·義)를 우선시함</li>
+<li>맹자의 대응 구절: &quot;生亦我所欲也, 義亦我所欲也. 二者不可得兼, 舍生而取義者也.&quot; (생명도 원하는 것이고 의도 원하는 것이지만, 둘 다 얻을 수 없으면 생명을 버리고 의를 취한다) → <strong>사생취의(捨生取義)</strong></li>
+<li>공자는 제사에 대해 &quot;祭如在, 祭神如神在&quot;라 하여 죽음 후에도 도덕적 관계의 지속성을 강조함</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-28">
+              <header class="question-head">
+                <div class="question-index">28</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 28</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 4</span>
+                  </div>
+                  <h3 class="question-title">문제 4</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 맹자가 민본(民本) 사상을 표현한 구절이다.</p>
+<blockquote>
+<p><strong>民爲貴, 社稷次之, ㉠君爲輕. ... 聞誅一夫㉡紂矣, 未聞弑君也.</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 맹자 민본사상의 핵심 내용을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠과 ㉡에 해당하는 한자와 뜻을 각각 쓸 것<br>
+◦ '민위귀(民爲貴)'의 정치 철학적 의미를 설명할 것<br>
+◦ '문주일부주의(聞誅一夫紂矣)'가 함의하는 역성혁명론(易姓革命論)을 서술할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 君爲輕 (군위경) — 임금이 가장 가볍다</strong><br>
+<strong>㉡: 紂 (주) — 상나라 마지막 폭군 주왕(紂王)</strong></p>
+<p><strong>맹자 민본사상:</strong></p>
+<ol>
+<li>
+<p><strong>민위귀(民爲貴):</strong> 백성이 가장 귀하고, 사직(국가)이 그 다음이며, 임금이 가장 가볍다. → 백성이 정치의 근본</p>
+</li>
+<li>
+<p><strong>역성혁명론:</strong> &quot;폭군 주(紂)를 죽인 것을 들었을 뿐, 임금을 시해했다는 말은 듣지 못했다.&quot; → 덕을 잃은 폭군은 이미 '임금'이 아니라 '한 사내(一夫)'에 불과하므로, 그를 처형하는 것은 시해(弑君)가 아님</p>
+</li>
+<li>
+<p><strong>인정(仁政)의 근거:</strong> &quot;先王有不忍人之心, 斯有不忍人之政矣.&quot; — 백성에 대한 측은한 마음(不忍人之心)이 인정(仁政)의 출발점</p>
+</li>
+<li>
+<p><strong>恒産恒心:</strong> &quot;無恒産而有恒心者, 惟士爲能. 若民, 則無恒産, 因無恒心.&quot; → 백성의 생활 안정이 도덕적 주체성의 전제 조건</p>
+</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-29">
+              <header class="question-head">
+                <div class="question-index">29</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 29</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 5</span>
+                  </div>
+                  <h3 class="question-title">문제 5</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 순자가 예(禮)의 기원을 설명한 구절이다.</p>
+<blockquote>
+<p><strong>禮起於何也? 曰: 人生而有欲, 欲而不得, 則不能無求; 求而無度量分界, 則不能不爭; 爭則㉠亂, 亂則窮. 先王惡其亂也, 故制禮義以分之, 以養人之欲, 給人之求. 使欲必不窮乎物, 物必不屈於欲, 兩者相持而長, 是㉡禮之所起也.</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 순자의 예치론(禮治論)의 핵심을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠과 ㉡에 해당하는 한자를 쓸 것<br>
+◦ 순자가 예(禮)의 기원을 어디서 찾는지 설명할 것<br>
+◦ 순자의 성악설(性惡說)과 예치의 관계를 서술할 것<br>
+◦ &quot;君者舟也; 庶人者水也. 水則載舟, 水則覆舟.&quot;를 연계하여 순자의 군주론을 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 亂 (난, 혼란)</strong><br>
+<strong>㉡: 禮之所起 (예지소기) — 예가 생겨나는 바</strong></p>
+<p><strong>순자 예치론:</strong></p>
+<ol>
+<li>
+<p><strong>예의 기원:</strong> 인간은 태어나면서 욕구(欲)를 가짐 → 욕구를 충족하지 못하면 다툼 → 다툼은 혼란(亂) → 선왕이 혼란을 싫어하여 예의(禮義)를 제정하여 욕구에 분수와 한계를 부여함</p>
+</li>
+<li>
+<p><strong>성악설(性惡說)과 예:</strong> 순자는 인간의 본성이 악하다고 봄. 따라서 외적 규범인 예(禮)와 교육(師法之化)을 통해 악한 본성을 교정해야 함</p>
+</li>
+<li>
+<p><strong>예치(禮治)의 기능:</strong> &quot;故禮者, 養也&quot; — 예는 인간의 욕구를 조절하고 질서를 유지하며 사회를 양육하는 기능</p>
+</li>
+<li>
+<p><strong>군주론:</strong> &quot;君者舟也; 庶人者水也. 水則載舟, 水則覆舟.&quot; → 백성이 임금을 떠받치기도 하고 뒤집기도 한다. 군주는 예(禮)에 따라 백성의 욕구를 조절해야 함. 순자의 민본사상 표현</p>
+</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-30">
+              <header class="question-head">
+                <div class="question-index">30</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 30</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 6</span>
+                  </div>
+                  <h3 class="question-title">문제 6</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 공자가 문화와 교육에 대해 말한 구절이다.</p>
+<blockquote>
+<p><strong>子曰: &quot;㉠興於詩, 立於禮, 成於樂.&quot;</strong><br>
+<strong>子曰: &quot;質勝文則野, 文勝質則史. ㉡文質彬彬, 然後君子.&quot;</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 말을 각각 쓰고, 공자의 예악론(禮樂論)의 의의를 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠에 나타난 시(詩)·예(禮)·악(樂)의 역할을 각각 설명할 것<br>
+◦ ㉡의 '文質彬彬'이 의미하는 이상적 인간상을 서술할 것<br>
+◦ 유교에서 예악(禮樂)이 인간 형성에 어떤 역할을 하는지 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 興於詩 (흥어시) — 시에서 일어나고 / 立於禮 / 成於樂</strong><br>
+<strong>㉡: 文質彬彬 (문질빈빈) — 형식과 내용이 조화를 이룸</strong></p>
+<p><strong>예악론 해설:</strong></p>
+<ol>
+<li>
+<p><strong>시·예·악의 역할:</strong></p>
+<ul>
+<li>興於詩: 시(詩)로 도덕 감정을 일깨움 — 정서 함양</li>
+<li>立於禮: 예(禮)로 행동 규범을 세움 — 사회적 질서</li>
+<li>成於樂: 악(樂)으로 인격을 완성함 — 내면적 조화</li>
+</ul>
+</li>
+<li>
+<p><strong>文質彬彬:</strong></p>
+<ul>
+<li>質(질) &gt; 文(문): 내용이 형식을 앞서면 야(野) — 거칠고 투박함</li>
+<li>文(문) &gt; 質(질): 형식이 내용을 앞서면 사(史) — 겉치레·형식주의</li>
+<li>文質彬彬: 내용(질)과 형식(문)이 균형 있게 조화된 이상적 군자(君子)</li>
+</ul>
+</li>
+<li>
+<p><strong>유교 예악의 의의:</strong> 순자도 &quot;樂者, 審一以定和者也&quot; — 음악은 조화(和)를 정하는 것이라 하여, 예악이 사회적 화합과 위계 질서를 동시에 구현한다고 봄</p>
+</li>
+</ol>
+</div>
+</details></div>
+            </article>
+          </div>
+        </section>
+      
+        <section class="paper-section" id="06-">
+          <header class="section-head">
+            <div class="section-topline">
+              <span class="section-label">SECTION 6</span>
+              <span class="section-range">문항 31~35</span>
+            </div>
+            <h2 class="section-title">도가사상 연습문제</h2>
+            <div class="section-meta">
+              
+              
+            </div>
+          </header>
+          <div class="question-stack">
+            <article class="question-card" id="q-31">
+              <header class="question-head">
+                <div class="question-index">31</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 31</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 1</span>
+                  </div>
+                  <h3 class="question-title">문제 1</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 노자 『도덕경』의 상덕(上德)에 대한 구절이다.</p>
+<blockquote>
+<p><strong>㉠上德不德, 是以有德. ㉡下德不失德, 是以無德.</strong><br>
+(상덕은 덕이라고 하지 않으므로 덕이 있게 된다. 하덕은 덕을 잃지 않으려고 하기에 오히려 덕이 없게 된다.)</p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡의 의미를 설명하고, 노자가 제시하는 덕(德)의 개념을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ 상덕(上德)과 ㉡ 하덕(下德)의 차이를 설명할 것<br>
+◦ 상덕의 특징인 무위(無爲)와 하덕의 특징인 유위(有爲)를 대조하여 설명할 것<br>
+◦ 노자가 유가의 인(仁)·의(義) 도덕을 비판하는 근거를 서술할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠ 상덕(上德):</strong></p>
+<ul>
+<li>&quot;덕이라 하지 않는다(不德)&quot;는 것은 의식적으로 덕을 행하려는 작위(作爲)가 없음</li>
+<li>자신을 잊고 사사로움 없이 순수하게 자연의 법칙에 따라 행동 → 무위이무불위(無爲而無不爲)</li>
+<li>행하지만 이루려는 의도가 없음(無以爲)</li>
+</ul>
+<p><strong>㉡ 하덕(下德):</strong></p>
+<ul>
+<li>&quot;덕을 잃지 않으려 한다(不失德)&quot;는 것은 의식적으로 덕을 유지하려는 노력 → 유위(有爲)</li>
+<li>작위가 있고(有爲), 이루지 못함이 있음(有不爲)</li>
+<li>유가의 인(仁)·의(義)가 여기에 해당: 인위적 도덕 규범으로 본질적으로 하덕</li>
+</ul>
+<p><strong>노자의 유가 비판:</strong></p>
+<ul>
+<li>&quot;최상의 인(上仁)은 작위를 하지만 억지로 하고자 하는 것은 없다&quot; — 인에는 이미 친소(親疏)의 구별이 있어 유위(有爲)</li>
+<li>&quot;최상의 의(上義)는 작위함이 있고 억지로 하고자 하는 것이 있다&quot; — 의는 인보다 더 작위적</li>
+<li>도(道) → 덕(德) → 인(仁) → 의(義) → 예(禮) 순으로 도에서 멀어질수록 인위성이 강해짐</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-32">
+              <header class="question-head">
+                <div class="question-index">32</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 32</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 2</span>
+                  </div>
+                  <h3 class="question-title">문제 2</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 노자 『도덕경』 제12장이다.</p>
+<blockquote>
+<p><strong>五色令人目盲, 五音令人耳聾, 五味令人口爽, 馳騁畋獵令人心發狂, 難得之貨令人行妨. 是以聖人爲腹不爲㉠目, 故去㉡彼取此.</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 이 구절에 나타난 노자의 문화·소비관을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ 목(目)이 상징하는 것과 ㉡ 彼와 此가 각각 무엇을 가리키는지 설명할 것<br>
+◦ &quot;爲腹不爲目(위복불위목)&quot;의 의미를 서술할 것<br>
+◦ 노자 소비관의 핵심 개념인 지족(知足)·지지(知止)와 연관하여 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 目 (목, 눈/외적 감각)</strong><br>
+<strong>㉡: 彼 (피, 저것) = 외적 감각·욕망 / 此 (차, 이것) = 내적 만족·자족</strong></p>
+<p><strong>해설:</strong></p>
+<ol>
+<li>
+<p><strong>오색오음(五色五音)의 폐해:</strong></p>
+<ul>
+<li>오색(五色) → 눈을 멀게 함</li>
+<li>오음(五音) → 귀를 먹게 함</li>
+<li>오미(五味) → 입맛을 상하게 함</li>
+<li>달리고 사냥하기 → 마음을 미치게 함</li>
+<li>얻기 어려운 재화 → 행동을 해치게 함</li>
+</ul>
+</li>
+<li>
+<p><strong>위복불위목(爲腹不爲目):</strong></p>
+<ul>
+<li>腹(복): 배를 채우는 것 = 내면의 기본적 필요, 자족(自足)</li>
+<li>目(목): 눈으로 보는 것 = 외적 욕망, 감각적 쾌락</li>
+<li>성인은 외적 감각 자극(目)을 위하지 않고 내적 충족(腹)을 위함 → 욕망의 절제</li>
+</ul>
+</li>
+<li>
+<p><strong>지족지지(知足知止):</strong></p>
+<ul>
+<li>&quot;知足不辱, 知止不殆, 可以長久.&quot; (만족을 알면 욕됨이 없고, 멈출 줄 알면 위태롭지 않아 오래 갈 수 있다)</li>
+<li>&quot;名與身孰親? 身與貨孰多? 得與亡孰病? 是故甚愛必大費, 多藏必厚亡.&quot;</li>
+<li>노자의 소비관: 과도한 소유와 외적 욕망 추구는 오히려 자신을 해침. 자연에 순응하는 소박한 삶(樸)을 강조</li>
+</ul>
+</li>
+</ol>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-33">
+              <header class="question-head">
+                <div class="question-index">33</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 33</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 3</span>
+                  </div>
+                  <h3 class="question-title">문제 3</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 노자 『도덕경』의 역설적 진리를 표현한 구절이다.</p>
+<blockquote>
+<p><strong>大成若缺, 其用不弊. 大盈若沖, 其用不窮. 大直若屈, 大巧若拙, ㉠大辯若訥.</strong></p>
+</blockquote>
+<p>위 구절의 ㉠에 들어갈 말을 쓰고, 이 구절에 나타난 노자의 역설적 사유를 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠에 해당하는 한자와 뜻을 쓸 것<br>
+◦ &quot;大直若屈, 大巧若拙&quot;의 역설이 가리키는 도가 사상의 핵심을 설명할 것<br>
+◦ 노자의 '반(反)의 논리' — 약함이 강함을 이기고, 부드러움이 굳셈을 이기는 원리를 서술할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 大辯若訥 (대변약눌) — 가장 뛰어난 말재주는 오히려 말 못하는 것처럼 보인다</strong></p>
+<p><strong>역설적 사유 해설:</strong></p>
+<div class="table-wrap"><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>표현</th>
+<th>직역</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>大成若缺</td>
+<td>크게 이룬 것은 이지러진 듯</td>
+<td>완전한 것은 겉으로 결함처럼 보임</td>
+</tr>
+<tr>
+<td>大盈若沖</td>
+<td>크게 가득 찬 것은 빈 듯</td>
+<td>진정한 충만은 비어 있는 것처럼 보임</td>
+</tr>
+<tr>
+<td>大直若屈</td>
+<td>크게 곧은 것은 굽은 듯</td>
+<td>진정한 올곧음은 억지로 굳지 않음</td>
+</tr>
+<tr>
+<td>大巧若拙</td>
+<td>크게 능숙한 것은 서툰 듯</td>
+<td>진정한 기교는 기교 없음처럼 보임</td>
+</tr>
+<tr>
+<td>大辯若訥</td>
+<td>크게 말 잘하는 것은 어눌한 듯</td>
+<td>진정한 웅변은 침묵처럼 들림</td>
+</tr>
+</tbody>
+</table></div></div>
+<p><strong>반(反)의 논리(弱之勝強, 柔之勝剛):</strong></p>
+<ul>
+<li>도는 반대 방향으로 작용함: &quot;반자도지동(反者道之動)&quot; — 되돌아가는 것이 도의 운동</li>
+<li>&quot;天之道, 不爭而善勝&quot; — 하늘의 도는 다투지 않고도 이김</li>
+<li>부드러움(柔)은 굳셈(剛)을 이기고, 약함(弱)은 강함(强)을 이긴다 — 물(水)의 비유</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-34">
+              <header class="question-head">
+                <div class="question-index">34</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 34</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 4</span>
+                  </div>
+                  <h3 class="question-title">문제 4</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 노자의 정치철학을 담은 구절이다.</p>
+<blockquote>
+<p><strong>我無爲而民㉠自化, 我好靜而民自正, 我無事而民㉡自富, 我無欲而民自樸.</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 노자의 무위정치(無爲政治)의 핵심을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ 自化(자화)와 ㉡ 自富(자부)의 의미를 설명할 것<br>
+◦ 자화·자정·자부·자박(自化·自正·自富·自樸) 네 단계를 설명할 것<br>
+◦ 노자의 무위정치가 유가의 덕치·법가의 법치와 어떻게 다른지 서술할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 自化 (자화) — 스스로 변화함</strong><br>
+<strong>㉡: 自富 (자부) — 스스로 부유해짐</strong></p>
+<p><strong>무위정치(無爲政治) 네 단계:</strong></p>
+<div class="table-wrap"><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>군주의 자세</th>
+<th>백성의 반응</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>無爲 (무위)</td>
+<td>自化 (자화) — 스스로 변화</td>
+</tr>
+<tr>
+<td>好靜 (호정)</td>
+<td>自正 (자정) — 스스로 바르게 됨</td>
+</tr>
+<tr>
+<td>無事 (무사)</td>
+<td>自富 (자부) — 스스로 부유해짐</td>
+</tr>
+<tr>
+<td>無欲 (무욕)</td>
+<td>自樸 (자박) — 스스로 소박해짐</td>
+</tr>
+</tbody>
+</table></div></div>
+<p><strong>다른 사상과의 비교:</strong></p>
+<ul>
+<li><strong>유가 덕치:</strong> 군주의 도덕적 모범이 백성을 감화 → 여전히 작위(作爲) 존재</li>
+<li><strong>법가 법치:</strong> 법률과 상벌로 백성을 통제 → 강제성 있음</li>
+<li><strong>노자 무위정치:</strong> 군주가 아무것도 하지 않을 때(無爲無欲) 백성이 자연스럽게 스스로 변화하고 조화를 이룸 → 가장 완전한 통치는 통치가 없는 것처럼 보이는 상태</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-35">
+              <header class="question-head">
+                <div class="question-index">35</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 35</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 5</span>
+                  </div>
+                  <h3 class="question-title">문제 5</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 장자의 좌망(坐忘)과 오상아(吾喪我)에 관한 내용이다.</p>
+<blockquote>
+<p>안회는 좌망(坐忘)을 &quot;육신을 무너뜨리고 총명을 내쫓고 형체를 떠나며, 지식을 버리고 크게 통하는 ㉠도(道)와 하나가 되는 것&quot;이라고 설명하였음. 장자는 '거짓된 나(㉡我)'를 극복하고 '참된 나(吾)'를 만나는 것을 오상아(吾喪我)라고 말하였음.</p>
+</blockquote>
+<p>위 내용에서 ㉠과 ㉡에 들어갈 개념을 쓰고, 장자의 오상아(吾喪我)와 좌망(坐忘)의 의미를 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ 도(道)와의 합일이 의미하는 것을 설명할 것<br>
+◦ ㉡ '거짓된 나(我)'와 '참된 나(吾)'의 차이를 설명할 것<br>
+◦ 좌망(坐忘)의 방법론(육신 해체, 총명 내쫓기 등)을 서술할 것<br>
+◦ 장자의 제물론(齊物論) — 만물이 평등하다는 관점과 연결하여 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 道 (도) — 모든 것을 관통하는 우주적 원리</strong><br>
+<strong>㉡: 我 (아) — 사회적 자아, 외적 구속에 얽매인 거짓 자아</strong></p>
+<p><strong>좌망(坐忘) 해설:</strong></p>
+<ul>
+<li>坐忘: 고요히 앉아 모든 것을 잊는 수행 방법</li>
+<li>단계: ① 육신(肢體)을 해체 → ② 총명(聰明)을 내쫓음 → ③ 형체를 떠남 → ④ 지식을 버림 → ⑤ 도(道)와 하나가 됨</li>
+<li>목적: 사회적 구속(礼義·仁義)에서 벗어나 자연과 합일</li>
+</ul>
+<p><strong>오상아(吾喪我) 해설:</strong></p>
+<ul>
+<li>我(아): 사회적으로 형성된 거짓 자아 — 지위, 관습, 욕망에 얽매인 나</li>
+<li>吾(오): 도(道)와 통하는 참된 자아 — 자유롭고 자연스러운 본래 나</li>
+<li>'하늘의 통소 소리(天籟)'는 오직 참된 나(吾)를 만날 때만 들을 수 있음</li>
+</ul>
+<p><strong>제물론(齊物論)과의 연결:</strong></p>
+<ul>
+<li>만물은 도(道)의 관점에서 보면 평등함(齊物)</li>
+<li>거짓 자아를 버리면 나와 만물의 구분이 사라지고 만물과 하나가 됨(物我一體)</li>
+<li>장자의 도: &quot;자본자근(自本自根)&quot;, &quot;물물자(物物者)&quot; — 만물을 있게 하는 근본</li>
+</ul>
+</div>
+</details></div>
+            </article>
+          </div>
+        </section>
+      
+        <section class="paper-section" id="07-">
+          <header class="section-head">
+            <div class="section-topline">
+              <span class="section-label">SECTION 7</span>
+              <span class="section-range">문항 36~40</span>
+            </div>
+            <h2 class="section-title">성리학 연습문제</h2>
+            <div class="section-meta">
+              
+              
+            </div>
+          </header>
+          <div class="question-stack">
+            <article class="question-card" id="q-36">
+              <header class="question-head">
+                <div class="question-index">36</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 36</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 1</span>
+                  </div>
+                  <h3 class="question-title">문제 1</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 퇴계 이황의 이기론에 관한 글이다.</p>
+<blockquote>
+<p>주자(朱子)가 유숙문(劉叔文)에게 회답하는 편지에 말하기를, <strong>&quot;이와 기는 결단코 두 가지이다. 다만 사물에서 본다면 두 가지가 한 덩어리가 되어서 따로 떼어 각각 한곳에 있게 할 수는 없으나, 두 가지가 각각 별개의 것이 되는 데 문제가 되진 않는다.&quot;</strong></p>
+<p>퇴계(退溪): <strong>&quot;㉠理는 본래 존귀하기가 상대가 없으매, 物을 命하고 物로부터 命해지지 아니하니, 氣가 마땅히 이길 바가 아니다.&quot;</strong><br>
+— 『退溪先生文集』卷30, &lt;答李達李天機&gt;</p>
+</blockquote>
+<p>위 구절에서 ㉠이(理)의 특성을 설명하고, 퇴계의 이기론(理氣論)의 핵심을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ 理(이)와 氣(기)의 관계를 퇴계의 관점에서 설명할 것<br>
+◦ 주자(朱子)의 &quot;理在先, 氣在後&quot;를 바탕으로 퇴계가 理를 어떻게 강조하는지 설명할 것<br>
+◦ &quot;사람의 한 몸에는 이(理)와 기(氣)가 겸비되어 있는데 이는 귀하고 기는 천합니다&quot;라는 퇴계의 말과 연결하여 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠ 理(이)의 특성:</strong></p>
+<ul>
+<li>이(理)는 만물을 명령하는(命物) 주재자 — 기(氣)의 지배를 받지 않음</li>
+<li>&quot;理는 본래 존귀하기가 상대가 없음&quot; → 理의 절대적 우위성</li>
+</ul>
+<p><strong>퇴계 이기론:</strong></p>
+<div class="table-wrap"><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>구분</th>
+<th>이(理)</th>
+<th>기(氣)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>성격</td>
+<td>귀함(貴), 무위(無爲)</td>
+<td>천함(賤), 유욕(有欲)</td>
+</tr>
+<tr>
+<td>관계</td>
+<td>주재자</td>
+<td>활동자</td>
+</tr>
+<tr>
+<td>수양</td>
+<td>이를 실천하는 것이 성현</td>
+<td>기를 기르는 것은 노·장의 길</td>
+</tr>
+</tbody>
+</table></div></div>
+<p><strong>이기이원론(理氣二元論):</strong></p>
+<ul>
+<li>주자: &quot;이와 기는 결단코 두 가지(理氣決是二物)&quot; — 이와 기는 분리 불가능하지만 개념상 엄격히 구분</li>
+<li>퇴계: 이발(理發)과 기발(氣發)을 구분 → 사단(四端)은 이(理)가 발하는 것, 칠정(七情)은 기(氣)가 발하는 것</li>
+<li>이기지묘(理氣之妙): 이와 기는 하나가 아니고(不一) 둘도 아닌(不二) 묘한 관계</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-37">
+              <header class="question-head">
+                <div class="question-index">37</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 37</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 2</span>
+                  </div>
+                  <h3 class="question-title">문제 2</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 퇴계 이황의 사단칠정론(四端七情論)에 관한 글이다.</p>
+<blockquote>
+<p><strong>성을 논하자면 이가 기 속에 있는데도 자사(子思)와 맹자(孟子)는 오히려 본연의 성[本然之性]만을 지적해 내었고 정자(程子)와 장자(張子)는 오히려 기질의 성[氣質之性]을 뽑아내어 논하였으니, 정을 논함에 있어서는 성이 기질 속에 있다 하여 각각 발하는 바에 나아가 ㉠사단과 칠정의 소종래를 나눌 수 없겠습니까.</strong></p>
+</blockquote>
+<blockquote>
+<p><strong>인심(人心)은 곧 ㉡칠정이고 도심(道心)은 곧 사단이니, 두 개의 도리가 있는 것이 아닙니다.</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 개념을 설명하고, 퇴계의 사단칠정론의 핵심을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ 사단(四端)과 칠정(七情)의 소종래(所從來, 유래)를 각각 설명할 것<br>
+◦ ㉡ 인심(人心)=칠정, 도심(道心)=사단의 관계를 서술할 것<br>
+◦ 퇴계의 이발(理發)·기발(氣發)설과 기대승의 반론을 비교하여 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠ 사단과 칠정의 소종래:</strong></p>
+<ul>
+<li><strong>사단(四端):</strong> 맹자가 제시한 네 가지 도덕 감정 — 측은(惻隱)·수오(羞惡)·사양(辭讓)·시비(是非)
+<ul>
+<li>소종래: 이(理)에서 발함(理發而氣隨之)</li>
+</ul>
+</li>
+<li><strong>칠정(七情):</strong> 『예기』의 일곱 감정 — 喜·怒·哀·懼·愛·惡·欲
+<ul>
+<li>소종래: 기(氣)에서 발함(氣發而理乘之)</li>
+</ul>
+</li>
+</ul>
+<p><strong>㉡ 인심도심설:</strong></p>
+<ul>
+<li>인심(人心) = 칠정 → 알인욕(遏人欲, 인욕을 막음)의 대상</li>
+<li>도심(道心) = 사단 → 존천리(存天理, 천리를 보존)의 근거</li>
+</ul>
+<p><strong>이발기발(理發氣發):</strong></p>
+<div class="table-wrap"><div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>퇴계 (이황)</th>
+<th>기대승</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>입장</td>
+<td>사단=理發, 칠정=氣發 (이기호발설理氣互發說)</td>
+<td>칠정이 사단을 포함, 理氣는 분리 불가</td>
+</tr>
+<tr>
+<td>논거</td>
+<td>理도 능동적으로 발할 수 있음</td>
+<td>발하는 것은 항상 氣이고 理는 氣를 타고 발함</td>
+</tr>
+</tbody>
+</table></div></div>
+<p><strong>인심도심의 성격:</strong></p>
+<ul>
+<li>&quot;위태로운 것이 인심이어서 욕(欲)에 빠지기 쉽고&quot;(人心惟危)</li>
+<li>&quot;은미한 것이 도심이어서 잠깐 이(理)에 눈떴다가도 바로 욕(欲)에 가리어짐&quot;(道心惟微)</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-38">
+              <header class="question-head">
+                <div class="question-index">38</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 38</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 3</span>
+                  </div>
+                  <h3 class="question-title">문제 3</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 퇴계 이황의 격물치지설(格物致知說)에 관한 글이다.</p>
+<blockquote>
+<p><strong>그 理의 用은 비록 인심의 밖이 아니지만 그 理의 용의 묘한 소이는 참으로 이것이 리의 발현이므로 인심이 이르는 바에 따라서 그것이 主에 이르지 아니한다던가 다하지 아니하는 바가 없다. 다만 나의 격물(格物)이 이르지 아니할까를 두려워 할 뿐이요, ㉠리(理)가 능히 스스로 이르지 못할까를 걱정하지 아니한다.</strong><br>
+— 『退溪先生文集』卷18, &lt;答奇明彦&gt;</p>
+</blockquote>
+<p>위 구절의 ㉠ 개념(리자도설)을 설명하고, 퇴계의 격물치지 이해를 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ '리자도설(理自到說)'의 의미를 설명할 것<br>
+◦ 정자(程子)의 &quot;格은 이르는 것, 끝까지 캐어서 극에 이르는 것&quot;과 주자(朱子)의 설명을 인용하여 格物의 의미를 서술할 것<br>
+◦ 퇴계 격물치지론의 특징 — 이(理)가 사물에 내재하며 능동적으로 자기를 드러낸다는 점을 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠ 리자도설(理自到說):</strong></p>
+<ul>
+<li>&quot;리가 능히 스스로 이른다&quot; — 格物 공부는 내가 사물의 이치를 찾아가는 것이기도 하지만, 동시에 理 자체가 능동적으로 인심에 자기를 드러내는(自到) 과정</li>
+<li>퇴계는 格物을 통해 이(理)가 스스로 나타나는 것을 체험한다고 봄</li>
+</ul>
+<p><strong>格物致知의 의미:</strong></p>
+<ul>
+<li>정자(程子): &quot;格은 이르는 것(至也) — 끝까지 캐어서 그 극(極)에 이르는 것&quot;</li>
+<li>주자(朱子): &quot;물(物)에 있는 이(理)에 대해 이미 그 끝까지 다가가서 여지가 없는 것&quot; / &quot;사물의 이치를 끝까지 궁구하여 극진한 곳에 이르는 것&quot;</li>
+<li>출처: 원래 『대학(大學)』에서 제기된 개념 → 이정(二程)·주희(朱熹)가 발전시켜 이학의 핵심 개념으로 정착</li>
+</ul>
+<p><strong>퇴계 格物致知의 특징:</strong></p>
+<ul>
+<li>즉물(卽物): 사물에 나아가 → 궁리(窮理): 이치를 끝까지 탐구 → 활연관통(豁然貫通): 갑작스런 통찰</li>
+<li>이(理)의 측면: 원래 물(物)과 나 사이에 내외(內外)·정조(精粗)의 구분 없음</li>
+<li>리자도설: 내가 格物에 이르면 理가 스스로 드러나는 것 → 이의 능동성·주재성 강조</li>
+</ul>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-39">
+              <header class="question-head">
+                <div class="question-index">39</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 39</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 4</span>
+                  </div>
+                  <h3 class="question-title">문제 4</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 주희(朱熹)의 태극·음양론에 관한 구절이다.</p>
+<blockquote>
+<p><strong>공자가 말하기를, &quot;《주역(周易)》에 ㉠태극(太極)이 있으니, 이것이 양의(兩儀)를 낳는다.&quot; 하였고, 주자(周子)가 말하기를, &quot;태극이 동(動)하여 ㉡양(陽)을 낳고, 정(靜)하여 음(陰)을 낳는다.&quot;</strong></p>
+</blockquote>
+<p>위 구절에서 ㉠과 ㉡에 들어갈 개념을 쓰고, 주희 이학(理學)의 우주론을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ 태극(太極)과 무극(無極)의 관계를 설명할 것<br>
+◦ ㉡ 태극 → 음양 → 오행 → 만물 생성의 과정을 서술할 것<br>
+◦ 주희의 이기론(理氣論): &quot;이가 먼저고, 기는 다음이다(理在先, 氣在後)&quot;의 의미를 설명할 것<br>
+◦ 육구연(陸九淵)의 &quot;心即理&quot; 심학(心學)과의 차이를 서술할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 太極 (태극) — 우주의 근원적 원리</strong><br>
+<strong>㉡: 陽 (양) — 동(動)에서 생겨나는 양기(陽氣)</strong></p>
+<p><strong>주희 우주론:</strong></p>
+<p>무극(無極) → 태극(太極) → 동(動)→양(陽) / 정(靜)→음(陰) → 오행(五行) → 만물(萬物)</p>
+<ol>
+<li><strong>태극(太極):</strong> 이(理)의 궁극 = 우주의 근원 원리</li>
+<li><strong>무극이태극(無極而太極):</strong> 형체는 없지만(無極) 가장 완전한 이(太極) → 형이상학적 원리</li>
+<li><strong>음양오행:</strong> 기(氣)의 운동 → 오행(목·화·토·금·수) → 만물 화생(化生)</li>
+</ol>
+<p><strong>理在先 氣在後:</strong></p>
+<ul>
+<li>이(理)는 기(氣)에 앞서 존재 → 사물이 있기 전에 이미 사물의 이(理)가 있음</li>
+<li>이가 본질(理是本), 기가 수단(氣是器) → 이학(理學)의 핵심</li>
+</ul>
+<p><strong>주희 vs 육구연:</strong></p>
+<div class="table-wrap"><div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>주희(朱熹) — 이학(理學)</th>
+<th>육구연(陸九淵) — 심학(心學)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>핵심 명제</td>
+<td>性即理 (성이 곧 이)</td>
+<td>心即理 (심이 곧 이)</td>
+</tr>
+<tr>
+<td>수양 방법</td>
+<td>格物致知 — 사물에서 이치 탐구</td>
+<td>발본(拔本) — 마음에서 직접 이치 실현</td>
+</tr>
+<tr>
+<td>도(道)의 소재</td>
+<td>객관적 이(理)가 사물에 내재</td>
+<td>주관적 심(心)이 곧 우주</td>
+</tr>
+<tr>
+<td>왕양명과 관계</td>
+<td>비판 대상</td>
+<td>심즉리(心即理) → 치양지(致良知)로 발전</td>
+</tr>
+</tbody>
+</table></div></div>
+</div>
+</details>
+<hr>
+</div>
+            </article>
+          
+            <article class="question-card" id="q-40">
+              <header class="question-head">
+                <div class="question-index">40</div>
+                <div class="question-copy">
+                  <div class="question-meta">
+                    <span class="question-badge">문항 40</span>
+                    <span class="question-badge question-badge-subtle">원본 문제 5</span>
+                  </div>
+                  <h3 class="question-title">문제 5</h3>
+                </div>
+              </header>
+              <div class="question-content"><p>다음은 퇴계 이황의 인심도심설(人心道心說)에 관한 글이다.</p>
+<blockquote>
+<p><strong>무엇보다도 위태로운 것이 인심(人心)이어서 욕(欲)에 빠지기 쉽고 이(理)를 회복하기 어려우며, 무엇보다도 은미한 것이 도심(道心)이어서 잠깐 이(理)에 눈떴다가도 바로 욕(欲)에 가리어지기 때문입니다. 이제 빠지기 쉬운 인심으로 하여금 ㉠물러나 따르도록 하고, 잠깐 눈뜬 도심으로 하여금 ㉡끊임없이 계속되도록 하여 ...</strong></p>
+</blockquote>
+<p>위 구절의 ㉠과 ㉡이 가리키는 수양의 방향을 설명하고, 퇴계 심성론(心性論)의 특징을 서술하시오.</p>
+<p>&lt;작성방법&gt;<br>
+◦ ㉠ 인심을 &quot;물러나 따르게&quot; 하는 것과 ㉡ 도심을 &quot;끊임없이 계속&quot;하게 하는 수양론을 설명할 것<br>
+◦ 인심(人心)=칠정=알인욕(遏人欲), 도심(道心)=사단=존천리(存天理)의 구조를 서술할 것<br>
+◦ 퇴계 심학(心學)의 요점: &quot;인욕을 막고 천리를 보존한다(遏人欲 存天理)&quot; 두 가지 공부를 설명할 것</p>
+<details class="answer-toggle">
+  <summary>
+    <span class="summary-label" data-closed="답안 및 해설 보기" data-open="답안 및 해설 닫기">답안 및 해설 보기</span>
+    <span class="summary-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="answer-body"><p><strong>정답 및 해설</strong></p>
+<p><strong>㉠: 인심이 물러나 도심을 따르도록 — 인욕(人欲)의 절제</strong><br>
+<strong>㉡: 도심이 끊임없이 이어지도록 — 천리(天理)의 보존</strong></p>
+<p><strong>퇴계 심성론 구조:</strong></p>
+<pre><code>心(마음)
+├── 도심(道心) = 사단(四端) → 천리(天理) → 存天理 공부
+└── 인심(人心) = 칠정(七情) → 인욕(人欲) → 遏人欲 공부
+</code></pre>
+<p><strong>수양론:</strong></p>
+<ul>
+<li><strong>존천리(存天理):</strong> 도심이 주재하여 천리가 지속적으로 드러나게 함 → 경(敬) 공부</li>
+<li><strong>알인욕(遏人欲):</strong> 인심이 욕망에 빠지지 않도록 억제 → 계신공구(戒愼恐懼) 공부</li>
+</ul>
+<p><strong>인심도심의 성격:</strong></p>
+<ul>
+<li>인심: &quot;형기(形氣)에서 나오는 마음&quot; — 성인도 없을 수 없으나, 물욕에 빠지면 인욕이 됨</li>
+<li>도심: &quot;성명(性命)의 올바름에서 근원하는 마음&quot; — 은미하여 쉽게 욕망에 가리어짐</li>
+<li>핵심: 인심을 도심이 주재(主宰)하게 하는 것이 수양의 목표</li>
+</ul>
+<p><strong>『중용』 서문(주자):</strong></p>
+<ul>
+<li>&quot;人心惟危, 道心惟微, 惟精惟一, 允執厥中&quot; — 인심은 위태롭고 도심은 은미하니 정밀하고 한결같이 하여 진실로 그 중(中)을 잡아야 함</li>
+</ul>
+</div>
+</details></div>
+            </article>
+          </div>
+        </section>
+      
+      </main>
+    </div>
+
+    <script>
+      const drawer = document.getElementById("drawer");
+      const overlay = document.getElementById("overlay");
+      const menuButton = document.getElementById("menuButton");
+      const drawerClose = document.getElementById("drawerClose");
+      const drawerNav = document.getElementById("drawerNav");
+
+      function openDrawer() {
+        drawer.classList.add("is-open");
+        overlay.hidden = false;
+        requestAnimationFrame(() => overlay.classList.add("is-open"));
+        drawer.setAttribute("aria-hidden", "false");
+        menuButton.setAttribute("aria-expanded", "true");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeDrawer() {
+        drawer.classList.remove("is-open");
+        overlay.classList.remove("is-open");
+        drawer.setAttribute("aria-hidden", "true");
+        menuButton.setAttribute("aria-expanded", "false");
+        document.body.style.overflow = "";
+        window.setTimeout(() => {
+          if (!overlay.classList.contains("is-open")) {
+            overlay.hidden = true;
+          }
+        }, 220);
+      }
+
+      menuButton.addEventListener("click", () => {
+        if (drawer.classList.contains("is-open")) {
+          closeDrawer();
+          return;
+        }
+        openDrawer();
+      });
+
+      drawerClose.addEventListener("click", closeDrawer);
+      overlay.addEventListener("click", closeDrawer);
+
+      drawerNav.addEventListener("click", (event) => {
+        const link = event.target.closest("a");
+        if (!link) {
+          return;
+        }
+        closeDrawer();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && drawer.classList.contains("is-open")) {
+          closeDrawer();
+        }
+      });
+
+      document.addEventListener(
+        "toggle",
+        (event) => {
+          const details = event.target;
+          if (!(details instanceof HTMLDetailsElement) || !details.classList.contains("answer-toggle")) {
+            return;
+          }
+
+          const label = details.querySelector(".summary-label");
+          if (!label) {
+            return;
+          }
+
+          const closedText = label.dataset.closed || "답안 및 해설 보기";
+          const openText = label.dataset.open || "답안 및 해설 닫기";
+          label.textContent = details.open ? openText : closedText;
+        },
+        true
+      );
+    </script>
+  </body>
+</html>
