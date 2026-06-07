@@ -608,6 +608,7 @@
       </main>
     </div>
 
+    <script src="./study-questions-data.js"></script>
     <script>
       const studyDeck = [
         {
@@ -2220,9 +2221,37 @@
         ],
       };
 
+      function normalizeTitleKey(text) {
+        return String(text || "").normalize("NFC").trim();
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function formatText(text) {
+        return escapeHtml(text).replace(/&lt;br\s*\/?&gt;/gi, "<br />").replace(/\n/g, "<br />");
+      }
+
+      const latestOriginalExtrasByTitle = new Map(
+        (Array.isArray(window.studyQuestionDeck) ? window.studyQuestionDeck : []).map((section) => [
+          normalizeTitleKey(section.title),
+          Array.isArray(section.questions) ? section.questions.slice(0, 5) : [],
+        ])
+      );
+
       const fullStudyDeck = studyDeck.map((section) => ({
         ...section,
-        questions: [...section.questions, ...(extraStudyQuestions[section.id] || [])],
+        questions: [
+          ...section.questions,
+          ...(extraStudyQuestions[section.id] || []),
+          ...(latestOriginalExtrasByTitle.get(normalizeTitleKey(section.title)) || []),
+        ],
       }));
 
       const drawer = document.getElementById("drawer");
@@ -2237,8 +2266,8 @@
           .map(
             (section, index) => `
               <a class="drawer-link" href="#${section.id}">
-                <strong>${index + 1}. ${section.title}</strong>
-                <span>${section.focus}</span>
+                <strong>${index + 1}. ${escapeHtml(section.title)}</strong>
+                <span>${escapeHtml(section.focus)}</span>
               </a>
             `
           )
@@ -2253,11 +2282,11 @@
                 <div class="section-head">
                   <span class="section-label">FILE ${index + 1}</span>
                   <div>
-                    <h2 class="section-title">${section.title}</h2>
-                    <p class="section-focus">${section.focus}</p>
+                    <h2 class="section-title">${escapeHtml(section.title)}</h2>
+                    <p class="section-focus">${escapeHtml(section.focus)}</p>
                   </div>
                   <div class="tag-row">
-                    ${section.extras.map((item) => `<span class="tag">${item}</span>`).join("")}
+                    ${section.extras.map((item) => `<span class="tag">${escapeHtml(item)}</span>`).join("")}
                   </div>
                 </div>
                 <div class="question-list">
@@ -2267,18 +2296,18 @@
                         <article class="question-card">
                           <div class="question-meta">
                             <span class="question-no">${qIndex + 1}번</span>
-                            <span class="question-type">${question.type}</span>
+                            <span class="question-type">${escapeHtml(question.type)}</span>
                           </div>
-                          <p class="question-text">${question.prompt}</p>
+                          <p class="question-text">${formatText(question.prompt)}</p>
                           <details class="answer-toggle">
                             <summary>
                               <span class="summary-label">답안 및 해설 보기</span>
                               <span class="summary-caret" aria-hidden="true">⌄</span>
                             </summary>
                             <div class="answer-body">
-                              <p><strong>정답</strong><br />${question.answer}</p>
-                              <p><strong>해설</strong><br />${question.explanation}</p>
-                              <blockquote>${question.quote}</blockquote>
+                              <p><strong>정답</strong><br />${formatText(question.answer)}</p>
+                              <p><strong>해설</strong><br />${formatText(question.explanation)}</p>
+                              <blockquote>${formatText(question.quote)}</blockquote>
                             </div>
                           </details>
                         </article>

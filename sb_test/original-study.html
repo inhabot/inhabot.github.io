@@ -453,7 +453,94 @@
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
         font-size: 14px;
         line-height: 1.82;
-        white-space: pre-wrap;
+        white-space: normal;
+      }
+
+      .raw-markdown {
+        display: grid;
+        gap: 12px;
+      }
+
+      .raw-heading {
+        margin: 0;
+        line-height: 1.35;
+      }
+
+      .raw-heading.level-1 {
+        font-size: 22px;
+      }
+
+      .raw-heading.level-2 {
+        font-size: 19px;
+      }
+
+      .raw-heading.level-3,
+      .raw-heading.level-4,
+      .raw-heading.level-5,
+      .raw-heading.level-6 {
+        font-size: 16px;
+      }
+
+      .raw-paragraph,
+      .raw-quote,
+      .raw-list,
+      .raw-ordered {
+        margin: 0;
+      }
+
+      .raw-quote {
+        padding: 14px 16px;
+        border-left: 4px solid rgba(79, 164, 255, 0.32);
+        border-radius: 0 16px 16px 0;
+        background: rgba(233, 244, 255, 0.72);
+        color: var(--ink-soft);
+      }
+
+      .raw-list,
+      .raw-ordered {
+        padding-left: 20px;
+      }
+
+      .raw-list li + li,
+      .raw-ordered li + li {
+        margin-top: 6px;
+      }
+
+      .raw-rule {
+        margin: 2px 0;
+        border: 0;
+        border-top: 1px solid rgba(52, 92, 140, 0.14);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      .raw-scroll table {
+        width: max-content;
+        min-width: 100%;
+        border-collapse: collapse;
+        border-spacing: 0;
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid rgba(52, 92, 140, 0.12);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+
+      .raw-scroll th,
+      .raw-scroll td {
+        padding: 12px 10px;
+        border: 1px solid rgba(52, 92, 140, 0.1);
+        text-align: left;
+        vertical-align: top;
+        line-height: 1.62;
+        word-break: keep-all;
+      }
+
+      .raw-scroll th {
+        background: rgba(79, 164, 255, 0.12);
+        color: var(--accent-strong);
+        font-weight: 800;
       }
 
       .empty-state {
@@ -586,8 +673,11 @@
           .replace(/'/g, "&#39;");
       }
 
-      function formatText(text) {
-        return escapeHtml(text).replace(/\n/g, "<br />");
+      function renderInline(text) {
+        return escapeHtml(text)
+          .replace(/&lt;br\s*\/?&gt;/gi, "<br />")
+          .replace(/`([^`]+)`/g, "<code>$1</code>")
+          .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
       }
 
       function cleanTitle(text) {
@@ -600,6 +690,164 @@
           .split(/\n\s*\n+/)
           .map((block) => block.replace(/[ \t]+\n/g, "\n").trim())
           .filter(Boolean);
+      }
+
+      function isMarkdownTableSeparator(line) {
+        return /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(line.trim());
+      }
+
+      function isMarkdownTableLine(line) {
+        const trimmed = line.trim();
+        return Boolean(trimmed) && /\|/.test(trimmed) && !/^>\s?/.test(trimmed);
+      }
+
+      function parseMarkdownTableRow(line) {
+        const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+        return trimmed.split("|").map((cell) => cell.trim());
+      }
+
+      function renderMarkdownTable(lines) {
+        const headerCells = parseMarkdownTableRow(lines[0]);
+        const rows = lines.slice(2).map(parseMarkdownTableRow);
+        const columnCount = Math.max(
+          headerCells.length,
+          ...rows.map((row) => row.length)
+        );
+        const normalizeRow = (row) => {
+          const nextRow = [...row];
+          while (nextRow.length < columnCount) {
+            nextRow.push("");
+          }
+          return nextRow;
+        };
+        const normalizedHeader = normalizeRow(headerCells);
+        const normalizedRows = rows.map(normalizeRow);
+
+        return `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>${normalizedHeader
+                  .map((cell) => `<th>${renderInline(cell) || "&nbsp;"}</th>`)
+                  .join("")}</tr>
+              </thead>
+              <tbody>
+                ${normalizedRows
+                  .map(
+                    (row) =>
+                      `<tr>${row
+                        .map((cell) => `<td>${renderInline(cell) || "&nbsp;"}</td>`)
+                        .join("")}</tr>`
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      function renderMarkdown(raw) {
+        const lines = raw.replace(/\r\n/g, "\n").split("\n");
+        const html = [];
+        let index = 0;
+
+        while (index < lines.length) {
+          const line = lines[index];
+          const trimmed = line.trim();
+
+          if (!trimmed) {
+            index += 1;
+            continue;
+          }
+
+          if (isMarkdownTableLine(trimmed) && index + 1 < lines.length && isMarkdownTableSeparator(lines[index + 1])) {
+            const tableLines = [lines[index], lines[index + 1]];
+            index += 2;
+
+            while (index < lines.length && lines[index].trim() && isMarkdownTableLine(lines[index])) {
+              tableLines.push(lines[index]);
+              index += 1;
+            }
+
+            html.push(renderMarkdownTable(tableLines));
+            continue;
+          }
+
+          if (/^#{1,6}\s+/.test(trimmed)) {
+            const level = Math.min(6, trimmed.match(/^#+/)[0].length);
+            const content = trimmed.replace(/^#{1,6}\s+/, "");
+            html.push(`<h${level} class="raw-heading level-${level}">${renderInline(content)}</h${level}>`);
+            index += 1;
+            continue;
+          }
+
+          if (/^---+$/.test(trimmed)) {
+            html.push('<hr class="raw-rule" />');
+            index += 1;
+            continue;
+          }
+
+          if (/^>\s?/.test(trimmed)) {
+            const quoteLines = [];
+            while (index < lines.length && /^>\s?/.test(lines[index].trim())) {
+              quoteLines.push(lines[index].trim().replace(/^>\s?/, ""));
+              index += 1;
+            }
+            html.push(`<blockquote class="raw-quote">${renderInline(quoteLines.join("\n")).replace(/\n/g, "<br />")}</blockquote>`);
+            continue;
+          }
+
+          if (/^\s*[-*]\s+/.test(line)) {
+            const items = [];
+            while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
+              items.push(lines[index].replace(/^\s*[-*]\s+/, "").trim());
+              index += 1;
+            }
+            html.push(`<ul class="raw-list">${items.map((item) => `<li>${renderInline(item)}</li>`).join("")}</ul>`);
+            continue;
+          }
+
+          if (/^\s*\d+\.\s+/.test(line)) {
+            const items = [];
+            while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) {
+              items.push(lines[index].replace(/^\s*\d+\.\s+/, "").trim());
+              index += 1;
+            }
+            html.push(`<ol class="raw-ordered">${items.map((item) => `<li>${renderInline(item)}</li>`).join("")}</ol>`);
+            continue;
+          }
+
+          const paragraphLines = [line];
+          index += 1;
+
+          while (index < lines.length) {
+            const nextLine = lines[index];
+            const nextTrimmed = nextLine.trim();
+
+            if (
+              !nextTrimmed ||
+              /^#{1,6}\s+/.test(nextTrimmed) ||
+              /^---+$/.test(nextTrimmed) ||
+              /^>\s?/.test(nextTrimmed) ||
+              /^\s*[-*]\s+/.test(nextLine) ||
+              /^\s*\d+\.\s+/.test(nextLine) ||
+              (isMarkdownTableLine(nextTrimmed) &&
+                index + 1 < lines.length &&
+                isMarkdownTableSeparator(lines[index + 1]))
+            ) {
+              break;
+            }
+
+            paragraphLines.push(nextLine);
+            index += 1;
+          }
+
+          html.push(
+            `<p class="raw-paragraph">${renderInline(paragraphLines.join("\n")).replace(/\n/g, "<br />")}</p>`
+          );
+        }
+
+        return `<div class="raw-markdown">${html.join("")}</div>`;
       }
 
       function isMetaBlock(block) {
@@ -765,7 +1013,7 @@
           return;
         }
 
-        target.innerHTML = formatText(section.body);
+        target.innerHTML = renderMarkdown(section.body);
         target.dataset.rendered = "true";
       }
 
