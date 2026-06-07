@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>새봄 TEST 원본학습</title>
+    <style>
+      :root {
+        --bg: #e6f3ff;
+        --bg-deep: #cfe7ff;
+        --paper: #f7fbff;
+        --paper-strong: #edf5ff;
+        --ink: #183b5b;
+        --ink-soft: #5f7e9a;
+        --line: rgba(52, 92, 140, 0.12);
+        --accent: #4fa4ff;
+        --accent-strong: #1f68b5;
+        --accent-soft: rgba(79, 164, 255, 0.14);
+        --shadow: 0 18px 42px rgba(77, 129, 189, 0.16);
+        --radius-lg: 28px;
+        --radius-md: 20px;
+        --radius-sm: 14px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "SUIT Variable", "Pretendard Variable", "Apple SD Gothic Neo",
+          "Noto Sans KR", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(255, 255, 255, 0.46), transparent 32%),
+          linear-gradient(180deg, #f1f8ff 0%, var(--bg) 100%);
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      code {
+        font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+      }
+
+      .shell {
+        position: relative;
+        width: 100%;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: calc(env(safe-area-inset-top) + 14px) 18px 14px;
+        background: rgba(247, 251, 255, 0.88);
+        backdrop-filter: blur(18px);
+        border-bottom: 1px solid rgba(52, 92, 140, 0.08);
+      }
+
+      .menu-btn {
+        flex: 0 0 auto;
+        width: 48px;
+        height: 48px;
+        border: 0;
+        border-radius: 16px;
+        background: var(--paper);
+        box-shadow: 0 10px 24px rgba(77, 129, 189, 0.16);
+        color: var(--ink);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+
+      .menu-icon {
+        width: 20px;
+        height: 14px;
+        display: grid;
+        gap: 4px;
+      }
+
+      .menu-icon span {
+        display: block;
+        width: 100%;
+        height: 2px;
+        border-radius: 999px;
+        background: var(--ink);
+      }
+
+      .top-copy {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .eyebrow {
+        margin: 0 0 4px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        color: var(--accent);
+        text-transform: uppercase;
+      }
+
+      .top-title {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .top-subtitle {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: auto;
+      }
+
+      .nav-link-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 10px 14px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #79c8ff, #4fa4ff);
+        color: #f7fbff;
+        font-size: 13px;
+        font-weight: 800;
+        box-shadow: 0 10px 20px rgba(31, 104, 181, 0.22);
+      }
+
+      .drawer {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 40;
+        width: min(84vw, 340px);
+        padding: calc(env(safe-area-inset-top) + 18px) 16px 20px;
+        background:
+          linear-gradient(180deg, rgba(232, 244, 255, 0.98), rgba(247, 251, 255, 0.98)),
+          var(--paper);
+        border-right: 1px solid rgba(52, 92, 140, 0.1);
+        box-shadow: 24px 0 48px rgba(77, 129, 189, 0.18);
+        transform: translateX(-102%);
+        transition: transform 220ms ease;
+        overflow-y: auto;
+      }
+
+      .drawer.is-open {
+        transform: translateX(0);
+      }
+
+      .drawer-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .drawer-title {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .drawer-copy {
+        margin: 6px 0 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+      }
+
+      .drawer-close {
+        width: 42px;
+        height: 42px;
+        border: 0;
+        border-radius: 14px;
+        background: rgba(31, 104, 181, 0.1);
+        color: var(--ink);
+        font-size: 18px;
+        cursor: pointer;
+      }
+
+      .drawer-nav {
+        display: grid;
+        gap: 10px;
+      }
+
+      .drawer-link {
+        padding: 14px 14px 13px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid rgba(52, 92, 140, 0.08);
+        box-shadow: 0 10px 18px rgba(77, 129, 189, 0.08);
+      }
+
+      .drawer-link strong {
+        display: block;
+        font-size: 14px;
+        line-height: 1.35;
+      }
+
+      .drawer-link span {
+        display: block;
+        margin-top: 5px;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 35;
+        background: rgba(19, 56, 92, 0.34);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 220ms ease;
+      }
+
+      .overlay.is-open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      main {
+        padding: 16px 14px 44px;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        padding: 24px 20px;
+        border-radius: 30px;
+        background:
+          radial-gradient(circle at top right, rgba(255, 255, 255, 0.45), transparent 34%),
+          linear-gradient(160deg, #f7fbff 0%, #d9ecff 48%, #b7d9ff 100%);
+        box-shadow: var(--shadow);
+        border: 1px solid rgba(52, 92, 140, 0.08);
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        right: -38px;
+        bottom: -48px;
+        width: 148px;
+        height: 148px;
+        border-radius: 999px;
+        background: rgba(79, 164, 255, 0.16);
+      }
+
+      .hero-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        color: var(--accent-strong);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .hero h1 {
+        margin: 14px 0 10px;
+        font-size: 28px;
+        line-height: 1.18;
+      }
+
+      .hero p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.65;
+        color: var(--ink-soft);
+        max-width: 48ch;
+      }
+
+      .chip-row,
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip-row {
+        margin-top: 18px;
+      }
+
+      .hero-chip,
+      .tag,
+      .source-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .hero-chip {
+        background: rgba(255, 255, 255, 0.68);
+        color: var(--ink);
+        border: 1px solid rgba(52, 92, 140, 0.08);
+      }
+
+      .playbook {
+        margin-top: 18px;
+        padding: 16px;
+        border-radius: 22px;
+        background: rgba(244, 249, 255, 0.82);
+        border: 1px solid rgba(52, 92, 140, 0.08);
+      }
+
+      .playbook h2 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+
+      .playbook ol {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--ink-soft);
+      }
+
+      .sections {
+        display: grid;
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      .section-card {
+        scroll-margin-top: 92px;
+        padding: 18px;
+        border-radius: var(--radius-lg);
+        background: rgba(248, 252, 255, 0.94);
+        border: 1px solid rgba(52, 92, 140, 0.08);
+        box-shadow: 0 14px 30px rgba(77, 129, 189, 0.12);
+      }
+
+      .section-head {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .section-label {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+
+      .section-title {
+        margin: 0;
+        font-size: 21px;
+        line-height: 1.26;
+      }
+
+      .section-focus {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+
+      .tag {
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid rgba(52, 92, 140, 0.08);
+        color: var(--ink-soft);
+      }
+
+      .passage-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .passage-card {
+        padding: 16px;
+        border-radius: var(--radius-md);
+        background: var(--paper);
+        border: 1px solid var(--line);
+      }
+
+      .passage-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+
+      .passage-title {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.35;
+      }
+
+      .source-chip {
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+      }
+
+      .passage-text {
+        margin: 0;
+        padding: 14px;
+        border-radius: 18px;
+        background: var(--paper-strong);
+        border: 1px solid rgba(79, 164, 255, 0.16);
+        font-size: 15px;
+        line-height: 1.78;
+        white-space: normal;
+      }
+
+      .raw-details {
+        margin-top: 14px;
+        border-radius: var(--radius-md);
+        background: rgba(243, 249, 255, 0.95);
+        border: 1px solid rgba(52, 92, 140, 0.1);
+        overflow: hidden;
+      }
+
+      .raw-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 800;
+        list-style: none;
+      }
+
+      .raw-summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .raw-summary::after {
+        content: "펼치기";
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 58px;
+        min-height: 32px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(79, 164, 255, 0.12);
+        color: var(--accent-strong);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .raw-details[open] .raw-summary::after {
+        content: "접기";
+      }
+
+      .raw-content {
+        padding: 0 16px 16px;
+      }
+
+      .raw-scroll {
+        max-height: 56vh;
+        overflow: auto;
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(52, 92, 140, 0.08);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        font-size: 14px;
+        line-height: 1.82;
+        white-space: pre-wrap;
+      }
+
+      .empty-state {
+        padding: 20px 18px;
+        border-radius: var(--radius-lg);
+        background: rgba(248, 252, 255, 0.94);
+        border: 1px solid rgba(52, 92, 140, 0.08);
+        color: var(--ink-soft);
+        text-align: center;
+        line-height: 1.7;
+      }
+
+      @media (min-width: 760px) {
+        main {
+          max-width: 860px;
+          margin: 0 auto;
+          padding: 20px 22px 56px;
+        }
+
+        .topbar {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+
+        .hero {
+          padding: 30px 28px;
+        }
+
+        .section-card {
+          padding: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <button
+          type="button"
+          class="menu-btn"
+          id="menuButton"
+          aria-expanded="false"
+          aria-controls="drawer"
+          aria-label="원문 학습 섹션 바로가기 열기"
+        >
+          <span class="menu-icon" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </button>
+        <div class="top-copy">
+          <p class="eyebrow">새봄 TEST</p>
+          <h1 class="top-title">원본학습</h1>
+          <p class="top-subtitle">시험 범위 파일별 실제 원문 모음</p>
+        </div>
+        <div class="top-actions">
+          <a class="nav-link-btn" href="./sb01.html">문제로 이동</a>
+        </div>
+      </header>
+
+      <aside class="drawer" id="drawer" aria-hidden="true">
+        <div class="drawer-head">
+          <div>
+            <h2 class="drawer-title">원문 바로가기</h2>
+            <p class="drawer-copy">
+              <code>test_source</code> 실제 파일 내용을 기준으로 핵심 원문 카드와 파일 전체
+              원문으로 바로 내려갑니다.
+            </p>
+          </div>
+          <button type="button" class="drawer-close" id="drawerClose" aria-label="메뉴 닫기">
+            ✕
+          </button>
+        </div>
+        <nav class="drawer-nav" id="drawerNav"></nav>
+      </aside>
+
+      <div class="overlay" id="overlay" hidden></div>
+
+      <main>
+        <section class="hero">
+          <span class="hero-kicker">문제 없이 읽는 원문 전용 페이지</span>
+          <h1>시험 범위 원문만 모아서<br />빠르게 반복 학습하는 페이지</h1>
+          <p>
+            여기서는 문제를 풀지 않고, <strong><code>test_source</code> 실제 원문</strong>을
+            파일별로 바로 읽을 수 있게 정리했습니다. 위쪽에는 빠르게 외울 핵심 원문 카드가
+            보이고, 아래에서는 파일 전체 원문까지 펼쳐서 이어서 볼 수 있습니다.
+          </p>
+          <div class="chip-row">
+            <span class="hero-chip">실제 원문 카드</span>
+            <span class="hero-chip">모바일 우선</span>
+            <span class="hero-chip">파일 전체 원문 포함</span>
+            <span class="hero-chip">문제 페이지와 왕복 가능</span>
+          </div>
+          <div class="playbook">
+            <h2>추천 사용법</h2>
+            <ol>
+              <li>먼저 파일 하나를 정해서 원문 카드만 끝까지 읽고, 첫 줄만 보고 뒤 문장이 이어지는지 확인하세요.</li>
+              <li>헷갈리는 파일은 아래의 전체 원문을 펼쳐서 흐름까지 같이 읽으면 단기 암기가 훨씬 빨라집니다.</li>
+              <li>막히는 파일만 다시 문제 페이지로 돌아가서 문제와 원문을 왕복하면 효율이 좋습니다.</li>
+            </ol>
+          </div>
+        </section>
+
+        <div class="sections" id="sections"></div>
+      </main>
+    </div>
+
+    <script src="./original-study-data.js"></script>
+    <script>
+      const sourceStudyDeck = Array.isArray(window.originalSourceFiles)
+        ? window.originalSourceFiles
+        : [];
+
+      const drawer = document.getElementById("drawer");
+      const drawerNav = document.getElementById("drawerNav");
+      const overlay = document.getElementById("overlay");
+      const menuButton = document.getElementById("menuButton");
+      const drawerClose = document.getElementById("drawerClose");
+      const sectionsRoot = document.getElementById("sections");
+
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function formatText(text) {
+        return escapeHtml(text).replace(/\n/g, "<br />");
+      }
+
+      function cleanTitle(text) {
+        return text.replace(/^#+\s*/, "").replace(/\s+/g, " ").trim();
+      }
+
+      function splitBlocks(raw) {
+        return raw
+          .replace(/\r\n/g, "\n")
+          .split(/\n\s*\n+/)
+          .map((block) => block.replace(/[ \t]+\n/g, "\n").trim())
+          .filter(Boolean);
+      }
+
+      function isMetaBlock(block) {
+        const compact = block.replace(/\s+/g, "").trim();
+        const flat = block.trim();
+
+        if (!compact) {
+          return true;
+        }
+
+        if (compact === "CONTENTS" || compact === "불교윤리사상") {
+          return true;
+        }
+
+        if (/^\d+$/.test(compact)) {
+          return true;
+        }
+
+        if (/^==>picture/i.test(compact)) {
+          return true;
+        }
+
+        if (flat === "---") {
+          return true;
+        }
+
+        return false;
+      }
+
+      function scoreBlock(text, hasHeading) {
+        let score = 0;
+
+        if (/[“”"‘’]/.test(text) || /子曰|曰[:：]|<[^>]+>/.test(text)) {
+          score += 6;
+        }
+
+        if (/☞|※|=>|＝|=/.test(text)) {
+          score += 2;
+        }
+
+        if (
+          /연기|공|보살|무위|돈오|성리학|공자|맹자|노자|장자|禮|義|仁|佛|道/.test(text)
+        ) {
+          score += 1;
+        }
+
+        if (text.length >= 60 && text.length <= 760) {
+          score += 3;
+        } else if (text.length >= 25 && text.length <= 1200) {
+          score += 1;
+        }
+
+        if (hasHeading) {
+          score += 2;
+        }
+
+        return score;
+      }
+
+      function buildCandidates(raw) {
+        const blocks = splitBlocks(raw).filter((block) => !isMetaBlock(block));
+        const candidates = [];
+
+        for (let index = 0; index < blocks.length; index += 1) {
+          const block = blocks[index];
+          const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+
+          if (!lines.length) {
+            continue;
+          }
+
+          const firstLine = cleanTitle(lines[0]);
+          const nextBlock = blocks[index + 1];
+          const looksLikeHeading =
+            firstLine.length > 0 &&
+            firstLine.length <= 28 &&
+            !/[“”"‘’]/.test(firstLine) &&
+            !/<[^>]+>/.test(firstLine);
+
+          if (
+            lines.length === 1 &&
+            looksLikeHeading &&
+            nextBlock &&
+            !isMetaBlock(nextBlock)
+          ) {
+            candidates.push({
+              title: firstLine,
+              excerpt: nextBlock,
+              score: scoreBlock(`${firstLine}\n${nextBlock}`, true),
+              order: index,
+            });
+            index += 1;
+            continue;
+          }
+
+          const hasHeading = looksLikeHeading && lines.length > 1;
+
+          candidates.push({
+            title: hasHeading ? firstLine : `원문 카드 ${candidates.length + 1}`,
+            excerpt: hasHeading ? lines.slice(1).join("\n") : lines.join("\n"),
+            score: scoreBlock(block, hasHeading),
+            order: index,
+          });
+        }
+
+        return candidates.filter((candidate) => candidate.excerpt.trim().length >= 24);
+      }
+
+      function extractOutline(raw) {
+        const outline = [];
+        const blocks = splitBlocks(raw).filter((block) => !isMetaBlock(block));
+
+        for (const block of blocks) {
+          const firstLine = cleanTitle(block.split("\n")[0] || "");
+          if (
+            firstLine &&
+            firstLine.length <= 22 &&
+            !/[“”"‘’]/.test(firstLine) &&
+            !outline.includes(firstLine)
+          ) {
+            outline.push(firstLine);
+          }
+
+          if (outline.length === 4) {
+            break;
+          }
+        }
+
+        return outline;
+      }
+
+      function buildHighlights(file) {
+        const candidates = buildCandidates(file.body);
+        const highlights = candidates
+          .slice()
+          .sort((left, right) => right.score - left.score || left.order - right.order)
+          .slice(0, 6)
+          .sort((left, right) => left.order - right.order)
+          .map((candidate, index) => ({
+            title: candidate.title,
+            excerpt: candidate.excerpt,
+            source: `원문 카드 ${index + 1}`,
+          }));
+
+        if (highlights.length) {
+          return highlights;
+        }
+
+        const fallbackBlocks = splitBlocks(file.body)
+          .filter((block) => !isMetaBlock(block))
+          .slice(0, 6);
+
+        return fallbackBlocks.map((block, index) => ({
+          title: `원문 카드 ${index + 1}`,
+          excerpt: block,
+          source: `원문 카드 ${index + 1}`,
+        }));
+      }
+
+      const preparedDeck = sourceStudyDeck.map((file, index) => {
+        const outline = extractOutline(file.body);
+        const highlights = buildHighlights(file);
+
+        return {
+          ...file,
+          label: `FILE ${index + 1}`,
+          outline,
+          highlights,
+          preview: outline.slice(0, 2).join(" · ") || "실제 원문 중심 학습",
+        };
+      });
+
+      function renderEmptyState() {
+        sectionsRoot.innerHTML = `
+          <div class="empty-state">
+            원문 데이터를 불러오지 못했습니다.<br />
+            <code>original-study-data.js</code> 파일이 함께 있는지 확인해 주세요.
+          </div>
+        `;
+      }
+
+      function renderDrawer() {
+        if (!preparedDeck.length) {
+          drawerNav.innerHTML = "";
+          return;
+        }
+
+        drawerNav.innerHTML = preparedDeck
+          .map(
+            (section, index) => `
+              <a class="drawer-link" href="#${section.id}">
+                <strong>${index + 1}. ${escapeHtml(section.title)}</strong>
+                <span>${escapeHtml(section.preview)}</span>
+              </a>
+            `
+          )
+          .join("");
+      }
+
+      function renderSections() {
+        if (!preparedDeck.length) {
+          renderEmptyState();
+          return;
+        }
+
+        sectionsRoot.innerHTML = preparedDeck
+          .map(
+            (section, index) => `
+              <section class="section-card" id="${section.id}">
+                <div class="section-head">
+                  <span class="section-label">FILE ${index + 1}</span>
+                  <div>
+                    <h2 class="section-title">${escapeHtml(section.title)}</h2>
+                    <p class="section-focus">
+                      실제 <code>test_source</code> 원문에서 바로 읽을 블록만 먼저 뽑아 두었습니다.
+                      카드로 빠르게 본 뒤, 아래에서 파일 전체 원문까지 이어서 확인할 수 있습니다.
+                    </p>
+                  </div>
+                  <div class="tag-row">
+                    ${section.outline
+                      .map((item) => `<span class="tag">${escapeHtml(item)}</span>`)
+                      .join("")}
+                    <span class="tag">원문 카드 ${section.highlights.length}개</span>
+                    <span class="tag">파일 전체 원문</span>
+                  </div>
+                </div>
+                <div class="passage-grid">
+                  ${section.highlights
+                    .map(
+                      (passage) => `
+                        <article class="passage-card">
+                          <div class="passage-meta">
+                            <h3 class="passage-title">${escapeHtml(passage.title)}</h3>
+                            <span class="source-chip">${escapeHtml(passage.source)}</span>
+                          </div>
+                          <p class="passage-text">${formatText(passage.excerpt)}</p>
+                        </article>
+                      `
+                    )
+                    .join("")}
+                </div>
+                <details class="raw-details" data-file-id="${section.id}">
+                  <summary class="raw-summary">파일 전체 원문 보기</summary>
+                  <div class="raw-content">
+                    <div class="raw-scroll" id="raw-${section.id}"></div>
+                  </div>
+                </details>
+              </section>
+            `
+          )
+          .join("");
+
+        document.querySelectorAll(".raw-details").forEach((details) => {
+          details.addEventListener("toggle", () => {
+            if (!details.open) {
+              return;
+            }
+
+            renderRawSource(details.dataset.fileId);
+          });
+        });
+      }
+
+      function renderRawSource(fileId) {
+        const target = document.getElementById(`raw-${fileId}`);
+        const section = preparedDeck.find((item) => item.id === fileId);
+
+        if (!target || !section || target.dataset.rendered === "true") {
+          return;
+        }
+
+        target.innerHTML = formatText(section.body);
+        target.dataset.rendered = "true";
+      }
+
+      function openDrawer() {
+        drawer.classList.add("is-open");
+        overlay.hidden = false;
+        requestAnimationFrame(() => overlay.classList.add("is-open"));
+        drawer.setAttribute("aria-hidden", "false");
+        menuButton.setAttribute("aria-expanded", "true");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeDrawer() {
+        drawer.classList.remove("is-open");
+        overlay.classList.remove("is-open");
+        drawer.setAttribute("aria-hidden", "true");
+        menuButton.setAttribute("aria-expanded", "false");
+        document.body.style.overflow = "";
+        window.setTimeout(() => {
+          if (!overlay.classList.contains("is-open")) {
+            overlay.hidden = true;
+          }
+        }, 220);
+      }
+
+      menuButton.addEventListener("click", () => {
+        if (drawer.classList.contains("is-open")) {
+          closeDrawer();
+          return;
+        }
+
+        openDrawer();
+      });
+
+      drawerClose.addEventListener("click", closeDrawer);
+      overlay.addEventListener("click", closeDrawer);
+
+      drawerNav.addEventListener("click", (event) => {
+        const link = event.target.closest("a");
+        if (!link) {
+          return;
+        }
+
+        closeDrawer();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && drawer.classList.contains("is-open")) {
+          closeDrawer();
+        }
+      });
+
+      renderDrawer();
+      renderSections();
+    </script>
+  </body>
+</html>
