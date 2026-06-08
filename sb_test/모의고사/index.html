@@ -36,6 +36,7 @@
         min-height: 100vh;
         font-family: "MaruBuri", "KoPubWorldBatang", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
         color: var(--ink);
+        overflow-x: hidden;
         background:
           radial-gradient(circle at top, rgba(255, 255, 255, 0.42), transparent 28%),
           linear-gradient(180deg, #e8dfcf 0%, var(--bg) 100%);
@@ -131,7 +132,8 @@
         position: fixed;
         inset: 0 auto 0 0;
         z-index: 50;
-        width: min(84vw, 360px);
+        width: min(88vw, 360px);
+        max-width: 100%;
         padding: calc(env(safe-area-inset-top) + 18px) 16px 22px;
         background:
           linear-gradient(180deg, rgba(249, 241, 226, 0.98), rgba(255, 251, 245, 0.98)),
@@ -196,6 +198,7 @@
         display: block;
         font-size: 14px;
         line-height: 1.4;
+        overflow-wrap: anywhere;
       }
 
       .drawer-link span {
@@ -203,6 +206,7 @@
         margin-top: 6px;
         font-size: 12px;
         color: var(--ink-soft);
+        overflow-wrap: anywhere;
       }
 
       .overlay {
@@ -260,6 +264,10 @@
         border-radius: 999px;
         font-size: 12px;
         font-weight: 800;
+        max-width: 100%;
+        line-height: 1.35;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
 
       .section-label {
@@ -343,6 +351,10 @@
         color: var(--accent);
         font-size: 11px;
         font-weight: 800;
+        max-width: 100%;
+        line-height: 1.35;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
 
       .question-badge-subtle {
@@ -458,6 +470,12 @@
         color: var(--accent);
       }
 
+      .summary-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
       .answer-toggle summary::-webkit-details-marker {
         display: none;
       }
@@ -490,10 +508,12 @@
       }
 
       table {
-        width: max-content;
-        min-width: 100%;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
         border-collapse: collapse;
         border-spacing: 0;
+        table-layout: fixed;
       }
 
       th,
@@ -502,7 +522,8 @@
         border: 1px solid rgba(70, 54, 40, 0.08);
         vertical-align: top;
         text-align: left;
-        word-break: keep-all;
+        word-break: break-word;
+        overflow-wrap: anywhere;
       }
 
       th {
@@ -515,6 +536,160 @@
         border: 0;
         border-top: 1px dashed rgba(70, 54, 40, 0.18);
         margin: 18px 0;
+      }
+
+      @media (max-width: 380px) {
+        .topbar {
+          gap: 10px;
+          padding: calc(env(safe-area-inset-top) + 12px) 12px 12px;
+        }
+
+        .menu-btn {
+          width: 42px;
+          height: 42px;
+          border-radius: 14px;
+        }
+
+        .top-title {
+          font-size: 16px;
+        }
+
+        .top-subtitle {
+          font-size: 11px;
+          line-height: 1.45;
+        }
+
+        .drawer {
+          width: min(90vw, 320px);
+          padding: calc(env(safe-area-inset-top) + 16px) 12px 18px;
+        }
+
+        .drawer-link {
+          padding: 12px;
+          border-radius: 16px;
+        }
+
+        main {
+          padding: 12px 10px 32px;
+        }
+
+        .paper-section {
+          margin-top: 12px;
+          padding: 14px;
+          border-radius: 22px;
+        }
+
+        .section-head {
+          margin-bottom: 14px;
+          padding-bottom: 14px;
+        }
+
+        .section-title {
+          margin: 10px 0 8px;
+          font-size: 20px;
+        }
+
+        .question-stack {
+          gap: 12px;
+        }
+
+        .question-card {
+          padding: 13px;
+          border-radius: 18px;
+        }
+
+        .question-head {
+          grid-template-columns: 46px 1fr;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .question-index {
+          width: 46px;
+          height: 46px;
+          border-radius: 14px;
+          font-size: 18px;
+        }
+
+        .question-title {
+          margin-top: 8px;
+          font-size: 17px;
+        }
+
+        .question-content {
+          font-size: 14px;
+          line-height: 1.72;
+        }
+
+        .question-content h1,
+        .question-content h2,
+        .question-content h3,
+        .question-content h4,
+        .question-content h5,
+        .question-content h6 {
+          font-size: 16px;
+        }
+
+        .question-content ul,
+        .question-content ol {
+          padding-left: 18px;
+        }
+
+        .question-content blockquote,
+        .callout,
+        .answer-toggle summary,
+        .answer-body {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+
+        .question-content blockquote {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+
+        .callout,
+        .answer-toggle {
+          border-radius: 16px;
+        }
+
+        .summary-caret {
+          width: 24px;
+          height: 24px;
+          flex: 0 0 24px;
+        }
+
+        th,
+        td {
+          padding: 10px 8px;
+          font-size: 13px;
+        }
+      }
+
+      @media (max-width: 340px) {
+        .question-head {
+          grid-template-columns: 1fr;
+        }
+
+        .question-index {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+        }
+
+        .section-label,
+        .section-range,
+        .meta-chip,
+        .question-badge {
+          padding: 6px 9px;
+          font-size: 11px;
+        }
+
+        th,
+        td {
+          padding: 8px 6px;
+          font-size: 12px;
+        }
       }
 
       @media (min-width: 760px) {
@@ -801,10 +976,10 @@
               </header>
               <div class="question-content"><p>다음 원문을 읽고 괄호 안에 들어갈 사성제 각 항목의 이름과 의미를 쓰시오.</p>
 <blockquote>
-<p>&quot;비구들이여, 고의 성제란 이것이다. 생은 고이다. 노는 고이다. 병은 고이다. 사는 고이다.&quot; → <strong>( 고제 )</strong><br>
-&quot;비구들이여, 고의 발생의 성제란 이것이다. 후유(後有)를 일으키고 기쁨과 탐욕을 수반하는 갈애가 그것이다.&quot; → <strong>( 집제 )</strong><br>
-&quot;비구들이여, 고의 소멸의 성제란 이것이다. 이 갈애를 남김없이 멸하고 버리고 떠나는 일이다.&quot; → <strong>( 멸제 )</strong><br>
-&quot;비구들이여, 고의 소멸에 따르는 도의 성제란 이것이다. 성스러운 팔지의 도이니라.&quot; → <strong>( 도제 )</strong> ＜여래소설＞</p>
+<p>&quot;비구들이여, 고의 성제란 이것이다. 생은 고이다. 노는 고이다. 병은 고이다. 사는 고이다.&quot; → <strong>( )</strong><br>
+&quot;비구들이여, 고의 발생의 성제란 이것이다. 후유(後有)를 일으키고 기쁨과 탐욕을 수반하는 갈애가 그것이다.&quot; → <strong>( )</strong><br>
+&quot;비구들이여, 고의 소멸의 성제란 이것이다. 이 갈애를 남김없이 멸하고 버리고 떠나는 일이다.&quot; → <strong>( )</strong><br>
+&quot;비구들이여, 고의 소멸에 따르는 도의 성제란 이것이다. 성스러운 팔지의 도이니라.&quot; → <strong>( )</strong> ＜여래소설＞</p>
 </blockquote>
 <details class="answer-toggle">
   <summary>
@@ -908,7 +1083,7 @@
 <p>&quot;삼세의 일체법은 진실로 존재한다. 그 이유는 무엇인가? 경전에서 세존께서 말씀하셨기 때문이다. '비구들이여, 만일 과거의 色이 존재하지 않는다면, 마땅히 여러 제자들은 과거의 색에 대한 염오를 부지런히 닦지 못할 것이다.'&quot; ＜구사론＞</p>
 </blockquote>
 <ol>
-<li>이 주장을 펼친 학파는? (1점)</li>
+<li>이 주장을 펼친 학파는? ㉠:( ) (1점)</li>
 </ol>
 <details class="answer-toggle">
   <summary>
@@ -1380,7 +1555,7 @@
               </header>
               <div class="question-content"><p>다음은 원효의 ＜대승기신론소＞에서 인용한 것이다. &lt;작성방법&gt;에 따라 서술하시오.</p>
 <blockquote>
-<p>&quot;이론을 펼칠 때는 '제한 없고 끝이 없다는'(無量無邊) 뜻을 근본으로 삼고, 이론을 합할 때는 '두 가지 측면/맥락'(㉠: ) 와/과 '하나로 보는 마음자리'(㉡: )라는 도리를 요점으로 삼는다. ㉠:( ) 안에서는 온갖 뜻을 받아들여도 혼란스럽지 않고, 본질이나 실체에 의한 막힘이 없어 한계가 없는 도리는 ㉡:( )에서 섞여 융합된다.&quot; ＜대승기신론소＞</p>
+<p>&quot;이론을 펼칠 때는 '제한 없고 끝이 없다는'(無量無邊) 뜻을 근본으로 삼고, 이론을 합할 때는 '두 가지 측면/맥락'(㉠:( )) 와/과 '하나로 보는 마음자리'(㉡:( ))라는 도리를 요점으로 삼는다. ㉠:( ) 안에서는 온갖 뜻을 받아들여도 혼란스럽지 않고, 본질이나 실체에 의한 막힘이 없어 한계가 없는 도리는 ㉡:( )에서 섞여 융합된다.&quot; ＜대승기신론소＞</p>
 </blockquote>
 <p><strong>＜작성방법＞</strong></p>
 <ol>
@@ -1614,8 +1789,8 @@
               </header>
               <div class="question-content"><p>다음은 공자가 정치의 본질에 대해 말한 구절이다.</p>
 <blockquote>
-<p><strong>爲政以德, 譬如北辰, 居其所而㉠衆星共之.</strong><br>
-(덕으로 정치를 하면, 비유컨대 북극성과 같아서, 그 자리에 있으면 ㉠이 것들이 모두 그것을 향한다.)</p>
+<p><strong>爲政以德, 譬如北辰, 居其所而㉠:( )共之.</strong><br>
+(덕으로 정치를 하면, 비유컨대 북극성과 같아서, 그 자리에 있으면 ㉠:( )이/가 모두 그것을 향한다.)</p>
 </blockquote>
 <p>위 구절에서 ㉠에 들어갈 말을 쓰고, 이 구절의 출처와 핵심 정치 사상을 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -1660,7 +1835,7 @@
               </header>
               <div class="question-content"><p>다음은 공자가 통치 원리에 대해 말한 구절이다.</p>
 <blockquote>
-<p><strong>道之以政, 齊之以刑, 民免而㉠無恥; 道之以德, 齊之以禮, 有恥且㉡格.</strong></p>
+<p><strong>道之以政, 齊之以刑, 民免而㉠:( ); 道之以德, 齊之以禮, 有恥且㉡:( ).</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 이 구절에 나타난 두 가지 통치 방식의 차이를 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -1717,7 +1892,7 @@
               </header>
               <div class="question-content"><p>다음은 공자가 사생의 의리에 대해 말한 구절이다.</p>
 <blockquote>
-<p><strong>志士仁人, 無求㉠生以害仁, 有殺身以成㉡仁.</strong></p>
+<p><strong>志士仁人, 無求㉠:( )以害仁, 有殺身以成㉡:( ).</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 이 구절에 담긴 유교적 사생관(死生觀)을 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -1759,7 +1934,7 @@
               </header>
               <div class="question-content"><p>다음은 맹자가 민본(民本) 사상을 표현한 구절이다.</p>
 <blockquote>
-<p><strong>民爲貴, 社稷次之, ㉠君爲輕. ... 聞誅一夫㉡紂矣, 未聞弑君也.</strong></p>
+<p><strong>民爲貴, 社稷次之, ㉠:( ). ... 聞誅一夫㉡:( )矣, 未聞弑君也.</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 맹자 민본사상의 핵심 내용을 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -1808,7 +1983,7 @@
               </header>
               <div class="question-content"><p>다음은 순자가 예(禮)의 기원을 설명한 구절이다.</p>
 <blockquote>
-<p><strong>禮起於何也? 曰: 人生而有欲, 欲而不得, 則不能無求; 求而無度量分界, 則不能不爭; 爭則㉠亂, 亂則窮. 先王惡其亂也, 故制禮義以分之, 以養人之欲, 給人之求. 使欲必不窮乎物, 物必不屈於欲, 兩者相持而長, 是㉡禮之所起也.</strong></p>
+<p><strong>禮起於何也? 曰: 人生而有欲, 欲而不得, 則不能無求; 求而無度量分界, 則不能不爭; 爭則㉠:( ), 亂則窮. 先王惡其亂也, 故制禮義以分之, 以養人之欲, 給人之求. 使欲必不窮乎物, 物必不屈於欲, 兩者相持而長, 是㉡:( )也.</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 순자의 예치론(禮治論)의 핵심을 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -1858,8 +2033,8 @@
               </header>
               <div class="question-content"><p>다음은 공자가 문화와 교육에 대해 말한 구절이다.</p>
 <blockquote>
-<p><strong>子曰: &quot;㉠興於詩, 立於禮, 成於樂.&quot;</strong><br>
-<strong>子曰: &quot;質勝文則野, 文勝質則史. ㉡文質彬彬, 然後君子.&quot;</strong></p>
+<p><strong>子曰: &quot;㉠:( ), 立於禮, 成於樂.&quot;</strong><br>
+<strong>子曰: &quot;質勝文則野, 文勝質則史. ㉡:( ), 然後君子.&quot;</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 말을 각각 쓰고, 공자의 예악론(禮樂論)의 의의를 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -1979,7 +2154,7 @@
               </header>
               <div class="question-content"><p>다음은 노자 『도덕경』 제12장이다.</p>
 <blockquote>
-<p><strong>五色令人目盲, 五音令人耳聾, 五味令人口爽, 馳騁畋獵令人心發狂, 難得之貨令人行妨. 是以聖人爲腹不爲㉠目, 故去㉡彼取此.</strong></p>
+<p><strong>五色令人目盲, 五音令人耳聾, 五味令人口爽, 馳騁畋獵令人心發狂, 難得之貨令人行妨. 是以聖人爲腹不爲㉠:( ), 故去㉡:( )取此.</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 이 구절에 나타난 노자의 문화·소비관을 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -2042,7 +2217,7 @@
               </header>
               <div class="question-content"><p>다음은 노자 『도덕경』의 역설적 진리를 표현한 구절이다.</p>
 <blockquote>
-<p><strong>大成若缺, 其用不弊. 大盈若沖, 其用不窮. 大直若屈, 大巧若拙, ㉠大辯若訥.</strong></p>
+<p><strong>大成若缺, 其用不弊. 大盈若沖, 其用不窮. 大直若屈, 大巧若拙, ㉠:( ).</strong></p>
 </blockquote>
 <p>위 구절의 ㉠에 들어갈 말을 쓰고, 이 구절에 나타난 노자의 역설적 사유를 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -2118,7 +2293,7 @@
               </header>
               <div class="question-content"><p>다음은 노자의 정치철학을 담은 구절이다.</p>
 <blockquote>
-<p><strong>我無爲而民㉠自化, 我好靜而民自正, 我無事而民㉡自富, 我無欲而民自樸.</strong></p>
+<p><strong>我無爲而民㉠:( ), 我好靜而民自正, 我無事而民㉡:( ), 我無欲而民自樸.</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 말을 쓰고, 노자의 무위정치(無爲政治)의 핵심을 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -2185,7 +2360,7 @@
               </header>
               <div class="question-content"><p>다음은 장자의 좌망(坐忘)과 오상아(吾喪我)에 관한 내용이다.</p>
 <blockquote>
-<p>안회는 좌망(坐忘)을 &quot;육신을 무너뜨리고 총명을 내쫓고 형체를 떠나며, 지식을 버리고 크게 통하는 ㉠도(道)와 하나가 되는 것&quot;이라고 설명하였음. 장자는 '거짓된 나(㉡我)'를 극복하고 '참된 나(吾)'를 만나는 것을 오상아(吾喪我)라고 말하였음.</p>
+<p>안회는 좌망(坐忘)을 &quot;육신을 무너뜨리고 총명을 내쫓고 형체를 떠나며, 지식을 버리고 크게 통하는 ㉠:( )와 하나가 되는 것&quot;이라고 설명하였음. 장자는 '거짓된 나(㉡:( ))'를 극복하고 '참된 나(吾)'를 만나는 것을 오상아(吾喪我)라고 말하였음.</p>
 </blockquote>
 <p>위 내용에서 ㉠과 ㉡에 들어갈 개념을 쓰고, 장자의 오상아(吾喪我)와 좌망(坐忘)의 의미를 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -2323,10 +2498,10 @@
               </header>
               <div class="question-content"><p>다음은 퇴계 이황의 사단칠정론(四端七情論)에 관한 글이다.</p>
 <blockquote>
-<p><strong>성을 논하자면 이가 기 속에 있는데도 자사(子思)와 맹자(孟子)는 오히려 본연의 성[本然之性]만을 지적해 내었고 정자(程子)와 장자(張子)는 오히려 기질의 성[氣質之性]을 뽑아내어 논하였으니, 정을 논함에 있어서는 성이 기질 속에 있다 하여 각각 발하는 바에 나아가 ㉠사단과 칠정의 소종래를 나눌 수 없겠습니까.</strong></p>
+<p><strong>성을 논하자면 이가 기 속에 있는데도 자사(子思)와 맹자(孟子)는 오히려 본연의 성[本然之性]만을 지적해 내었고 정자(程子)와 장자(張子)는 오히려 기질의 성[氣質之性]을 뽑아내어 논하였으니, 정을 논함에 있어서는 성이 기질 속에 있다 하여 각각 발하는 바에 나아가 ㉠:( )과 칠정의 소종래를 나눌 수 없겠습니까.</strong></p>
 </blockquote>
 <blockquote>
-<p><strong>인심(人心)은 곧 ㉡칠정이고 도심(道心)은 곧 사단이니, 두 개의 도리가 있는 것이 아닙니다.</strong></p>
+<p><strong>인심(人心)은 곧 ㉡:( )이고 도심(道心)은 곧 사단이니, 두 개의 도리가 있는 것이 아닙니다.</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 개념을 설명하고, 퇴계의 사단칠정론의 핵심을 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>
@@ -2453,7 +2628,7 @@
               </header>
               <div class="question-content"><p>다음은 주희(朱熹)의 태극·음양론에 관한 구절이다.</p>
 <blockquote>
-<p><strong>공자가 말하기를, &quot;《주역(周易)》에 ㉠태극(太極)이 있으니, 이것이 양의(兩儀)를 낳는다.&quot; 하였고, 주자(周子)가 말하기를, &quot;태극이 동(動)하여 ㉡양(陽)을 낳고, 정(靜)하여 음(陰)을 낳는다.&quot;</strong></p>
+<p><strong>공자가 말하기를, &quot;《주역(周易)》에 ㉠:( )이 있으니, 이것이 양의(兩儀)를 낳는다.&quot; 하였고, 주자(周子)가 말하기를, &quot;태극이 동(動)하여 ㉡:( )을 낳고, 정(靜)하여 음(陰)을 낳는다.&quot;</strong></p>
 </blockquote>
 <p>위 구절에서 ㉠과 ㉡에 들어갈 개념을 쓰고, 주희 이학(理學)의 우주론을 서술하시오.</p>
 <p>&lt;작성방법&gt;<br>

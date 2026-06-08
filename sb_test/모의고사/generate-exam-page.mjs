@@ -325,6 +325,7 @@ function buildHtml(sections) {
         min-height: 100vh;
         font-family: "MaruBuri", "KoPubWorldBatang", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
         color: var(--ink);
+        overflow-x: hidden;
         background:
           radial-gradient(circle at top, rgba(255, 255, 255, 0.42), transparent 28%),
           linear-gradient(180deg, #e8dfcf 0%, var(--bg) 100%);
@@ -420,7 +421,8 @@ function buildHtml(sections) {
         position: fixed;
         inset: 0 auto 0 0;
         z-index: 50;
-        width: min(84vw, 360px);
+        width: min(88vw, 360px);
+        max-width: 100%;
         padding: calc(env(safe-area-inset-top) + 18px) 16px 22px;
         background:
           linear-gradient(180deg, rgba(249, 241, 226, 0.98), rgba(255, 251, 245, 0.98)),
@@ -485,6 +487,7 @@ function buildHtml(sections) {
         display: block;
         font-size: 14px;
         line-height: 1.4;
+        overflow-wrap: anywhere;
       }
 
       .drawer-link span {
@@ -492,6 +495,7 @@ function buildHtml(sections) {
         margin-top: 6px;
         font-size: 12px;
         color: var(--ink-soft);
+        overflow-wrap: anywhere;
       }
 
       .overlay {
@@ -549,6 +553,10 @@ function buildHtml(sections) {
         border-radius: 999px;
         font-size: 12px;
         font-weight: 800;
+        max-width: 100%;
+        line-height: 1.35;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
 
       .section-label {
@@ -632,6 +640,10 @@ function buildHtml(sections) {
         color: var(--accent);
         font-size: 11px;
         font-weight: 800;
+        max-width: 100%;
+        line-height: 1.35;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
 
       .question-badge-subtle {
@@ -747,6 +759,12 @@ function buildHtml(sections) {
         color: var(--accent);
       }
 
+      .summary-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
       .answer-toggle summary::-webkit-details-marker {
         display: none;
       }
@@ -779,10 +797,12 @@ function buildHtml(sections) {
       }
 
       table {
-        width: max-content;
-        min-width: 100%;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
         border-collapse: collapse;
         border-spacing: 0;
+        table-layout: fixed;
       }
 
       th,
@@ -791,7 +811,8 @@ function buildHtml(sections) {
         border: 1px solid rgba(70, 54, 40, 0.08);
         vertical-align: top;
         text-align: left;
-        word-break: keep-all;
+        word-break: break-word;
+        overflow-wrap: anywhere;
       }
 
       th {
@@ -804,6 +825,160 @@ function buildHtml(sections) {
         border: 0;
         border-top: 1px dashed rgba(70, 54, 40, 0.18);
         margin: 18px 0;
+      }
+
+      @media (max-width: 380px) {
+        .topbar {
+          gap: 10px;
+          padding: calc(env(safe-area-inset-top) + 12px) 12px 12px;
+        }
+
+        .menu-btn {
+          width: 42px;
+          height: 42px;
+          border-radius: 14px;
+        }
+
+        .top-title {
+          font-size: 16px;
+        }
+
+        .top-subtitle {
+          font-size: 11px;
+          line-height: 1.45;
+        }
+
+        .drawer {
+          width: min(90vw, 320px);
+          padding: calc(env(safe-area-inset-top) + 16px) 12px 18px;
+        }
+
+        .drawer-link {
+          padding: 12px;
+          border-radius: 16px;
+        }
+
+        main {
+          padding: 12px 10px 32px;
+        }
+
+        .paper-section {
+          margin-top: 12px;
+          padding: 14px;
+          border-radius: 22px;
+        }
+
+        .section-head {
+          margin-bottom: 14px;
+          padding-bottom: 14px;
+        }
+
+        .section-title {
+          margin: 10px 0 8px;
+          font-size: 20px;
+        }
+
+        .question-stack {
+          gap: 12px;
+        }
+
+        .question-card {
+          padding: 13px;
+          border-radius: 18px;
+        }
+
+        .question-head {
+          grid-template-columns: 46px 1fr;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .question-index {
+          width: 46px;
+          height: 46px;
+          border-radius: 14px;
+          font-size: 18px;
+        }
+
+        .question-title {
+          margin-top: 8px;
+          font-size: 17px;
+        }
+
+        .question-content {
+          font-size: 14px;
+          line-height: 1.72;
+        }
+
+        .question-content h1,
+        .question-content h2,
+        .question-content h3,
+        .question-content h4,
+        .question-content h5,
+        .question-content h6 {
+          font-size: 16px;
+        }
+
+        .question-content ul,
+        .question-content ol {
+          padding-left: 18px;
+        }
+
+        .question-content blockquote,
+        .callout,
+        .answer-toggle summary,
+        .answer-body {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+
+        .question-content blockquote {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+
+        .callout,
+        .answer-toggle {
+          border-radius: 16px;
+        }
+
+        .summary-caret {
+          width: 24px;
+          height: 24px;
+          flex: 0 0 24px;
+        }
+
+        th,
+        td {
+          padding: 10px 8px;
+          font-size: 13px;
+        }
+      }
+
+      @media (max-width: 340px) {
+        .question-head {
+          grid-template-columns: 1fr;
+        }
+
+        .question-index {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+        }
+
+        .section-label,
+        .section-range,
+        .meta-chip,
+        .question-badge {
+          padding: 6px 9px;
+          font-size: 11px;
+        }
+
+        th,
+        td {
+          padding: 8px 6px;
+          font-size: 12px;
+        }
       }
 
       @media (min-width: 760px) {
