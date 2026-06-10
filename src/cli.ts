@@ -283,6 +283,52 @@ program
   })
 
 program
+  .command("patch <original> <edited>")
+  .description("서식 보존 라운드트립 패치 — 편집된 마크다운을 원본 HWPX에 in-place 반영 (kordoc patch 원본.hwpx 편집.md -o 출력.hwpx)")
+  .option("-o, --output <path>", "출력 HWPX 경로 (기본: <원본>.patched.hwpx)")
+  .option("--no-verify", "패치 후 재파싱 자동 검증 생략")
+  .option("--silent", "진행 메시지 숨기기")
+  .action(async (original: string, edited: string, opts) => {
+    try {
+      const { patchHwpx } = await import("./index.js")
+      // 루트 커맨드의 동명 옵션(-o/--silent)이 서브커맨드 옵션을 가로채는 commander 동작 보완
+      const rootOpts = program.opts()
+      const output: string | undefined = opts.output ?? rootOpts.output
+      const silent: boolean = opts.silent ?? rootOpts.silent
+      const originalBuf = new Uint8Array(readFileSync(resolve(original)))
+      const editedMarkdown = readFileSync(resolve(edited), "utf-8")
+
+      const result = await patchHwpx(originalBuf, editedMarkdown, { verify: opts.verify !== false })
+      if (!result.success || !result.data) {
+        process.stderr.write(`[kordoc] 패치 실패: ${result.error ?? "알 수 없는 오류"}\n`)
+        process.exit(1)
+      }
+
+      const outPath = resolve(output ?? original.replace(/\.hwpx$/i, "") + ".patched.hwpx")
+      mkdirSync(dirname(outPath), { recursive: true })
+      writeFileSync(outPath, result.data)
+
+      if (!silent) {
+        process.stderr.write(`[kordoc] ${result.applied}개 변경 적용 (원본 서식 보존) → ${outPath}\n`)
+        for (const s of result.skipped) {
+          process.stderr.write(`[kordoc] ⚠️ SKIP: ${s.reason}${s.before ? ` | ${s.before}` : ""}\n`)
+        }
+        if (result.verification) {
+          const v = result.verification.stats
+          const residual = v.added + v.removed + v.modified
+          process.stderr.write(residual === 0
+            ? `[kordoc] ✓ 검증: 편집 마크다운과 재파싱 결과 완전 일치 (${v.unchanged}블록)\n`
+            : `[kordoc] ⚠️ 검증 잔차: 수정 ${v.modified}, 추가 ${v.added}, 삭제 ${v.removed} (미지원 변경은 skip 목록 참조)\n`)
+        }
+      }
+      if (result.skipped.length > 0) process.exitCode = 2
+    } catch (err) {
+      process.stderr.write(`[kordoc] 오류: ${sanitizeError(err)}\n`)
+      process.exit(1)
+    }
+  })
+
+program
   .command("mcp")
   .description("MCP 서버 실행 (Claude / Cursor / Windsurf 연동)")
   .action(async () => {

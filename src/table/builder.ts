@@ -2,6 +2,7 @@
 
 import type { CellContext, IRBlock, IRCell, IRTable } from "../types.js"
 import { sanitizeHref } from "../utils.js"
+import { mapPuaText } from "../shared/pua.js"
 
 /** 테이블 열 수 상한 — 한국 공공문서 기준 충분한 값 */
 export const MAX_COLS = 200
@@ -151,8 +152,9 @@ const HWP_SHAPE_ALT_TEXT_RE = /(?:모서리가 둥근 |둥근 )?(?:사각형|직
 
 /** HWP PUA 특수문자 및 도형 대체텍스트 제거 — 모든 포맷 공통 */
 function sanitizeText(text: string): string {
-  let result = text
-    // Supplementary Private Use Area (U+F0000-U+FFFFD) — HWP 전용 기호
+  // 한컴 PUA → 표준 유니코드 매핑 (rhwp 검증 테이블) — 제거 regex보다 먼저 적용
+  let result = mapPuaText(text)
+    // Supplementary Private Use Area (U+F0000-U+FFFFD) — HWP 전용 기호 (매핑 안 된 잔여분)
     .replace(/[\u{F0000}-\u{FFFFD}]/gu, "")
     // HWP 도형/개체 자동생성 대체텍스트 제거
     .replace(HWP_SHAPE_ALT_TEXT_RE, "")
@@ -206,7 +208,9 @@ export function flattenLayoutTables(blocks: IRBlock[]): IRBlock[] {
       }
 
       // 레이아웃 테이블 판정: 많은 줄바꿈(>5), 또는 적은 행에 비해 총 텍스트 과다(>300)
-      if (totalNewlines > 5 || (numRows <= 2 && totalTextLen > 300)) {
+      // 단, 열이 4개 이상이면 헤더-값 구조의 데이터 표일 가능성이 높아 해체하지 않는다
+      // (실증: 2×10 모집프로그램 표가 문단으로 해체되어 헤더↔값 연결 파괴)
+      if (numCols < 4 && (totalNewlines > 5 || (numRows <= 2 && totalTextLen > 300))) {
         // 레이아웃 테이블 → 각 셀을 paragraph 블록으로 분해
         for (let r = 0; r < numRows; r++) {
           for (let c = 0; c < numCols; c++) {
@@ -311,6 +315,11 @@ export function blocksToMarkdown(blocks: IRBlock[]): string {
       if (lines.length > 0 && lines[lines.length - 1] !== "") {
         lines.push("")
       }
+      // 표 캡션 — 표 위에 강조 문단으로 출력 (v3.0)
+      if (block.table.caption) {
+        const caption = sanitizeText(block.table.caption)
+        if (caption) lines.push(`**${escapeGfm(caption)}**`, "")
+      }
       const tableMd = tableToMarkdown(block.table)
       if (tableMd) {
         lines.push(tableMd)
@@ -330,6 +339,36 @@ function hasMergedCells(table: IRTable): boolean {
     }
   }
   return false
+}
+
+/** 셀 내부에 중첩 표 블록 존재 여부 — v3.0 */
+function hasNestedTables(table: IRTable): boolean {
+  for (const row of table.cells) {
+    for (const cell of row) {
+      if (cell.blocks?.some(b => b.type === "table" && b.table)) return true
+    }
+  }
+  return false
+}
+
+/** 셀 내부 콘텐츠 → HTML — blocks(중첩표/다중문단) 있으면 구조 보존 재귀 렌더링 */
+function cellInnerHtml(cell: IRCell): string {
+  if (cell.blocks?.length) {
+    return cell.blocks
+      .map(b => {
+        if (b.type === "table" && b.table) {
+          // 중첩표 캡션도 보존 — 표 위에 텍스트로
+          const cap = b.table.caption ? sanitizeText(b.table.caption) : ""
+          return (cap ? cap + "<br>" : "") + tableToHtml(b.table)
+        }
+        if (b.type === "image" && b.text) return `<img src="${b.text}" alt="image">`
+        const t = sanitizeText(b.text ?? "")
+        return t ? t.replace(/\n/g, "<br>") : ""
+      })
+      .filter(Boolean)
+      .join("<br>")
+  }
+  return sanitizeText(cell.text).replace(/\n/g, "<br>")
 }
 
 function containsInlineMath(text: string): boolean {
@@ -367,7 +406,7 @@ function tableToHtml(table: IRTable): string {
         }
       }
 
-      const text = sanitizeText(cell.text).replace(/\n/g, "<br>")
+      const text = cellInnerHtml(cell)
       const attrs: string[] = []
       if (cell.colSpan > 1) attrs.push(`colspan="${cell.colSpan}"`)
       if (cell.rowSpan > 1) attrs.push(`rowspan="${cell.rowSpan}"`)
@@ -386,9 +425,11 @@ function tableToMarkdown(table: IRTable): string {
 
   const { cells, rows: numRows, cols: numCols } = table
 
-  // 병합 셀이 있으면 HTML 테이블로 출력하되, 수식이 있으면 GFM 표로 출력한다.
+  // 병합 셀·중첩표가 있으면 HTML 테이블로 출력하되, 수식이 있으면 GFM 표로 출력한다.
   // 많은 Markdown 렌더러가 raw HTML table 내부의 $...$를 수식으로 다시 처리하지 않는다.
-  if (hasMergedCells(table) && !tableContainsInlineMath(table)) return tableToHtml(table)
+  if ((hasMergedCells(table) || hasNestedTables(table)) && !tableContainsInlineMath(table)) {
+    return tableToHtml(table)
+  }
 
   // 1행 1열 → 구조화된 텍스트 (빈 셀이면 스킵)
   if (numRows === 1 && numCols === 1) {
@@ -445,7 +486,7 @@ function tableToMarkdown(table: IRTable): string {
   // 2) "첫 열만 값, 나머지 빈" 행 → 다음 데이터 행의 첫 열에 값을 전파
   //    단, colSpan으로 인한 빈 열(skip 셀)은 이 대상이 아님
   const uniqueRows: string[][] = []
-  let pendingFirstCol = ""
+  let pendingLabelRow: string[] | null = null
   for (let r = 0; r < display.length; r++) {
     const row = display[r]
     const isEmptyPlaceholder = row.every(cell => cell === "")
@@ -456,19 +497,20 @@ function tableToMarkdown(table: IRTable): string {
     const nonEmptyCols = row.filter(cell => cell !== "")
     const hasSkipInRow = row.some((_, c) => skip.has(`${r},${c}`))
     if (!hasSkipInRow && nonEmptyCols.length === 1 && row[0] !== "" && row.slice(1).every(c => c === "")) {
-      pendingFirstCol = row[0]
+      if (pendingLabelRow) uniqueRows.push(pendingLabelRow) // 연속 보류 — 앞 행 소실 방지
+      pendingLabelRow = row
       continue
     }
 
-    // 저장된 첫 열 값을 현재 행의 빈 첫 열에 전파
-    if (pendingFirstCol && row[0] === "") {
-      row[0] = pendingFirstCol
-      pendingFirstCol = ""
-    } else {
-      pendingFirstCol = ""
+    // 보류한 첫 열 값을 현재 행의 빈 첫 열에 전파, 전파 불가면 보류 행 그대로 출력
+    if (pendingLabelRow) {
+      if (row[0] === "") row[0] = pendingLabelRow[0]
+      else uniqueRows.push(pendingLabelRow)
+      pendingLabelRow = null
     }
     uniqueRows.push(row)
   }
+  if (pendingLabelRow) uniqueRows.push(pendingLabelRow) // 표 끝 보류 행 소실 방지
 
   if (uniqueRows.length === 0) return ""
 

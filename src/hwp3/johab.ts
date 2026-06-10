@@ -5,7 +5,7 @@
  * 한자/기호 등 그 외 영역은 johab-symbols.ts 의 lookup table 로 처리한다.
  * 매핑되지 않는 코드는 '?' 로 fallback 한다.
  *
- * 출처: rhwp/src/parser/hwp3/johab.rs (Apache-2.0). 알고리즘 동일.
+ * 출처: rhwp/src/parser/hwp3/johab.rs (MIT). 알고리즘 동일.
  */
 
 import { JOHAB_SYMBOLS } from "./johab-symbols.js"

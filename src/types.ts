@@ -72,12 +72,22 @@ export interface IRTable {
   cells: IRCell[][]
   /** 첫 행을 헤더로 렌더링할지 여부 (현재: rows > 1이면 true — 의미적 감지가 아닌 레이아웃 힌트) */
   hasHeader: boolean
+  /** 표 캡션 (예: "표 1. 부서별 예산") — v3.0 */
+  caption?: string
 }
 
 export interface IRCell {
   text: string
   colSpan: number
   rowSpan: number
+  /**
+   * 셀 내부 블록 콘텐츠 — v3.0.
+   * 중첩 표·이미지·다중 문단을 구조 그대로 보존한다.
+   * blocks가 있으면 text는 blocks의 평탄화 텍스트(하위 호환용)다.
+   */
+  blocks?: IRBlock[]
+  /** 제목 셀 여부 (HWP5 width_ref bit2 / HWPX header 속성) — v3.0 */
+  isHeader?: boolean
 }
 
 // ─── 메타데이터 ─────────────────────────────────────
@@ -164,6 +174,7 @@ export type WarningCode =
   | "MALFORMED_XML"
   | "PARTIAL_PARSE"
   | "LENIENT_CFB_RECOVERY"
+  | "NEEDS_OCR"
 
 /** 문서 구조 (헤딩 트리) */
 export interface OutlineItem {
@@ -291,6 +302,39 @@ export interface CellDiff {
 export interface DiffResult {
   stats: { added: number; removed: number; modified: number; unchanged: number }
   diffs: BlockDiff[]
+}
+
+// ─── 라운드트립 패치 (v3.0) ─────────────────────────
+
+/** 패치 중 매핑 실패/미지원으로 건너뛴 항목 — silent 실패 금지 */
+export interface PatchSkip {
+  /** 건너뛴 사유 */
+  reason: string
+  /** 원본 쪽 내용 요약 (최대 80자) */
+  before?: string
+  /** 편집 쪽 내용 요약 (최대 80자) */
+  after?: string
+}
+
+/** patchHwpx 옵션 */
+export interface PatchOptions {
+  /** 패치 후 재파싱 자동 검증 (기본 true) */
+  verify?: boolean
+}
+
+/** patchHwpx 결과 */
+export interface PatchResult {
+  success: boolean
+  /** 패치된 HWPX (success=true) */
+  data?: Uint8Array
+  /** 적용된 변경 수 */
+  applied: number
+  /** 매핑 실패 항목 (이유 포함) */
+  skipped: PatchSkip[]
+  /** 자동 검증: 패치본 재파싱 vs 편집 마크다운 diff */
+  verification?: DiffResult
+  /** 실패 사유 (success=false) */
+  error?: string
 }
 
 // ─── 양식 인식 ──────────────────────────────────────

@@ -26,6 +26,8 @@ export interface ClusterItem {
   h: number
   fontSize: number
   fontName: string
+  /** pdfjs 공백 아이템이 직전에 있었음 — 단어 경계 힌트 */
+  hasSpaceBefore?: boolean
 }
 
 // ─── 상수 ──────────────────────────────────────────────
@@ -75,8 +77,11 @@ export function detectClusterTables(items: ClusterItem[], pageNum: number): Clus
   // 0. 균등배분 아이템 사전 병합 (개별 글자 → 단어)
   const { merged, originMap } = mergeEvenSpacedClusters(items)
 
-  // 1. Y좌표로 행 그룹핑
-  const rows = groupByBaseline(merged)
+  // 1. Y좌표로 행 그룹핑 + 첨자 행 복원
+  // 본문 줄에서 살짝 올라간 각주 마커(*)·덧말은 baseline 그룹핑(Y_TOL)에서 별도 행으로
+  // 떨어진다. 이런 조각 행이 표 헤더/열 앵커로 오인되면 본문 문단이 통째로 표에 흡수되므로
+  // 수직으로 겹치는 행은 같은 시각적 줄로 병합한다.
+  const rows = mergeOverlappingRows(groupByBaseline(merged))
   if (rows.length < MIN_ROWS) return []
 
   const results: ClusterTableResult[] = []
@@ -142,6 +147,8 @@ function mergeEvenSpacedClusters(
       if (/^[가-힣\d]$/.test(sorted[i].text)) {
         let runEnd = i + 1
         while (runEnd < sorted.length && /^[가-힣\d]$/.test(sorted[runEnd].text)) {
+          // 명시적 공백 글리프 = 단어 경계 → run 분리 (Type3 글자 분리 배치 오판 방지)
+          if (sorted[runEnd].hasSpaceBefore) break
           const gap = sorted[runEnd].x - (sorted[runEnd - 1].x + sorted[runEnd - 1].w)
           const fs = sorted[runEnd].fontSize
           if (gap < fs * 0.1 || gap > fs * 3) break
@@ -243,6 +250,50 @@ function detectHeaderRow(rows: RowGroup[]): HeaderResult | null {
     return { columns, headerIdx: ri }
   }
   return null
+}
+
+/**
+ * 수직으로 겹치는 인접 행 병합 — 첨자(각주 마커/덧말)가 별도 행으로 분리된 것 복원.
+ * 첨자 조각 행: 아이템이 적고(≤3) 짧으며(≤8자), 겹치는 행보다 글자 박스가 확실히
+ * 작은 행(높이 ≤0.8배). 이런 행만 본문 줄에 흡수한다.
+ * (rowspan 라벨처럼 키가 큰 셀이 이웃 행을 덮는 경우는 병합하지 않음 — 정상 표 구조)
+ */
+function mergeOverlappingRows(rows: RowGroup[]): RowGroup[] {
+  if (rows.length <= 1) return rows
+  const result: RowGroup[] = [rows[0]]
+  for (let i = 1; i < rows.length; i++) {
+    const prev = result[result.length - 1]
+    const curr = rows[i]
+    const a = rowBand(prev)
+    const b = rowBand(curr)
+    const overlap = Math.min(a.top, b.top) - Math.max(a.bottom, b.bottom)
+    const prevIsFrag = isFragmentRow(prev) && a.height <= b.height * 0.8 && overlap >= a.height * 0.5
+    const currIsFrag = isFragmentRow(curr) && b.height <= a.height * 0.8 && overlap >= b.height * 0.5
+    if (prevIsFrag || currIsFrag) {
+      // 본문 줄(흡수하는 쪽)의 y를 대표값으로 유지
+      const baseY = prevIsFrag ? curr.y : prev.y
+      result[result.length - 1] = { y: baseY, items: [...prev.items, ...curr.items] }
+    } else {
+      result.push(curr)
+    }
+  }
+  return result
+}
+
+/** 첨자 후보 행: 아이템 ≤3개, 모두 짧은 텍스트(≤8자) */
+function isFragmentRow(row: RowGroup): boolean {
+  return row.items.length <= 3 && row.items.every(i => i.text.length <= 8)
+}
+
+/** 행 아이템들의 수직 범위 (bottom=min y, top=max y+h) */
+function rowBand(row: RowGroup): { bottom: number; top: number; height: number } {
+  let bottom = Infinity, top = -Infinity
+  for (const i of row.items) {
+    const h = i.h > 0 ? i.h : i.fontSize
+    if (i.y < bottom) bottom = i.y
+    if (i.y + h > top) top = i.y + h
+  }
+  return { bottom, top, height: top - bottom }
 }
 
 // ─── 다중행 셀 병합 ────────────────────────────────────

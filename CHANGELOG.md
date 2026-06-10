@@ -5,6 +5,76 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-06-11 — "99.9% 정확도" 파서 대도약 + 서식 보존 무손실 라운드트립
+
+> 실측 코퍼스(한국 공문서 324건 — 정부 보도자료·서울시 결재문서·2014~2016 옛 문서) 기반
+> 자기참조 채점 인프라를 구축하고, 정확도 게이트 전체 PASS 상태로 릴리스.
+> Breaking은 `IRCell.blocks` 추가뿐이며 기존 `IRCell.text`는 그대로 유지된다(하위호환).
+> 실질적으론 minor에 가깝지만 정확도 대도약과 라운드트립 신기능을 기념해 major로 올린다.
+
+### 정확도 (v2.9.1 → v3.0.0, bench/score.mjs 게이트)
+
+| 지표 | v2.9.1 | v3.0.0 |
+|------|--------|--------|
+| HWPX 텍스트 재현율 (micro) | 99.699% | **99.998%** |
+| HWPX 표 구조 정확일치 | 99.875% | **100%** (1,421표, 중첩표 343 포함) |
+| 환각률 (phantom) | 0.019% | **0.006%** |
+| PDF consensus coverage | 97.013% | **99.16%** |
+| HWP5↔HWPX 쌍 유사도 | (비공식) | **99.94%** (정식 게이트 승격) |
+| 테스트 | 329 | **458** |
+
+### Added
+
+- **🔄 서식 보존 무손실 라운드트립 `patchHwpx(original, editedMarkdown)`** — `parse()`로 얻은
+  마크다운을 편집해 넘기면 원본 HWPX의 ZIP/XML 구조를 그대로 두고 변경된 문단/셀의
+  `hp:t` 텍스트만 in-place 치환한다. 스타일·이미지·표 구조·설정은 1바이트도 변경 없음
+  (section XML 외 ZIP 엔트리는 원본 바이트 그대로, 변경 문단도 run 구조·charPr 보존).
+  지원: 문단/헤딩 텍스트 수정, 표 셀 텍스트 수정(GFM·HTML·1x1·1열 표, 중첩표 셀 재귀).
+  미지원 편집(블록 추가/삭제, 표 구조 변경, 줄바꿈 분절 문단 등)은 데이터를 건드리지
+  않고 `skipped[]`에 사유와 함께 정직하게 보고. 패치 후 자동 재파싱 검증(`verification`).
+  실코퍼스 e2e: 무변경 패치 = 바이트 동일(전수), 문단 수정 128건 무손상.
+- **🧪 정확도 채점 인프라 `bench/`** — 자기참조 XML GT 채점기(score.mjs) + 14종 게이트
+  (recall/phantom/표 구조/셀 내용/순서/수식·각주 presence/머리말 정책) + PDF consensus
+  coverage + HWP5↔HWPX 쌍 트랙. 코퍼스 수집기 2종(korea.kr RSS / 서울 정보소통광장,
+  출력 디렉토리·날짜 필터 파라미터화). 베이스라인 박제: `bench/out/score-baseline-v3.0.0.json`.
+- **🖼️ HWP5 BinData 이미지 추출** — BIN 16진 스토리지 + PICTURE ctrl offset 해석 (0건 → 90건).
+- **📑 중첩표 구조 보존** — `IRCell.blocks`로 셀 안 표/문단을 IRBlock 트리로 표현,
+  HTML 표 렌더에서 재귀 출력 (3중 중첩 포함 343표 정확일치).
+- **🔤 한컴 PUA 매핑** (`src/shared/pua.ts`) — 사용자 영역 글머리표·기호를 표준 유니코드로
+  (rhwp 검증 테이블).
+- **HWPX 파서**: 머리말/꼬리말/각주/미주 ctrl 선별 순회, 하이퍼링크 URL(fieldBegin),
+  표 캡션, 자동번호 7수준 카운터, 글상자+이미지 병행, outline 헤딩, 변경추적/메모 차단,
+  글상자 안 표 재귀, `<hp:lineBreak/>` 줄바꿈 인식.
+- **HWP5 파서**: ctrl_id u32 LE 정규화(각주/하이퍼링크 dead-code 해소), 캡션/셀 구분,
+  중첩표 level 재귀, NUMBERING/BULLET 카운터, 머리말/꼬리말, FIELD_BEGIN/END 스택(%hlk),
+  STYLE off-by-one 수정.
+- **PDF 파서**: XY-Cut++ 읽기 순서 3종, 페이지 걸친 표 병합, 과소분할 표 재구성, 캡션,
+  한국어 리스트, 취소선, fontSize 비례 공백 복원, NEEDS_OCR 경고 정식화.
+
+### Fixed
+
+- **GFM 표 마지막 라벨 행 소실** — "첫 열만 값인 행 → 다음 행 전파" 휴리스틱이 표 끝이나
+  전파 불가 상황에서 행을 통째로 버리던 문제. 보류 행을 그대로 출력하도록 수정.
+- **PDF 첨자(각주 마커 ①·\*) 표 오탐** — 별도 행으로 분리된 첨자가 표로 재구성되던 문제
+  (mergeOverlappingRows/mergeSuperscriptLines).
+- **라운드트립 적대적 리뷰 24건 수정** (31-에이전트 멀티에이전트 리뷰, 전건 실행 repro 검증):
+  - critical: 각주 문단의 body 오분류로 본문 편집이 각주를 덮어쓰는 문제, 대형 문서(4M+
+    유닛 곱) 정렬 폴백의 전체 시프트 오적용, HTML 셀 안 리터럴 `</td>`로 인한 셀 경계
+    오인, ZIP Buffer 입력 시 호출자 원본 버퍼 in-place 오염(Node `Buffer.slice`는 view).
+  - major: 셀 안 글상자 문단의 본문 오염, 유사 문단 그리디 오페어링, 자동번호 접두
+    오발동, 문단 분절(강제 줄바꿈/[별표] 병합/문단 내 표) silent 손상 → graceful skip,
+    sanitize 도메인 불일치로 미편집 문단 재작성(run 서식 파괴), 1x1 표 `**` 무조건
+    벗김, 싱글쿼트 manifest 미해석, applySplices 예외의 계약 위반 전파.
+  - minor: EOCD comment 가짜 시그니처/trailing 정크, 펼친 `<hp:cellAddr>`, 리터럴
+    `<br>` 모호성, `| - | - |` 데이터 행 구분행 오인, 섹션 경로 대소문자 비대칭,
+    리터럴 `# ` 접두 소실, hp:lineBreak 파서/스캐너 불일치 등.
+
+### Changed (Breaking)
+
+- **`IRCell.blocks?: IRBlock[]` 추가** — 중첩표/셀 내 구조 보존용. 기존 `IRCell.text`는
+  평탄화 텍스트로 그대로 유지되므로 대부분의 사용처는 영향 없음. `IRTable.caption`,
+  `NEEDS_OCR` 경고 코드 추가.
+
 ## [2.9.1] - 2026-06-05 — PageQuality 타입 export 수정 + 문서 현행화
 
 ### Fixed
