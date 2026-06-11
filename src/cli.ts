@@ -284,13 +284,13 @@ program
 
 program
   .command("patch <original> <edited>")
-  .description("서식 보존 라운드트립 패치 — 편집된 마크다운을 원본 HWPX에 in-place 반영 (kordoc patch 원본.hwpx 편집.md -o 출력.hwpx)")
-  .option("-o, --output <path>", "출력 HWPX 경로 (기본: <원본>.patched.hwpx)")
+  .description("서식 보존 라운드트립 패치 — 편집된 마크다운을 원본 HWPX/HWP에 in-place 반영 (kordoc patch 원본.hwpx 편집.md -o 출력.hwpx)")
+  .option("-o, --output <path>", "출력 경로 (기본: <원본>.patched.hwpx|.hwp)")
   .option("--no-verify", "패치 후 재파싱 자동 검증 생략")
   .option("--silent", "진행 메시지 숨기기")
   .action(async (original: string, edited: string, opts) => {
     try {
-      const { patchHwpx } = await import("./index.js")
+      const { patchHwpx, patchHwp, detectFormat } = await import("./index.js")
       // 루트 커맨드의 동명 옵션(-o/--silent)이 서브커맨드 옵션을 가로채는 commander 동작 보완
       const rootOpts = program.opts()
       const output: string | undefined = opts.output ?? rootOpts.output
@@ -298,13 +298,17 @@ program
       const originalBuf = new Uint8Array(readFileSync(resolve(original)))
       const editedMarkdown = readFileSync(resolve(edited), "utf-8")
 
-      const result = await patchHwpx(originalBuf, editedMarkdown, { verify: opts.verify !== false })
+      const format = detectFormat(originalBuf.buffer as ArrayBuffer)
+      const result = format === "hwp"
+        ? await patchHwp(originalBuf, editedMarkdown, { verify: opts.verify !== false })
+        : await patchHwpx(originalBuf, editedMarkdown, { verify: opts.verify !== false })
       if (!result.success || !result.data) {
         process.stderr.write(`[kordoc] 패치 실패: ${result.error ?? "알 수 없는 오류"}\n`)
         process.exit(1)
       }
 
-      const outPath = resolve(output ?? original.replace(/\.hwpx$/i, "") + ".patched.hwpx")
+      const ext = format === "hwp" ? ".hwp" : ".hwpx"
+      const outPath = resolve(output ?? original.replace(/\.hwpx?$/i, "") + ".patched" + ext)
       mkdirSync(dirname(outPath), { recursive: true })
       writeFileSync(outPath, result.data)
 

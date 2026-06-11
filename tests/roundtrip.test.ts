@@ -4,7 +4,8 @@ import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { inflateRawSync } from "node:zlib"
-import { join } from "node:path"
+import { join, dirname } from "node:path"
+import { fileURLToPath } from "node:url"
 import JSZip from "jszip"
 import { markdownToHwpx, parseHwpx, patchHwpx } from "../src/index.js"
 import { scanSectionXml, buildParagraphSplices, applySplices, escapeXmlText, decodeXmlEntities } from "../src/roundtrip/source-map.js"
@@ -362,7 +363,8 @@ describe("markdown-units", () => {
 
 // ─── 실파일 e2e (bench/corpus, gitignore — 존재할 때만) ─
 
-const CORPUS = join(import.meta.dirname ?? __dirname, "..", "bench", "corpus")
+// import.meta.dirname은 Node 20.11+ — Node 18 ESM 호환을 위해 fileURLToPath 사용
+const CORPUS = join(dirname(fileURLToPath(import.meta.url)), "..", "bench", "corpus")
 
 describe("patchHwpx: 실파일 e2e (corpus 존재 시)", { skip: !existsSync(CORPUS) }, () => {
   it("seoul 결재문서 — 문단+HTML 셀 수정, 바이트 보존", async () => {

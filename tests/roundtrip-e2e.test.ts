@@ -11,13 +11,15 @@
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { existsSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs"
-import { join } from "node:path"
+import { join, dirname } from "node:path"
+import { fileURLToPath } from "node:url"
 import { tmpdir } from "node:os"
 import { spawnSync } from "node:child_process"
 import JSZip from "jszip"
 import { markdownToHwpx, parseHwpx, patchHwpx } from "../src/index.js"
 
-const CORPUS = join(import.meta.dirname ?? __dirname, "..", "bench", "corpus")
+// import.meta.dirname은 Node 20.11+ — Node 18 ESM 호환을 위해 fileURLToPath 사용
+const CORPUS = join(dirname(fileURLToPath(import.meta.url)), "..", "bench", "corpus")
 const DIRS = ["seoul", "korea-kr", "misc"]
 const MARKER = "라운드트립검증"
 const SWEEP_LIMIT = process.env.KORDOC_E2E_FULL ? Infinity : 12

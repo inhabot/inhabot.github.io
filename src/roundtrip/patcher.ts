@@ -138,7 +138,7 @@ export async function patchHwpx(
 
 // ─── 유닛 구성 ───────────────────────────────────────
 
-interface OrigUnit extends MdUnit {
+export interface OrigUnit extends MdUnit {
   /** 출처 IR 블록 인덱스 */
   blockIdx: number
   role?: "caption"
@@ -151,7 +151,7 @@ interface OrigUnit extends MdUnit {
  * IR 블록별 개별 렌더링으로 유닛 생성 — blocksToMarkdown의 [별표 N] 2블록
  * 병합 규칙을 재현해 전체 렌더와 동일한 분할을 보장한다.
  */
-function buildOrigUnits(blocks: IRBlock[]): OrigUnit[] {
+export function buildOrigUnits(blocks: IRBlock[]): OrigUnit[] {
   const units: OrigUnit[] = []
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]
@@ -195,9 +195,9 @@ function buildTableOrdinals(blocks: IRBlock[]): Map<number, number> {
 
 // ─── 유닛 정렬 (정확 일치 LCS + 갭 유사도 페어링) ────
 
-type AlignedPair = [number | null, number | null]
+export type AlignedPair = [number | null, number | null]
 
-function alignUnits(a: string[], b: string[]): AlignedPair[] {
+export function alignUnits(a: string[], b: string[]): AlignedPair[] {
   const m = a.length, n = b.length
   if (m * n > 4_000_000) {
     // 대형 문서 보호 — dense LCS 불가. 공통 prefix/suffix만 정확 일치로 페어링하고
@@ -454,7 +454,7 @@ function patchParagraphUnit(
 }
 
 /** 텍스트 유닛 마크다운 → 평문 (builder 렌더링의 역변환) */
-function textUnitToPlain(raw: string, block: IRBlock): string {
+export function textUnitToPlain(raw: string, block: IRBlock): string {
   // 여러 줄(soft-wrap)은 한 문단으로
   let text = raw.split("\n").map(l => l.trim()).filter(Boolean).join(" ")
   // 헤딩 접두 — 헤딩/[별표] 블록만 (리터럴 '# '로 시작하는 일반 문단은 보존)
@@ -476,7 +476,7 @@ function textUnitToPlain(raw: string, block: IRBlock): string {
 // ─── 검증 diff ───────────────────────────────────────
 
 /** 유닛 목록 diff → DiffResult (검증 리포트용) */
-function diffUnitLists(a: MdUnit[], b: MdUnit[]): DiffResult {
+export function diffUnitLists(a: MdUnit[], b: MdUnit[]): DiffResult {
   const pairs = alignUnits(a.map(u => u.raw), b.map(u => u.raw))
   const stats = { added: 0, removed: 0, modified: 0, unchanged: 0 }
   const diffs: BlockDiff[] = []
