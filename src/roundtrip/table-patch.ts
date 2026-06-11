@@ -177,7 +177,7 @@ function extractImgTags(inner: string): string {
 /** GFM 셀의 비텍스트 토큰 — 이미지 참조/추출실패 플레이스홀더 */
 const CELL_TOKEN_RE = /!\[image\]\([^)]*\)|\[이미지: [^\]]*\]/g
 
-function extractCellTokens(text: string): string {
+export function extractCellTokens(text: string): string {
   return (text.match(CELL_TOKEN_RE) || []).join(" ")
 }
 
