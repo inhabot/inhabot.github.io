@@ -1,7 +1,14 @@
 # Active Context — kordoc 본체
 
-**마지막 업데이트**: 2026-06-12 (Phase A 마무리 + **Phase B 구현 완료** — v3.1.0 릴리스 진행)
-**상태**: 테스트 500/500 그린 (인라인 다중라벨 수정 +9). Phase B는 kordoc-ai 레포에 구현 완료 (RPC 4종 + FillWizard + rhwp WASM 임베드, fill-e2e 9/9).
+**마지막 업데이트**: 2026-06-12 (Phase A 릴리스 + **Phase B 구현 완료** — 집 PC 인계)
+**상태**: kordoc v3.1.0 = PR #34 머지 + 태그 푸시 + 테스트 500/500. **npm publish만 보류 — npm 토큰 만료(E401), `npm login` 후 `npm publish` 필요.** Phase B는 kordoc-ai PR #1(feat/fill-wizard-phase-b, 머지 대기)에 구현 완료.
+
+## 🏠 집 PC 인계 체크리스트 (2026-06-12)
+1. **npm publish** (kordoc, v3.1.0) — `npm login` 후 실행. registry엔 아직 3.0.1
+2. kordoc-ai PR #1 리뷰/머지 — 머지 전 `pnpm tauri:dev`로 FillWizard 실행: 웹뷰 WASM 초기화 확인(실패 시에도 사이드카 render_preview 폴백 동작), 실양식 드롭→채움→저장→한/글 육안 검증
+3. 실양식 3종 목표 중 로컬 2종만 확보(서면자문/수당여비, edu-facility-ai/docs/원본자료) — 3종째 필요. 260202 다운로드의 "붙임2 개인정보..." hwpx는 위장 확장자(파싱 불가)
+4. 다음 개발 = **Phase C 클릭-편집**: capability 잠금 시각화, 미리보기 인라인 편집, undo/redo, 30초 자동저장 (플랜: `.claude/plans/kordoc-studio-plan.md` — **gitignore라 이 PC 로컬 전용**, 없으면 studio 메모리/PR 본문 참조)
+5. 함정 메모: pnpm 전역 minimum-release-age(7일) → 신규 패키지는 프로젝트 .npmrc 예외 필요. kordoc-ai concat.test.ts 실패 1건은 기존 픽스처 부재(무관). bench는 코퍼스 보유 환경에서만
 
 ## Phase B 완료 요약 (2026-06-12, kordoc-ai 레포)
 - 사이드카 RPC 4종: form_schema/form_fill/patch_blocks(HEAVY) + render_preview(HEAVY 제외) — Rust 화이트리스트 동기화
