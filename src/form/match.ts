@@ -133,6 +133,68 @@ export function fillInCellPatterns(
   return matches.length > 0 ? { text, matches } : null
 }
 
+// ─── 인라인 "라벨: 값" 세그먼트 분해 ─────────────────
+
+export interface InlineSegment {
+  /** 라벨 (콜론 제외) */
+  label: string
+  /** 라벨 시작 오프셋 */
+  labelStart: number
+  /** 값 시작 오프셋 (콜론·공백 뒤) */
+  valueStart: number
+  /** 값 끝 오프셋 (다음 라벨/구분자 직전, 우측 공백 제외) */
+  valueEnd: number
+  /** text.slice(valueStart, valueEnd) */
+  value: string
+}
+
+const INLINE_LABEL_RE = /([가-힣A-Za-z]{2,10})\s*[:：]/g
+
+/**
+ * 인라인 양식 한 줄을 라벨 단위로 분해 — 한 줄에 라벨이 여러 개인 양식
+ * ("자문위원 성명:   작성일자:  ") 지원. 값은 다음 라벨 직전(또는
+ * 구분자 [,;\n] / 100자 / 줄끝)에서 끝난다. 값이 빈 라벨도 세그먼트로
+ * 반환한다 (value="", valueStart===valueEnd — 채움 대상).
+ * "http://" 류 URL 스킴의 콜론은 라벨로 보지 않는다.
+ */
+export function scanInlineSegments(text: string): InlineSegment[] {
+  const labels: Array<{ label: string; start: number; end: number }> = []
+  INLINE_LABEL_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = INLINE_LABEL_RE.exec(text)) !== null) {
+    if (text[INLINE_LABEL_RE.lastIndex] === "/") continue // "://" — URL 스킴
+    labels.push({ label: m[1], start: m.index, end: INLINE_LABEL_RE.lastIndex })
+  }
+
+  const segments: InlineSegment[] = []
+  for (let i = 0; i < labels.length; i++) {
+    const cur = labels[i]
+    let vs = cur.end
+    while (vs < text.length && (text[vs] === " " || text[vs] === "\t")) vs++
+    let ve = i + 1 < labels.length ? labels[i + 1].start : text.length
+    if (ve < vs) ve = vs // 다음 라벨이 공백 스킵 구간 안에서 시작하는 경우
+    const sep = text.slice(vs, ve).search(/[\n,;]/)
+    if (sep !== -1) ve = vs + sep
+    if (ve - vs > 100) ve = vs + 100
+    while (ve > vs && /\s/.test(text[ve - 1])) ve--
+    segments.push({
+      label: cur.label,
+      labelStart: cur.start,
+      valueStart: vs,
+      valueEnd: ve,
+      value: text.slice(vs, ve),
+    })
+  }
+  return segments
+}
+
+/** 빈 자리(valueStart===valueEnd) 삽입 시 콜론·다음 라벨과 붙지 않게 공백 부착 */
+export function padInsertion(text: string, pos: number, value: string): string {
+  const lead = pos > 0 && !/\s/.test(text[pos - 1]) ? " " : ""
+  const trail = pos < text.length && !/\s/.test(text[pos]) ? " " : ""
+  return lead + value + trail
+}
+
 /** 입력 values 맵을 정규화된 키로 변환 */
 export function normalizeValues(values: Record<string, string>): Map<string, string> {
   const map = new Map<string, string>()

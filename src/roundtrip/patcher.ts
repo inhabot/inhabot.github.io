@@ -26,6 +26,7 @@ import {
   type MdUnit,
 } from "./markdown-units.js"
 import { patchGfmTable, patchHtmlTable, patchTextChunkTable } from "./table-patch.js"
+import { resolveSectionEntryNames } from "./hwpx-entries.js"
 
 export type { PatchOptions, PatchResult, PatchSkip } from "../types.js"
 
@@ -184,7 +185,7 @@ export function buildOrigUnits(blocks: IRBlock[]): OrigUnit[] {
 }
 
 /** OB 표 블록 인덱스 → 최상위 표 서수 */
-function buildTableOrdinals(blocks: IRBlock[]): Map<number, number> {
+export function buildTableOrdinals(blocks: IRBlock[]): Map<number, number> {
   const map = new Map<number, number>()
   let ordinal = 0
   for (let i = 0; i < blocks.length; i++) {
@@ -285,7 +286,7 @@ function bestSimInRange(arr: string[], from: number, to: number, target: string)
 
 // ─── 문단 매핑 ───────────────────────────────────────
 
-interface ParaMapping {
+export interface ParaMapping {
   para?: ScanParagraph
   /** 자동번호 접두가 IR 텍스트에 붙어 있었음 (스캔 텍스트에는 없음) */
   prefixStripped?: boolean
@@ -296,7 +297,7 @@ interface ParaMapping {
  * 같은 정규화 텍스트끼리 등장 순서대로 페어링 (중복 문단 대응).
  * 머리말/꼬리말로 배치된 선두/말미 블록은 매핑에서 제외.
  */
-function resolveParagraphMappings(blocks: IRBlock[], scans: SectionScan[]): Map<number, ParaMapping> {
+export function resolveParagraphMappings(blocks: IRBlock[], scans: SectionScan[]): Map<number, ParaMapping> {
   const buckets = new Map<string, ScanParagraph[]>()
   for (const scan of scans) {
     for (const para of scan.bodyParagraphs) {
@@ -506,43 +507,5 @@ function u8ToArrayBuffer(u8: Uint8Array): ArrayBuffer {
   return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer
 }
 
-/** manifest(content.hpf) 기반 섹션 엔트리명 해석 — parser.ts resolveSectionPaths와 동일하게
- *  zip 엔트리 정확 일치만 포함 (대소문자 보정 금지 — 파서가 못 본 섹션이 스캔에 끼면
- *  중복 텍스트 문단 수정이 비가시 섹션에 적용되는 cross-section bleed 발생) */
-async function resolveSectionEntryNames(zip: JSZip): Promise<string[]> {
-  for (const mp of ["Contents/content.hpf", "content.hpf"]) {
-    const f = zip.file(mp)
-    if (!f) continue
-    const xml = await f.async("text")
-    const paths = sectionPathsFromManifest(xml).filter(p => zip.file(p) !== null)
-    if (paths.length > 0) return paths
-  }
-  return Object.keys(zip.files).filter(n => /[Ss]ection\d+\.xml$/.test(n)).sort()
-}
-
-function sectionPathsFromManifest(xml: string): string[] {
-  const isSectionId = (id: string) => /^s/i.test(id) || id.toLowerCase().includes("section")
-  const attr = (tag: string, name: string): string => {
-    const m = tag.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`))
-    return m ? (m[1] ?? m[2]) : ""
-  }
-  const idToHref = new Map<string, string>()
-  for (const m of xml.matchAll(/<opf:item(\s(?:"[^"]*"|'[^']*'|[^>"'])*?)\/?>/g)) {
-    const id = attr(m[1], "id")
-    let href = attr(m[1], "href")
-    const mediaType = attr(m[1], "media-type")
-    if (!isSectionId(id) && !mediaType.includes("xml")) continue
-    if (!href.startsWith("/") && !href.startsWith("Contents/") && isSectionId(id)) href = "Contents/" + href
-    if (id) idToHref.set(id, href)
-  }
-  const ordered: string[] = []
-  for (const m of xml.matchAll(/<opf:itemref(\s(?:"[^"]*"|'[^']*'|[^>"'])*?)\/?>/g)) {
-    const href = idToHref.get(attr(m[1], "idref"))
-    if (href) ordered.push(href)
-  }
-  if (ordered.length > 0) return ordered
-  return Array.from(idToHref.entries())
-    .filter(([id]) => isSectionId(id))
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, href]) => href)
-}
+// 섹션 엔트리 해석은 hwpx-entries.ts로 이동 (session/filler 공용) — re-export로 하위 호환 유지
+export { resolveSectionEntryNames } from "./hwpx-entries.js"
