@@ -25,6 +25,9 @@ export default defineConfig([
     clean: true,
     external: OPTIONAL_EXTERNAL,
     noExternal: ["cfb"],
+    // CJS 빌드에서 import.meta.url(createRequire 용) 잔존 → require() 소비자
+    // SyntaxError. shims가 CJS에선 __filename 기반으로 치환한다.
+    shims: true,
     define,
   },
   {

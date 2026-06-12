@@ -302,7 +302,8 @@ export async function fillForm(
 // ─── 게임체인저 API ─────────────────────────────────
 
 export { compare, diffBlocks } from "./diff/compare.js"
-export { extractFormFields, isLabelCell } from "./form/recognize.js"
+export { extractFormFields, isLabelCell, extractFormSchema, inferFieldType } from "./form/recognize.js"
+export type { FormFieldType, FormFieldSchema, FormSchemaResult } from "./form/recognize.js"
 export { fillFormFields } from "./form/filler.js"
 export type { FillResult } from "./form/filler.js"
 export { fillHwpx } from "./form/filler-hwpx.js"
@@ -312,6 +313,18 @@ export type { HwpxTheme, MarkdownToHwpxOptions } from "./hwpx/generator.js"
 export { patchHwpx } from "./roundtrip/patcher.js"
 export { patchHwp } from "./roundtrip/hwp5-patch.js"
 export type { PatchResult, PatchSkip, PatchOptions } from "./types.js"
+
+// ─── 에디터 통합 API (v3.1) ─────────────────────────
+
+export { HwpxSession, openHwpxDocument, patchHwpxBlocks } from "./roundtrip/session.js"
+export type {
+  BlockEdit, BlockCapability, BlockCapabilityInfo, CellCapability, BlockSourceRef,
+} from "./roundtrip/session.js"
+// 소스맵 저수준 API — 블록↔원본 바인딩을 직접 다루는 고급 사용자용
+export { scanSectionXml, buildParagraphSplices, buildRangeSplices, applySplices } from "./roundtrip/source-map.js"
+export type {
+  SectionScan, ScanParagraph, ScanCell, ScanTable, ScanParaKind, SpliceEdit, TRange,
+} from "./roundtrip/source-map.js"
 export { renderHtml, markdownToPdf, blocksToPdf } from "./print/renderer.js"
 export type { PrintPreset, PrintOptions, PageMargin } from "./print/renderer.js"
 

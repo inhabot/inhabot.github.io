@@ -5,6 +5,99 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-06-12 — 에디터 통합 API (KorDoc Studio Phase A)
+
+> 에디터(KorDoc Studio)가 블록 클릭-편집으로 HWPX를 증분 수정할 수 있도록
+> 세션 기반 패치 API를 신설. "n회 연속 `patchBlocks` ≡ 일괄 `patchHwpx`"
+> 바이트 동일 동등성을 CI 게이트로 보장한다. 적대적 리뷰(26 에이전트) 확정
+> 22건 전부 수정 완료. 테스트 458 → **491**.
+
+### Added
+
+- **🖊️ `HwpxSession` — 블록 단위 증분 패치 세션** (`openHwpxDocument(bytes)`)
+  - `session.patchBlocks(edits)` — 블록 인덱스로 직접 편집 지정 (`BlockEdit`:
+    문단 `newText` / 표 `cells[{row,col,text}]`). 매핑은 patchHwpx와 동일
+    알고리즘(정규화 텍스트 버킷 + 표 서수) 재사용 — **n회 증분 ≡ 일괄 패치
+    바이트 동일** 동등성이 성립하며 CI 게이트로 검증. 패치 후 상태는 새
+    바이트에서 전체 재구축(블록 인덱스는 매 호출 후 갱신 필요).
+  - `session.capability(blockIndex)` — patchHwpx의 graceful-skip 게이트를
+    **사전 판정**으로 노출 (`text` / `cell-text` / `locked` + 셀별 가능 여부
+    + 한국어 사유). 에디터가 편집 전에 잠금 UI를 띄우는 단일 진실 소스.
+  - `session.sourceRef(blockIndex)` — 블록 → 원본 섹션 XML 오프셋 참조
+    (에디터 하이라이트/점프용).
+  - 단발성 헬퍼 `patchHwpxBlocks(bytes, edits)` — 세션 없이 1회 패치.
+- **📋 `extractFormSchema(blocks)` — 양식 필드 타입 추론** (폼 UI 자동 생성용)
+  - 필드 타입 7종: `text` / `date` / `phone` / `email` / `amount` /
+    `checkbox` / `idnum`. 기존 값 패턴 우선, 라벨 키워드 폴백
+    (`inferFieldType`도 단독 export).
+  - `required`(라벨의 ※·\*·★·"(필수)" 표시) / `empty`(빈 값·밑줄·괄호
+    플레이스홀더 = 채움 대상) 판정.
+  - 값이 빈 인라인 라벨("작성일자:")도 채움 대상 필드로 노출 —
+    `extractFormFields`는 기존 계약(값 있는 필드만) 유지.
+- **소스맵 저수준 API export** — `scanSectionXml` / `buildParagraphSplices` /
+  `buildRangeSplices` / `applySplices`. 블록↔원본 바인딩을 직접 다루는 고급
+  사용자용. `buildRangeSplices`는 **t-도메인 좌표계**(`hp:t` 연결 텍스트) —
+  탭/줄바꿈 요소가 끼어도 해당 요소를 건드리지 않고 텍스트만 정밀 치환.
+- **`PatchResult.changes`** — `session.patchBlocks` 전용 패치 전→후 diff
+  (적용 편집 수만큼 modified가 나오는 게 정상). 무손실 검증용
+  `verification`(잔차 0이어야 정상)과 의미가 정반대라 필드 분리.
+
+### Changed
+
+- **`fillHwpx` splice 전환** — 기존 run 단위 XML 문자열 치환에서 소스맵
+  splice 기반으로 전면 재작성. 수정된 텍스트 범위 외 섹션 XML은 **원본
+  바이트 그대로 보존**(서식·구조 무손상 보장 강화). 매칭 전략·결과 의미는
+  v3.0과 패리티 유지.
+
+### Fixed
+
+- **인라인 다중 라벨 오인식/데이터 소실** — "자문위원 성명: 작성일자:" 같이 한
+  줄에 라벨이 여러 개인 양식에서 첫 라벨의 값이 다음 라벨까지 삼키던 문제
+  (인식: 성명="작성일자:" 오페어링, 채우기: "작성일자:" 라벨이 값으로
+  덮여 소실). 신설 `scanInlineSegments`가 값을 다음 라벨 직전에서 끊으며,
+  한 문단의 라벨 여러 개를 모두 채운다 (기존 "문단당 첫 매칭만" 제한 해제).
+  URL 스킴(`http://`) 콜론은 라벨로 보지 않음. `extractFormFields` /
+  `fillHwpx` / `fillFormFields` 3개 경로 일관 적용.
+- **CJS 빌드 `import.meta` 잔존** — ESM 전용 `import.meta.url`이 CJS 출력에
+  그대로 남아 `require("kordoc")` 시 SyntaxError 나던 버그 (tsup `shims` 활성화).
+- **적대적 리뷰 22건 수정** (26-에이전트 멀티에이전트 리뷰, 근본원인 14개):
+  - major: 전각공백 silent drop으로 증분≡일괄 동등성 위반, 머리말 영역 양식
+    채우기 회귀, 탭 포함 문단 전체 재작성 시 탭 중복/순서 오염, 글상자 라벨
+    오염, 셀 이미지 토큰이 리터럴 텍스트로 기록, 빈 문자열 비우기 시 블록
+    핸들 소실(→ 비우기 자체를 미지원으로 확정), verification 의미 충돌(→
+    `changes` 필드 분리).
+  - minor: patchBlocks 재진입 직렬화, ArrayBuffer 뷰 입력 시 원본 오염,
+    매핑 dedup 슬롯 충돌, `matchedLabels` 회수 누락, amount 타입 오탐
+    (우편번호/연도) 등.
+
+### 의도된 제약 (설계 결정)
+
+- 빈 문자열로 블록 비우기 미지원 — 재파싱 시 블록 핸들이 사라져 세션 복구
+  불가, patchHwpx의 "블록 삭제 미지원"과 정합.
+- 인셀 패턴 채우기(전략 0)는 문단 단위 매칭 — 문단 경계에 걸친 패턴 미지원.
+
+## [3.0.1] - 2026-06-11 — HWP 5.x 바이너리 서식 보존 패치 `patchHwp`
+
+### Added
+
+- **🔧 `patchHwp(original, editedMarkdown)`** — `patchHwpx`의 HWP 5.x 대응.
+  OLE2 바이너리를 직접 수술해 변경된 문단/표 셀의 PARA_TEXT만 치환한다.
+  - `src/roundtrip/hwp5-patch.ts` — 레코드 스캔(재직렬화 동일성 게이트) +
+    문단/GFM 셀(좌표 기반)/1x1·1열 텍스트청크 표 패치 + PARA_HEADER nChars·
+    CHAR_SHAPE·LINE_SEG 연쇄 갱신. `ctrlMask=0` 순수 텍스트 문단만 수정,
+    위험 케이스는 전부 graceful skip. 암호화/배포용/DRM 문서는 거부.
+  - `src/roundtrip/ole-surgeon.ts` — CFB 섹터 레벨 스트림 교체. 전체 재조립
+    없이 대상 스트림의 데이터 섹터/FAT·miniFAT 체인/디렉토리 start·size만
+    갱신 (전체 재조립은 한/글 OLE 파서가 거부). mini↔regular 도메인 전환,
+    FAT/DIFAT 확장 지원. 수정 외 영역은 원본과 바이트 동일.
+  - CLI `patch` 커맨드가 매직바이트로 hwp/hwpx 자동 분기.
+  - 실파일 검증: 한/글 오픈 확인, no-op 패치 = 바이트 동일, 비수정 스트림
+    바이트 보존, 이모지/특수문자/극단 길이/19KB 확장 통과.
+
+### Changed
+
+- npm 배포를 로컬 publish로 일원화 (`.github/workflows/publish.yml` 제거).
+
 ## [3.0.0] - 2026-06-11 — "99.9% 정확도" 파서 대도약 + 서식 보존 무손실 라운드트립
 
 > 실측 코퍼스(한국 공문서 324건 — 정부 보도자료·서울시 결재문서·2014~2016 옛 문서) 기반

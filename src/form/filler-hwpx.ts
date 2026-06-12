@@ -1,16 +1,36 @@
 /**
- * HWPX 원본 서식 유지 채우기 — ZIP 내 section XML 직접 수정
+ * HWPX 원본 서식 유지 채우기 — section XML 오프셋 splice (v3.1, 바이트 보존)
  *
- * IRBlock 중간 표현을 거치지 않고, 원본 HWPX ZIP의 section XML에서
- * 테이블 셀 텍스트(<hp:t>)만 교체하여 모든 스타일을 보존합니다.
+ * v3.0까지는 xmldom 전체 재직렬화 방식이라 변경하지 않은 영역도 속성 순서·
+ * 공백·자기닫힘 표기가 바뀔 수 있었다. v3.1부터 patchHwpx와 동일한
+ * source-map splice + ZIP in-place 재조립을 사용해, 변경 문단 외 XML과
+ * 비변경 ZIP 엔트리를 1바이트도 건드리지 않는다.
+ *
+ * 전략 (v3.0과 동일, 적용 순서 보존):
+ * 0. 인셀 패턴 — 체크박스 □→☑, 괄호 빈칸 (  )→(값), 어노테이션 (한자：)→(한자：값)
+ * 1. 인접 라벨-값 셀 — label | value (패턴 적용 셀은 값을 앞에 삽입해 어노테이션 보존)
+ * 2. 헤더+데이터 행 — 첫 행이 전부 라벨이면 열 단위 매칭 (나중 쓰기 우선 — v3.0 동일)
+ * 3. 인라인 "라벨: 값" — 표 밖 본문/글상자/머리말·꼬리말·각주 문단
+ *
+ * 적용 범위는 v3.0과 동일하게 머리말/꼬리말 등 ctrl 내부 표·문단을 포함하고
+ * (scan.orphanTables/excludedParagraphs), 셀 라벨 판정은 v3.0과 동일하게
+ * 글상자(drawText) 문단을 제외한다. 패턴 매칭·범위 치환은 hp:t 연결 텍스트
+ * (t-도메인) 좌표로 수행해 사이에 끼인 tab/br 요소를 건드리지 않는다.
+ *
+ * v3.0과의 의도적 차이: 인셀 패턴(전략 0)은 문단 단위로 매칭한다 — 문단
+ * 경계에 걸친 패턴(극히 드묾)은 채우지 않는다.
  */
 
 import JSZip from "jszip"
-import { DOMParser, XMLSerializer } from "@xmldom/xmldom"
-import { isLabelCell } from "../form/recognize.js"
-import { KordocError, stripDtd } from "../utils.js"
-import { normalizeLabel, findMatchingKey, normalizeValues, resolveUnmatched, isKeywordLabel, fillInCellPatterns } from "./match.js"
+import { isLabelCell } from "./recognize.js"
+import { KordocError } from "../utils.js"
+import { normalizeLabel, findMatchingKey, normalizeValues, resolveUnmatched, isKeywordLabel, fillInCellPatterns, scanInlineSegments, padInsertion } from "./match.js"
 import type { FormField } from "../types.js"
+import {
+  scanSectionXml, buildParagraphSplices, buildRangeSplices, applySplices, paraTText, paraTextPureT,
+  type ScanParagraph, type ScanCell, type ScanTable, type SpliceEdit,
+} from "../roundtrip/source-map.js"
+import { patchZipEntries } from "../roundtrip/zip-patch.js"
 
 /** 채우기 결과 */
 export interface HwpxFillResult {
@@ -20,6 +40,18 @@ export interface HwpxFillResult {
   filled: FormField[]
   /** 매칭 실패한 라벨 */
   unmatched: string[]
+}
+
+/** 문단별 편집 원장 — 전략들이 의도를 누적하고 마지막에 splice로 변환 */
+interface ParaEditLedger {
+  /** 문단 전체 재작성 (우선 — 설정되면 ranges 무시, 나중 쓰기 우선) */
+  fullText?: string
+  /** 매칭 도메인(paraTText ?? para.text) 좌표의 부분 치환 (start===end는 삽입) */
+  ranges: Array<{ start: number; end: number; replacement: string }>
+  /** 이 문단 편집과 연결된 filled 레코드 인덱스 — splice 실패 시 회수 */
+  filledIdx: number[]
+  /** 이 문단 편집과 연결된 매칭 키 — splice 실패 시 unmatched 복원용 */
+  matchKeys: string[]
 }
 
 /**
@@ -33,87 +65,131 @@ export async function fillHwpx(
   hwpxBuffer: ArrayBuffer,
   values: Record<string, string>,
 ): Promise<HwpxFillResult> {
+  const u8 = new Uint8Array(hwpxBuffer)
   const zip = await JSZip.loadAsync(hwpxBuffer)
-  const filled: FormField[] = []
-  const matchedLabels = new Set<string>()
-
-  const normalizedValues = normalizeValues(values)
-
-  // section XML 파일 찾기
-  const sectionFiles = Object.keys(zip.files)
+  // v3.0과 동일한 글롭 — filler 매칭은 라벨 기반(국소적)이라 manifest 비등재
+  // 섹션을 포함해도 안전하고, 빼면 그 섹션의 양식이 조용히 누락된다
+  const sectionPaths = Object.keys(zip.files)
     .filter(name => /[Ss]ection\d+\.xml$/i.test(name))
     .sort()
-
-  if (sectionFiles.length === 0) {
+  if (sectionPaths.length === 0) {
     throw new KordocError("HWPX에서 섹션 파일을 찾을 수 없습니다")
   }
 
-  const xmlParser = new DOMParser()
-  const xmlSerializer = new XMLSerializer()
+  const normalizedValues = normalizeValues(values)
+  const matchedLabels = new Set<string>()
+  /** splice 실패 회수를 위해 null 자리표시 허용 — 마지막에 filter */
+  const filled: Array<FormField | null> = []
+  /** splice 실패로 회수된 키 / 성공 적용된 키 — unmatched 복원 판단용 */
+  const failedKeys = new Set<string>()
+  const succeededKeys = new Set<string>()
+  const replacements = new Map<string, Uint8Array>()
+  const encoder = new TextEncoder()
 
-  for (const sectionPath of sectionFiles) {
-    const zipEntry = zip.file(sectionPath)
-    if (!zipEntry) continue  // null 방어
+  for (let si = 0; si < sectionPaths.length; si++) {
+    const xml = await zip.file(sectionPaths[si])!.async("text")
+    const scan = scanSectionXml(xml, si)
 
-    const rawXml = await zipEntry.async("text")
-    const doc = xmlParser.parseFromString(stripDtd(rawXml), "text/xml")
-    if (!doc.documentElement) continue
+    const ledger = new Map<ScanParagraph, ParaEditLedger>()
+    const led = (p: ScanParagraph): ParaEditLedger => {
+      let l = ledger.get(p)
+      if (!l) ledger.set(p, (l = { ranges: [], filledIdx: [], matchKeys: [] }))
+      return l
+    }
 
-    let modified = false
+    /** 매칭/치환 좌표 도메인 텍스트 — t-도메인 우선, 엔티티 포함 시 para.text */
+    const matchText = (p: ScanParagraph): string => paraTText(p, xml) ?? p.text
+    /** 라벨/값 판정용 셀 텍스트 — v3.0 extractCellText와 동일하게 글상자 제외,
+     *  문단 경계 구분자 없이 연결 */
+    const cellLabelText = (cell: ScanCell): string =>
+      cell.paragraphs.filter(p => !p.inTextbox).map(p => matchText(p)).join("")
 
-    // 모든 테이블 요소 탐색
-    const tables = findAllElements(doc.documentElement as unknown as Node, "tbl")
-
-    // 전략 0: 인셀 패턴 채우기 — 전략 1보다 먼저 실행
-    // (체크박스 □→☑, 괄호 빈칸 (  )→(값), 어노테이션 (한자：)→(한자：값))
-    // 이렇게 해야 전략 1이 셀을 덮어쓸 때 어노테이션이 보존됨
-    const cellPatternApplied = new Set<Element>()
-    for (const tblEl of tables) {
-      const allCells = findAllElements(tblEl, "tc")
-      for (const tcEl of allCells) {
-        const tNodes = collectCellTextNodes(tcEl)
-        const fullText = tNodes.map(n => n.text).join("")
-        const result = fillInCellPatterns(fullText, normalizedValues, matchedLabels)
-        if (!result) continue
-
-        applyTextReplacements(tNodes, fullText, result.text)
-        cellPatternApplied.add(tcEl)
-        for (const m of result.matches) {
-          filled.push({ label: m.label, value: m.value, row: -1, col: -1 })
+    // 표 수집 — 문서 순서 DFS (중첩표 + 머리말 등 ctrl 내부 고아 표 포함)
+    const allTables: ScanTable[] = []
+    const collectTables = (tables: ScanTable[], depth: number): void => {
+      if (depth > 16) return
+      for (const t of tables) {
+        allTables.push(t)
+        for (const row of t.rows) {
+          for (const cell of row) collectTables(cell.tables, depth + 1)
         }
-        modified = true
+      }
+    }
+    collectTables(scan.tables, 0)
+    collectTables(scan.orphanTables, 0)
+
+    // ── 전략 0: 인셀 패턴 (전략 1보다 먼저 — 어노테이션 보존 순서) ──
+    const patternApplied = new Set<ScanCell>()
+    for (const table of allTables) {
+      for (const row of table.rows) {
+        for (const cell of row) {
+          for (const para of cell.paragraphs) {
+            const text = matchText(para)
+            const result = fillInCellPatterns(text, normalizedValues, matchedLabels)
+            if (!result) continue
+            const l = led(para)
+            if (l.fullText !== undefined) continue
+            // 최소 diff 범위만 치환 — 나머지 run 서식 보존
+            const newT = result.text
+            let s = 0
+            while (s < text.length && s < newT.length && text[s] === newT[s]) s++
+            let eo = text.length
+            let en = newT.length
+            while (eo > s && en > s && text[eo - 1] === newT[en - 1]) { eo--; en-- }
+            l.ranges.push({ start: s, end: eo, replacement: newT.slice(s, en) })
+            patternApplied.add(cell)
+            for (const m of result.matches) {
+              l.filledIdx.push(filled.length)
+              l.matchKeys.push(m.key)
+              filled.push({ label: m.label, value: m.value, row: -1, col: -1 })
+            }
+          }
+        }
       }
     }
 
-    for (const tblEl of tables) {
-      const rows = findDirectChildren(tblEl, "tr")
-
-      // 전략 1: 인접 라벨-값 셀 (label | value 패턴)
-      for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
-        const trEl = rows[rowIdx]
-        const cells = findDirectChildren(trEl, "tc")
-
+    // ── 전략 1 + 2: 표 단위 인터리브 (v3.0 DOM 버전과 동일 순서) ──
+    for (const table of allTables) {
+      // 전략 1: 인접 라벨-값 셀
+      for (let rowIdx = 0; rowIdx < table.rows.length; rowIdx++) {
+        const cells = table.rows[rowIdx]
         for (let colIdx = 0; colIdx < cells.length - 1; colIdx++) {
-          const labelText = extractCellText(cells[colIdx])
+          const labelText = cellLabelText(cells[colIdx])
           if (!isLabelCell(labelText)) continue
 
           const valueCell = cells[colIdx + 1]
-          const valueText = extractCellText(valueCell)
-          if (isKeywordLabel(valueText)) continue
+          if (isKeywordLabel(cellLabelText(valueCell))) continue
 
           const normalizedCellLabel = normalizeLabel(labelText)
           if (!normalizedCellLabel) continue
-
           const matchKey = findMatchingKey(normalizedCellLabel, normalizedValues)
           if (matchKey === undefined) continue
-
           const newValue = normalizedValues.get(matchKey)!
 
-          // 전략 0이 이미 어노테이션을 채웠다면, 값을 앞에 삽입 (어노테이션 보존)
-          if (cellPatternApplied.has(valueCell)) {
-            prependCellText(valueCell, newValue)
+          if (patternApplied.has(valueCell)) {
+            // 전략 0이 이미 어노테이션을 채움 — 값을 앞에 삽입 (어노테이션 보존)
+            const target = valueCell.paragraphs.find(p => p.tRanges.length > 0) ?? valueCell.paragraphs[0]
+            if (!target) continue
+            const l = led(target)
+            if (l.fullText === undefined) {
+              l.ranges.push({ start: 0, end: 0, replacement: newValue + " " })
+              l.filledIdx.push(filled.length)
+              l.matchKeys.push(matchKey)
+            }
           } else {
-            replaceCellText(valueCell, newValue)
+            const paras = valueCell.paragraphs
+            if (paras.length === 0) continue
+            // 나중 쓰기 우선 (v3.0 replaceCellText와 동일) — 기존 원장 덮어쓰기
+            const l0 = led(paras[0])
+            l0.fullText = newValue
+            l0.ranges = []
+            l0.filledIdx.push(filled.length)
+            l0.matchKeys.push(matchKey)
+            for (let k = 1; k < paras.length; k++) {
+              const lk = led(paras[k])
+              lk.fullText = ""
+              lk.ranges = []
+            }
           }
           matchedLabels.add(matchKey)
           filled.push({
@@ -122,364 +198,144 @@ export async function fillHwpx(
             row: rowIdx,
             col: colIdx,
           })
-          modified = true
         }
       }
 
-      // 전략 2: 헤더+데이터 행 패턴 (첫 행이 전부 라벨이면)
-      if (rows.length >= 2) {
-        const headerCells = findDirectChildren(rows[0], "tc")
-        const allLabels = headerCells.every(cell => {
-          const t = extractCellText(cell).trim()
+      // 전략 2: 헤더+데이터 행 (첫 행이 전부 라벨이면)
+      if (table.rows.length >= 2) {
+        const headerCells = table.rows[0]
+        const allLabels = headerCells.length > 0 && headerCells.every(cell => {
+          const t = cellLabelText(cell).trim()
           return t.length > 0 && t.length <= 20 && isLabelCell(t)
         })
-
         if (allLabels) {
-          for (let rowIdx = 1; rowIdx < rows.length; rowIdx++) {
-            const dataCells = findDirectChildren(rows[rowIdx], "tc")
+          for (let rowIdx = 1; rowIdx < table.rows.length; rowIdx++) {
+            const dataCells = table.rows[rowIdx]
             for (let colIdx = 0; colIdx < Math.min(headerCells.length, dataCells.length); colIdx++) {
-              const headerLabel = normalizeLabel(extractCellText(headerCells[colIdx]))
+              const headerLabel = normalizeLabel(cellLabelText(headerCells[colIdx]))
               const matchKey = findMatchingKey(headerLabel, normalizedValues)
               if (matchKey === undefined) continue
               if (matchedLabels.has(matchKey)) continue
-
               const newValue = normalizedValues.get(matchKey)!
-              replaceCellText(dataCells[colIdx], newValue)
+
+              const paras = dataCells[colIdx].paragraphs
+              if (paras.length === 0) continue
+              // 나중 쓰기 우선 (v3.0과 동일)
+              const l0 = led(paras[0])
+              l0.fullText = newValue
+              l0.ranges = []
+              l0.filledIdx.push(filled.length)
+              l0.matchKeys.push(matchKey)
+              for (let k = 1; k < paras.length; k++) {
+                const lk = led(paras[k])
+                lk.fullText = ""
+                lk.ranges = []
+              }
               matchedLabels.add(matchKey)
               filled.push({
-                label: extractCellText(headerCells[colIdx]).trim(),
+                label: cellLabelText(headerCells[colIdx]).trim(),
                 value: newValue,
                 row: rowIdx,
                 col: colIdx,
               })
-              modified = true
             }
           }
         }
       }
     }
 
-    // 인라인 "라벨: 값" 패턴도 처리 (테이블 밖 paragraph)
-    const allParagraphs = findAllElements(doc.documentElement as unknown as Node, "p")
-    for (const pEl of allParagraphs) {
-      if (isInsideTable(pEl)) continue
-
-      // 모든 <hp:t> 텍스트를 위치 정보와 함께 수집
-      const tNodes = collectTextNodes(pEl)
-      const fullText = tNodes.map(n => n.text).join("")
-
-      const pattern = /([가-힣A-Za-z]{2,10})\s*[:：]\s*([^\n,;]{0,100})/g
-      let match
-      while ((match = pattern.exec(fullText)) !== null) {
-        const rawLabel = match[1]
-        const normalized = normalizeLabel(rawLabel)
-        const matchKey = findMatchingKey(normalized, normalizedValues)
+    // ── 전략 3: 인라인 "라벨: 값" (표 밖 본문/글상자 + 머리말·꼬리말 등) ──
+    // 세그먼트 단위 분해 — 한 문단 다중 라벨("성명:  작성일자: ") 지원.
+    // 좌표는 전부 원본 도메인이라 문단당 여러 range를 안전하게 누적할 수 있다
+    // (겹침은 원장 변환 단계에서 앞선 전략 우선으로 제거).
+    for (const para of [...scan.bodyParagraphs, ...scan.excludedParagraphs]) {
+      const existing = ledger.get(para)
+      if (existing?.fullText !== undefined) continue
+      const text = matchText(para)
+      for (const seg of scanInlineSegments(text)) {
+        const matchKey = findMatchingKey(normalizeLabel(seg.label), normalizedValues)
         if (matchKey === undefined) continue
-
         const newValue = normalizedValues.get(matchKey)!
-        // 값 부분의 시작/끝 오프셋 계산
-        const valueStart = match.index + match[0].length - match[2].length
-        const valueEnd = match.index + match[0].length
-
-        replaceTextRange(tNodes, valueStart, valueEnd, newValue)
+        // 빈 자리 삽입은 콜론·다음 라벨과 붙지 않게 공백 부착
+        const replacement = seg.valueStart === seg.valueEnd
+          ? padInsertion(text, seg.valueStart, newValue)
+          : newValue
+        const l = led(para)
+        l.ranges.push({ start: seg.valueStart, end: seg.valueEnd, replacement })
         matchedLabels.add(matchKey)
-        filled.push({ label: rawLabel.trim(), value: newValue, row: -1, col: -1 })
-        modified = true
-        // 교체 후 패턴 인덱스 조정 (텍스트 길이 변경됨) — 다음 매칭 건너뜀
-        break
+        l.filledIdx.push(filled.length)
+        l.matchKeys.push(matchKey)
+        filled.push({ label: seg.label.trim(), value: newValue, row: -1, col: -1 })
       }
     }
 
-    if (modified) {
-      const newXml = xmlSerializer.serializeToString(doc)
-      zip.file(sectionPath, newXml)
+    // ── 원장 → splice 변환 ──
+    const splices: SpliceEdit[] = []
+    for (const [para, l] of ledger) {
+      let paraSplices: SpliceEdit[] | null = null
+
+      if (l.fullText !== undefined) {
+        paraSplices = buildParagraphSplices(para, l.fullText, xml)
+      } else if (l.ranges.length > 0) {
+        // 겹침 제거 (앞선 전략 우선)
+        const sorted = [...l.ranges].sort((a, b) => a.start - b.start || a.end - b.end)
+        const merged: typeof sorted = []
+        for (const r of sorted) {
+          const prev = merged[merged.length - 1]
+          if (prev && r.start < prev.end) continue
+          merged.push(r)
+        }
+        if (paraTText(para, xml) !== null) {
+          // t-도메인 정밀 치환 — tab/br 요소를 건드리지 않고 run 서식 보존
+          const precise: SpliceEdit[] = []
+          let ok = true
+          for (const r of merged) {
+            const sp = buildRangeSplices(para, xml, r.start, r.end, r.replacement)
+            if (!sp) { ok = false; break }
+            precise.push(...sp)
+          }
+          paraSplices = ok ? precise : null
+        } else if (paraTextPureT(para, xml)) {
+          // 엔티티 포함 문단 — para.text 좌표로 기록했으므로 문자열 적용 후
+          // 전체 재작성 폴백 (tab/br 등 비-t 기여가 없을 때만 안전)
+          let text = para.text
+          for (let k = merged.length - 1; k >= 0; k--) {
+            const r = merged[k]
+            text = text.slice(0, r.start) + r.replacement + text.slice(r.end)
+          }
+          paraSplices = buildParagraphSplices(para, text, xml)
+        } else {
+          // 엔티티 + tab/br 동시 포함 — 안전한 치환 경로 없음, 채우기 포기
+          paraSplices = null
+        }
+      }
+
+      if (paraSplices === null) {
+        // 적용할 수 없는 문단 — filled 레코드와 매칭 키를 회수해 unmatched로 복원
+        for (const idx of l.filledIdx) filled[idx] = null
+        for (const k of l.matchKeys) failedKeys.add(k)
+        continue
+      }
+      for (const k of l.matchKeys) succeededKeys.add(k)
+      splices.push(...paraSplices)
+    }
+
+    if (splices.length > 0) {
+      replacements.set(sectionPaths[si], encoder.encode(applySplices(xml, splices)))
     }
   }
 
+  // splice 실패로만 쓰인 키는 unmatched로 복원 (다른 곳에 성공 적용됐으면 유지)
+  for (const k of failedKeys) {
+    if (!succeededKeys.has(k)) matchedLabels.delete(k)
+  }
+
+  const cleanFilled = filled.filter((f): f is FormField => f !== null)
   const unmatched = resolveUnmatched(normalizedValues, matchedLabels, values)
-  const buffer = await zip.generateAsync({ type: "arraybuffer" })
-  return { buffer, filled, unmatched }
-}
-
-// ─── XML 탐색 헬퍼 ──────────────────────────────────
-
-/** 로컬 태그명 추출 (네임스페이스 프리픽스 제거) */
-function localName(el: Element): string {
-  return (el.tagName || el.localName || "").replace(/^[^:]+:/, "")
-}
-
-/** 문서 전체에서 특정 로컬 태그명의 요소를 재귀 탐색 */
-function findAllElements(node: Node, tagLocalName: string): Element[] {
-  const result: Element[] = []
-  const walk = (n: Node) => {
-    const children = n.childNodes
-    if (!children) return
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i] as Element
-      if (child.nodeType !== 1) continue
-      if (localName(child) === tagLocalName) result.push(child)
-      walk(child)
-    }
+  const out = replacements.size > 0 ? patchZipEntries(u8, replacements) : new Uint8Array(u8)
+  return {
+    buffer: out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer,
+    filled: cleanFilled,
+    unmatched,
   }
-  walk(node)
-  return result
-}
-
-/** 직계 자식 중 특정 로컬 태그명 요소만 반환 */
-function findDirectChildren(parent: Node, tagLocalName: string): Element[] {
-  const result: Element[] = []
-  const children = parent.childNodes
-  if (!children) return result
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i] as Element
-    if (child.nodeType === 1 && localName(child) === tagLocalName) {
-      result.push(child)
-    }
-  }
-  return result
-}
-
-/** 요소가 <tbl> 안에 있는지 확인 (부모 체인 탐색) */
-function isInsideTable(el: Element): boolean {
-  let parent = el.parentNode as Element | null
-  while (parent) {
-    if (parent.nodeType === 1 && localName(parent) === "tbl") return true
-    parent = parent.parentNode as Element | null
-  }
-  return false
-}
-
-// ─── 셀 텍스트 추출/교체 ────────────────────────────
-
-/** 셀(<hp:tc>) 내 모든 <hp:t> 텍스트를 합쳐 반환 */
-function extractCellText(tcEl: Element): string {
-  const parts: string[] = []
-  const walk = (node: Node) => {
-    const children = node.childNodes
-    if (!children) return
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i] as Element
-      if (child.nodeType === 3) {
-        parts.push(child.textContent || "")
-      } else if (child.nodeType === 1) {
-        const tag = localName(child)
-        // subList는 tc 아래 p를 감싸는 컨테이너 — 반드시 순회
-        if (tag === "t") walk(child)
-        else if (tag === "run" || tag === "r" || tag === "p" || tag === "subList") walk(child)
-        else if (tag === "tab") parts.push("\t")
-        else if (tag === "br") parts.push("\n")
-      }
-    }
-  }
-  walk(tcEl)
-  return parts.join("")
-}
-
-/**
- * 셀(<hp:tc>)의 첫 번째 <hp:t> 앞에 텍스트를 삽입 — 어노테이션 보존.
- * 예: "(한자：金民秀)" → "김민수 (한자：金民秀)"
- */
-function prependCellText(tcEl: Element, text: string): void {
-  const tElements = findAllElements(tcEl, "t")
-  if (tElements.length === 0) return
-
-  const firstT = tElements[0]
-  const existing = firstT.textContent || ""
-  clearChildren(firstT)
-  firstT.appendChild(firstT.ownerDocument!.createTextNode(text + " " + existing))
-}
-
-/**
- * 셀(<hp:tc>) 내 텍스트를 새 값으로 교체 — 스타일 보존 전략:
- *
- * 1) 첫 번째 <hp:run>의 <hp:t>에 새 텍스트 설정
- * 2) 나머지 <hp:run>의 <hp:t>는 빈 문자열로
- * 3) 두 번째 이후 <hp:p>는 내용만 비움 (요소 유지 — HWPX 뷰어 호환)
- *
- * 이렇게 하면 첫 번째 run의 charPrIDRef(글꼴, 크기, 굵기 등)가 보존됨
- */
-function replaceCellText(tcEl: Element, newValue: string): void {
-  const paragraphs = findAllElements(tcEl, "p")
-  if (paragraphs.length === 0) return
-
-  const firstP = paragraphs[0]
-  const runs = findAllElements(firstP, "run").concat(findAllElements(firstP, "r"))
-
-  if (runs.length > 0) {
-    setRunText(runs[0], newValue)
-    for (let i = 1; i < runs.length; i++) {
-      setRunText(runs[i], "")
-    }
-  } else {
-    const tElements = findAllElements(firstP, "t")
-    if (tElements.length > 0) {
-      clearChildren(tElements[0])
-      tElements[0].appendChild(tElements[0].ownerDocument!.createTextNode(newValue))
-      for (let i = 1; i < tElements.length; i++) {
-        clearChildren(tElements[i])
-      }
-    }
-  }
-
-  // 두 번째 이후 paragraph — 내용만 비움
-  for (let i = 1; i < paragraphs.length; i++) {
-    const p = paragraphs[i]
-    if (p.parentNode) {
-      const pRuns = findAllElements(p, "run").concat(findAllElements(p, "r"))
-      for (const run of pRuns) setRunText(run, "")
-      const pTs = findAllElements(p, "t")
-      for (const t of pTs) clearChildren(t)
-    }
-  }
-}
-
-/** <hp:run> 요소의 <hp:t> 텍스트를 교체 */
-function setRunText(runEl: Element, text: string): void {
-  const tElements = findAllElements(runEl, "t")
-  if (tElements.length > 0) {
-    clearChildren(tElements[0])
-    tElements[0].appendChild(tElements[0].ownerDocument!.createTextNode(text))
-    for (let i = 1; i < tElements.length; i++) {
-      clearChildren(tElements[i])
-    }
-    return
-  }
-
-  // <hp:t>가 없는 빈 run — 한컴오피스가 HWP→HWPX 변환 시 빈 셀의 run을
-  // self-closing(<hp:run charPrIDRef="..."/>)으로 만들면서 <hp:t>를 생략한다.
-  // 이 경우 부모 run의 prefix/namespace를 따라 새로 생성해 추가한다.
-  // 빈 문자열이면 굳이 노드를 만들지 않는다(다른 호출부에서 run을 비울 때 사용).
-  if (!text) return
-
-  const doc = runEl.ownerDocument!
-  const ns = runEl.namespaceURI
-  const qualifiedName = runEl.prefix ? `${runEl.prefix}:t` : "t"
-  const tEl = ns
-    ? doc.createElementNS(ns, qualifiedName)
-    : doc.createElement(qualifiedName)
-  tEl.appendChild(doc.createTextNode(text))
-  runEl.appendChild(tEl)
-}
-
-/** 요소의 모든 자식 노드 제거 */
-function clearChildren(el: Element): void {
-  while (el.firstChild) el.removeChild(el.firstChild)
-}
-
-// ─── 인라인 텍스트 교체 (분리된 <hp:t> 대응) ─────────
-
-/** <hp:t> 텍스트 노드와 글로벌 오프셋 정보 */
-interface TextNodeInfo {
-  /** <hp:t> 요소 */
-  element: Element
-  /** 이 요소의 텍스트 */
-  text: string
-  /** 전체 합산 텍스트에서의 시작 오프셋 */
-  offset: number
-}
-
-/** paragraph 내 모든 <hp:t> 텍스트 노드를 오프셋과 함께 수집 */
-function collectTextNodes(pEl: Element): TextNodeInfo[] {
-  const tElements = findAllElements(pEl, "t")
-  const result: TextNodeInfo[] = []
-  let offset = 0
-  for (const t of tElements) {
-    const text = t.textContent || ""
-    result.push({ element: t, text, offset })
-    offset += text.length
-  }
-  return result
-}
-
-/**
- * 여러 <hp:t>에 걸친 텍스트 범위를 새 값으로 교체.
- * 첫 번째 걸리는 <hp:t>에 교체 텍스트를 넣고, 나머지는 해당 범위만큼 잘라냄.
- */
-function replaceTextRange(
-  tNodes: TextNodeInfo[],
-  globalStart: number,
-  globalEnd: number,
-  newValue: string,
-): void {
-  let replaced = false
-  for (const node of tNodes) {
-    const nodeStart = node.offset
-    const nodeEnd = node.offset + node.text.length
-
-    if (nodeEnd <= globalStart || nodeStart >= globalEnd) continue
-
-    const localStart = Math.max(0, globalStart - nodeStart)
-    const localEnd = Math.min(node.text.length, globalEnd - nodeStart)
-
-    if (!replaced) {
-      const before = node.text.slice(0, localStart)
-      const after = node.text.slice(localEnd)
-      const newText = before + newValue + after
-      clearChildren(node.element)
-      node.element.appendChild(node.element.ownerDocument!.createTextNode(newText))
-      replaced = true
-    } else {
-      const before = node.text.slice(0, localStart)
-      const after = node.text.slice(localEnd)
-      const newText = before + after
-      clearChildren(node.element)
-      node.element.appendChild(node.element.ownerDocument!.createTextNode(newText))
-    }
-  }
-}
-
-// ─── 인셀 패턴 교체 (체크박스/괄호 빈칸) ─────────
-
-/** 셀(<hp:tc>) 내 모든 <hp:t> 텍스트 노드를 오프셋과 함께 수집 (subList 순회 포함) */
-function collectCellTextNodes(tcEl: Element): TextNodeInfo[] {
-  const tElements = findAllElements(tcEl, "t")
-  const result: TextNodeInfo[] = []
-  let offset = 0
-  for (const t of tElements) {
-    const text = t.textContent || ""
-    result.push({ element: t, text, offset })
-    offset += text.length
-  }
-  return result
-}
-
-/**
- * 셀 내 <hp:t> 노드들의 텍스트를 원본→교체 결과에 맞춰 반영.
- * 각 노드가 원본 텍스트에서 차지하는 범위를 추적하고,
- * 교체된 텍스트에서 같은 비율의 영역을 할당.
- */
-function applyTextReplacements(
-  tNodes: TextNodeInfo[],
-  originalFull: string,
-  replacedFull: string,
-): void {
-  if (originalFull === replacedFull) return
-
-  // 단일 <hp:t> 노드면 간단히 전체 교체
-  if (tNodes.length === 1) {
-    clearChildren(tNodes[0].element)
-    tNodes[0].element.appendChild(
-      tNodes[0].element.ownerDocument!.createTextNode(replacedFull),
-    )
-    return
-  }
-
-  // 여러 노드: diff를 노드 경계에 맞춰 적용
-  // 변경된 부분의 시작 오프셋을 찾아서 해당 노드만 교체
-  let diffStart = 0
-  while (diffStart < originalFull.length && diffStart < replacedFull.length &&
-         originalFull[diffStart] === replacedFull[diffStart]) {
-    diffStart++
-  }
-  let diffEndOrig = originalFull.length
-  let diffEndRepl = replacedFull.length
-  while (diffEndOrig > diffStart && diffEndRepl > diffStart &&
-         originalFull[diffEndOrig - 1] === replacedFull[diffEndRepl - 1]) {
-    diffEndOrig--
-    diffEndRepl--
-  }
-
-  // 변경된 범위를 포함하는 노드에 교체 적용
-  const newPart = replacedFull.slice(diffStart, diffEndRepl)
-  replaceTextRange(tNodes, diffStart, diffEndOrig, newPart)
 }

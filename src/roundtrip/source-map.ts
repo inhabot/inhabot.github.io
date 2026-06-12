@@ -37,6 +37,8 @@ export interface ScanParagraph {
   runPrefix?: string
   /** 자기닫힘 <hp:run/> 태그 범위 — t 삽입 시 펼쳐서 사용 (한컴 빈 문단 패턴) */
   selfCloseRun?: { start: number; end: number }
+  /** 글상자(drawText) 경유 문단 — 셀 라벨 판정 등에서 본문과 구분 (v3.1) */
+  inTextbox?: boolean
 }
 
 /** 스캔된 표 셀 — 앵커 좌표와 셀 내부 문단 */
@@ -73,6 +75,16 @@ export interface SectionScan {
   /** 머리말/꼬리말 문단 텍스트 (OB 앞/뒤 배치 블록 식별용) */
   headerTexts: string[]
   footerTexts: string[]
+  /**
+   * 파서 비가시 영역(머리말/꼬리말/각주/캡션/메모 등 ctrl 내부) 문단 — v3.1.
+   * patcher 매핑 대상이 아니며, filler가 이 영역의 인라인 패턴을 채울 때 사용.
+   */
+  excludedParagraphs: ScanParagraph[]
+  /**
+   * 어느 셀에도 속하지 않는 비최상위 표(머리말/꼬리말 등 ctrl 내부) — v3.1.
+   * filler 전용. patcher의 표 서수 매핑(tables)에는 포함되지 않는다.
+   */
+  orphanTables: ScanTable[]
 }
 
 /** 문자열 splice 편집 — [start, end) 를 replacement로 치환 */
@@ -171,6 +183,8 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
   const tables: ScanTable[] = []
   const headerTexts: string[] = []
   const footerTexts: string[] = []
+  const excludedParagraphs: ScanParagraph[] = []
+  const orphanTables: ScanTable[] = []
 
   // 진행 상태
   const paraStack: ScanParagraph[] = []
@@ -183,15 +197,15 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
   /** 스택 위에서 아래로 보며 가장 가까운 PARA_CONTAINER/장벽 판별.
    *  drawText는 투과 — 바깥에 tc가 있으면(셀 안 글상자) 파서의 mergeBlocksIntoCell과
    *  동일하게 cell로 귀속, 아니면 draw(본문 글상자). */
-  const classifyPara = (): ScanParaKind => {
+  const classifyPara = (): { kind: ScanParaKind; inTextbox: boolean } => {
     let sawDrawText = false
     for (let i = stack.length - 1; i >= 0; i--) {
       const l = stack[i].local
-      if (l === "tc") return "cell"
+      if (l === "tc") return { kind: "cell", inTextbox: sawDrawText }
       if (l === "drawText") { sawDrawText = true; continue }
-      if (PARA_CONTAINER.has(l)) return "excluded"
+      if (PARA_CONTAINER.has(l)) return { kind: "excluded", inTextbox: sawDrawText }
     }
-    return sawDrawText ? "draw" : "body"
+    return sawDrawText ? { kind: "draw", inTextbox: true } : { kind: "body", inTextbox: false }
   }
 
   /** 현재 위치의 t/tab 등이 최상위 열린 문단 소유인지 (사이에 장벽 없음) */
@@ -264,10 +278,12 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
         rowStack.pop()
         if (table) {
           finalizeTable(table)
-          // 중첩표는 둘러싼 셀에 부착 (재귀 패치용)
+          // 중첩표는 둘러싼 셀에 부착 (재귀 패치용), 셀이 없으면(머리말 등
+          // ctrl 내부) orphanTables로 — filler가 채우기 대상에 포함 (v3.1)
           if (!table.topLevel) {
             const cell = cellStack[cellStack.length - 1]
             if (cell) cell.tables.push(table)
+            else orphanTables.push(table)
           }
         }
       } else if (local === "header" || local === "footer") {
@@ -344,13 +360,17 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
       }
       // 자기 자신(p)을 제외하고 분류
       stack.pop()
-      para.kind = classifyPara()
+      const cls = classifyPara()
+      para.kind = cls.kind
+      if (cls.inTextbox) para.inTextbox = true
       stack.push({ local, qname, contentStart })
       paraStack.push(para)
       if (para.kind === "body" || para.kind === "draw") bodyParagraphs.push(para)
       else if (para.kind === "cell") {
         const cell = cellStack[cellStack.length - 1]
         if (cell) cell.paragraphs.push(para)
+      } else if (para.kind === "excluded") {
+        excludedParagraphs.push(para)
       }
     } else if (local === "run" || local === "r") {
       // hp:t가 없는 문단의 삽입 지점 후보 — 첫 run의 닫는 태그 위치는 닫힐 때 알 수 있으므로
@@ -405,6 +425,7 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
 
   // run 삽입 지점 보강: t가 없는 body/cell 문단에 대해 첫 run의 닫는 태그 위치 탐색
   for (const para of bodyParagraphs) fillRunInsertPos(para, xml)
+  for (const para of excludedParagraphs) fillRunInsertPos(para, xml)
   const fillTableInsertPos = (table: ScanTable, depth = 0): void => {
     if (depth > 16) return
     for (const row of table.rows) {
@@ -415,8 +436,9 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
     }
   }
   for (const table of tables) fillTableInsertPos(table)
+  for (const table of orphanTables) fillTableInsertPos(table)
 
-  return { sectionIndex, xml, bodyParagraphs, tables, headerTexts, footerTexts }
+  return { sectionIndex, xml, bodyParagraphs, tables, headerTexts, footerTexts, excludedParagraphs, orphanTables }
 }
 
 /** 속성 문자열에서 값 추출 */
@@ -555,6 +577,91 @@ export function buildParagraphSplices(para: ScanParagraph, newText: string, xml?
     return [{ start, end, replacement: `${opened}<${prefix}t>${escaped}</${prefix}t></${qname}>` }]
   }
   return newText ? null : []
+}
+
+/**
+ * 문단의 t-도메인 텍스트 — hp:t 콘텐츠만 이어붙인 문자열 (v3.1).
+ *
+ * para.text와 달리 tab/br 등 비-t 요소의 공백 기여가 없어, 그 사이에 끼인
+ * 요소를 건드리지 않는 정밀 치환(buildRangeSplices)의 좌표계로 쓴다.
+ * hp:t 콘텐츠에 엔티티/내부 태그([<&])가 있으면 좌표가 어긋나므로 null.
+ */
+export function paraTText(para: ScanParagraph, xml: string): string | null {
+  let text = ""
+  for (const t of para.tRanges) {
+    if (t.selfClosing) continue
+    const raw = xml.slice(t.contentStart, t.contentEnd)
+    if (/[<&]/.test(raw)) return null
+    text += raw
+  }
+  return text
+}
+
+/** 문단 텍스트가 전부 hp:t에서 왔는지 — tab/br 등 비-t 기여가 있으면 false.
+ *  false면 문단 전체 재작성 시 비-t 요소와 텍스트가 중복/순서 역전되므로 금지. */
+export function paraTextPureT(para: ScanParagraph, xml: string): boolean {
+  let len = 0
+  for (const t of para.tRanges) {
+    if (t.selfClosing) continue
+    len += tContentToText(xml.slice(t.contentStart, t.contentEnd)).length
+  }
+  return len === para.text.length
+}
+
+/**
+ * t-도메인 텍스트(paraTText 좌표계)의 [start, end) 범위만 치환하는 정밀 splice
+ * — run/탭 구조 보존 (v3.1).
+ *
+ * 좌표계가 t-도메인이므로 tab/br이 사이에 끼어 있어도 동작한다 (해당 요소는
+ * 건드리지 않고 t 콘텐츠만 수술). hp:t 콘텐츠에 엔티티/내부 태그가 있으면
+ * 오프셋 정합이 깨지므로 null을 반환한다 (호출자가 폴백 결정).
+ */
+export function buildRangeSplices(
+  para: ScanParagraph, xml: string, start: number, end: number, replacement: string,
+): SpliceEdit[] | null {
+  if (start < 0 || end < start) return null
+
+  // t 세그먼트 ↔ t-도메인 오프셋 정렬 — 디코딩 불변 검증
+  interface Seg { contentStart: number; from: number; to: number }
+  const segs: Seg[] = []
+  let offset = 0
+  for (const t of para.tRanges) {
+    if (t.selfClosing) continue // 텍스트 기여 없음
+    const raw = xml.slice(t.contentStart, t.contentEnd)
+    if (/[<&]/.test(raw)) return null // 엔티티/내부 태그 — 오프셋 불일치 가능
+    segs.push({ contentStart: t.contentStart, from: offset, to: offset + raw.length })
+    offset += raw.length
+  }
+  if (segs.length === 0 || end > offset) return null
+
+  const escaped = escapeXmlText(replacement)
+
+  // 삽입 (start === end) — 위치를 포함하는 첫 세그먼트에 삽입
+  if (start === end) {
+    for (const seg of segs) {
+      if (start >= seg.from && start <= seg.to) {
+        const at = seg.contentStart + (start - seg.from)
+        return [{ start: at, end: at, replacement: escaped }]
+      }
+    }
+    return null
+  }
+
+  // 치환 — 첫 겹침 세그먼트에 새 텍스트, 나머지 겹침 구간은 제거
+  const splices: SpliceEdit[] = []
+  let placed = false
+  for (const seg of segs) {
+    if (seg.to <= start || seg.from >= end) continue
+    const localStart = Math.max(seg.from, start) - seg.from
+    const localEnd = Math.min(seg.to, end) - seg.from
+    splices.push({
+      start: seg.contentStart + localStart,
+      end: seg.contentStart + localEnd,
+      replacement: placed ? "" : escaped,
+    })
+    placed = true
+  }
+  return placed ? splices : null
 }
 
 /** splice 일괄 적용 — 겹침 검증 후 뒤에서부터 치환 */

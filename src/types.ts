@@ -322,7 +322,7 @@ export interface PatchOptions {
   verify?: boolean
 }
 
-/** patchHwpx 결과 */
+/** patchHwpx / patchBlocks 결과 */
 export interface PatchResult {
   success: boolean
   /** 패치된 HWPX (success=true) */
@@ -331,8 +331,18 @@ export interface PatchResult {
   applied: number
   /** 매핑 실패 항목 (이유 포함) */
   skipped: PatchSkip[]
-  /** 자동 검증: 패치본 재파싱 vs 편집 마크다운 diff */
+  /**
+   * 무손실 검증 (patchHwpx/patchHwp 전용): 패치본 재파싱 vs 편집 마크다운의
+   * 잔차 diff — modified/added/removed가 0이어야 의도가 전부 반영된 것.
+   * session.patchBlocks는 이 필드를 채우지 않는다 (changes 참조).
+   */
   verification?: DiffResult
+  /**
+   * 변경 가시화 (session.patchBlocks 전용): 패치 전 → 후 문서 diff —
+   * 적용된 편집 수만큼 modified가 나오는 것이 정상. verification과 의미가
+   * 정반대이므로 혼용 금지.
+   */
+  changes?: DiffResult
   /** 실패 사유 (success=false) */
   error?: string
 }

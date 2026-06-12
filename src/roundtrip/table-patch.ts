@@ -241,8 +241,9 @@ export function patchTextChunkTable(
 /**
  * 격자 좌표 (gridR, gridC)의 셀에 새 텍스트 라인들을 적용.
  * 라인 ↔ 셀 내 비어있지 않은 문단 순서 매핑 (filler-hwpx 치환 전략).
+ * (session.ts 블록 단위 셀 편집에서도 공용)
  */
-function applyCellEdit(
+export function applyCellEdit(
   table: IRTable, scanTable: ScanTable, gridR: number, gridC: number,
   newLines: string[], ctx: TablePatchCtx, before: string, after: string,
   origLineCount?: number,

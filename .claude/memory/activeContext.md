@@ -1,7 +1,52 @@
 # Active Context — kordoc 본체
 
-**마지막 업데이트**: 2026-06-11 (v3.0.0 릴리스 완료)
-**상태**: 커밋 1f3ef33 + 태그 v3.0.0 푸시 + npm publish 완료 (kordoc@3.0.0 = latest). pnpm-lock.yaml/pnpm-workspace.yaml은 잔여물이라 커밋 제외(untracked로 남음 — 정리 여부 사용자 판단)
+**마지막 업데이트**: 2026-06-12 (Phase A 마무리 + **Phase B 구현 완료** — v3.1.0 릴리스 진행)
+**상태**: 테스트 500/500 그린 (인라인 다중라벨 수정 +9). Phase B는 kordoc-ai 레포에 구현 완료 (RPC 4종 + FillWizard + rhwp WASM 임베드, fill-e2e 9/9).
+
+## Phase B 완료 요약 (2026-06-12, kordoc-ai 레포)
+- 사이드카 RPC 4종: form_schema/form_fill/patch_blocks(HEAVY) + render_preview(HEAVY 제외) — Rust 화이트리스트 동기화
+- @rhwp/core@0.7.15 듀얼 임베드: 프론트 Vite asset(wasm 5.5MB, CSP `wasm-unsafe-eval` 추가) + 사이드카 Node WASM(esbuild external + dist/node_modules 복사, 번들 stdin RPC 실검증)
+- FillWizard: 좌 자동 폼(타입 위젯/필수/빈칸 배지) + 우 rhwp SVG 미리보기, 필드 포커스↔SVG 하이라이트 + 역방향 점프(svg-annotate), 출처 배지(명부 xlsx → "← 명부.xlsx B2" / 직접 입력 / 양식 기존 값), dry_run 미리보기 반영, 재파싱 검증 배지
+- 실양식 E2E 2종 통과 (서면자문=인라인형, 수당여비=표형). 3종 목표였으나 로컬에 실양식 2개뿐 — 3종째 + 한/글 육안 검증은 사용자 확인 필요
+- pnpm 전역 minimum-release-age(7일) → 프로젝트 .npmrc에 @rhwp/core 예외
+- **코어 버그픽스(v3.1.0 포함)**: 인라인 다중 라벨("성명: 작성일자:") — scanInlineSegments 신설, 인식 오페어링 + 채우기 시 다음 라벨 소실 수정, 문단당 1매칭 제한 해제
+
+---
+
+## KorDoc Studio Phase A 완료 (2026-06-12, 미커밋)
+
+### 프로젝트 컨텍스트
+- **KorDoc Studio (Suite Phase 3R)**: 양식 자동 채우기 + rhwp 미리보기/편집 작업대. 전체 플랜 `.claude/plans/kordoc-studio-plan.md`
+- rhwp 스파이크 검증 완료 (d:\AI_Project\kordoc-studio-spike): @rhwp/core@0.7.15 렌더 OK, exportHwpx 내용 100% 보존(바이트 비보존 → 듀얼 저장 경로)
+- 실양식 테스트 파일: `D:/AI_Project/edu-facility-ai/docs/원본자료/4. 서면자문 의견서(양식).hwpx`
+
+### ✅ 완료된 작업 (브랜치 feat/editor-api-v3.1)
+| 작업 | 파일 | 상태 |
+|------|------|------|
+| HwpxSession (open/capability/patchBlocks/sourceRef) + patchHwpxBlocks | `src/roundtrip/session.ts` (신규) | ✅ |
+| buildRangeSplices(t-도메인)/paraTText/paraTextPureT + 스캐너 additive(excludedParagraphs/orphanTables/inTextbox) | `src/roundtrip/source-map.ts` | ✅ |
+| 섹션 엔트리 해석 공용화 | `src/roundtrip/hwpx-entries.ts` (신규) | ✅ |
+| fillHwpx splice 전환 (바이트 보존 + v3.0 패리티) | `src/form/filler-hwpx.ts` (전면 재작성) | ✅ |
+| extractFormSchema/inferFieldType (타입 7종+required/empty) | `src/form/recognize.ts` | ✅ |
+| PatchResult.changes 필드 신설 (verification과 의미 분리) | `src/types.ts` | ✅ |
+| CJS import.meta 버그 수정 | `tsup.config.ts` (shims:true) | ✅ |
+| 신규 테스트 33개 (동등성 CI 게이트 포함) | `tests/{session-api,form-schema,filler-splice}.test.ts` | ✅ |
+
+### 적대적 리뷰 (26 에이전트, 22건 확정 → 근본원인 14개 전부 수정)
+major 수정: 전각공백 silent drop(동등성 위반), 머리말 영역 채우기 회귀, 탭 문단 재작성 오염, 글상자 라벨 오염, 셀 이미지 토큰 리터럴 기록, 빈 문자열 비우기 핸들 소실, verification 의미 충돌. minor: 재진입 직렬화, ArrayBuffer 뷰 복사, dedup 슬롯, matchedLabels 회수, amount 오탐 등.
+
+### 📋 다음 할 일
+- [x] 커밋 + PR + v3.1.0 릴리스 (CHANGELOG v3.0.1 보강 포함)
+- [x] Phase B (W3-4): kordoc-ai @rhwp/core 임베드 + FillWizard + RPC 4종 + 출처 배지
+- [ ] bench 게이트 회귀 확인 — 코퍼스 로컬 미존재로 미실행 (CI/코퍼스 보유 환경에서 `node bench/score.mjs`)
+- [ ] Phase B 잔여: 실양식 3종째 + 한/글 육안 검증 (사용자), tauri:dev 웹뷰에서 WASM 초기화 실확인
+- [ ] Phase C (클릭-편집): capability 잠금 시각화, 인라인 편집, undo/redo
+- [ ] MCP에 fill_form/form_schema 도구 노출 (Phase D 계획이나 반나절 작업)
+
+### 의도된 제약 (재론 금지)
+- 빈 문자열 블록 비우기 = skip (블록 핸들 소실 + patchHwpx 비대칭 방지)
+- 전략 0 인셀 패턴은 문단 단위 매칭 (문단 경계 걸친 패턴 미지원 — v3.0과 의도적 차이, 파일 헤더 문서화)
+- session의 changes vs patchHwpx의 verification — 의미 다름, 혼용 금지
 
 ---
 
