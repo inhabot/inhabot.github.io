@@ -135,6 +135,32 @@ describe("HwpxSession.patchBlocks", () => {
     assert.equal(res.verification, undefined)
   })
 
+  it("문단 편집: 원본 들여쓰기(선행 공백/전각공백) 보존", async () => {
+    const section = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+  <hp:p id="0"><hp:run charPrIDRef="0"><hp:t>  ○ 25일 발행 당일 : 익월 게재</hp:t></hp:run></hp:p>
+  <hp:p id="1"><hp:run charPrIDRef="0"><hp:t>　○ 전각공백 들여쓰기 줄</hp:t></hp:run></hp:p>
+</hs:sec>`
+    const zip = new JSZip()
+    zip.file("mimetype", "application/hwp+zip")
+    zip.file("Contents/section0.xml", section)
+    const original = new Uint8Array(await zip.generateAsync({ type: "arraybuffer" }))
+
+    const session = await HwpxSession.open(original)
+    const i0 = session.blocks.findIndex(b => b.text?.includes("25일"))
+    const i1 = session.blocks.findIndex(b => b.text?.includes("전각공백"))
+    const res = await session.patchBlocks([
+      { blockIndex: i0, newText: "○ 5일경 : 수정된 텍스트" },
+      { blockIndex: i1, newText: "○ 전각공백 수정됨" },
+    ])
+    assert.ok(res.success)
+    assert.equal(res.applied, 2)
+
+    const outXml = await (await JSZip.loadAsync(res.data!)).file("Contents/section0.xml")!.async("text")
+    assert.ok(outXml.includes("<hp:t>  ○ 5일경 : 수정된 텍스트</hp:t>"), "일반 공백 들여쓰기 보존")
+    assert.ok(outXml.includes("<hp:t>　○ 전각공백 수정됨</hp:t>"), "전각공백 들여쓰기 보존")
+  })
+
   it("표 셀 편집: 격자 좌표로 적용", async () => {
     const { original } = await makeSynthetic()
     const session = await HwpxSession.open(original)
