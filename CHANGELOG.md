@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-06-13
+
+### Fixed
+
+- **문단 통째 교체 시 원본 들여쓰기(선행/후행 공백) 소실** — IR 텍스트는
+  sanitize로 양끝 공백이 제거된 상태라 `buildParagraphSplices`가 통째 교체할
+  때 원본 `<hp:t>`의 선행 공백(들여쓰기)이 사라졌다. 클릭-편집 후 해당 줄만
+  왼쪽으로 튀어나오는 정렬 회귀. 원본 t-도메인 텍스트에서 양끝 공백을 복원해
+  새 텍스트에 입힌다 — `HwpxSession.patchBlocks` / `patchHwpx` / `fillHwpx` /
+  표 셀 공통 경로 적용, n회 증분 ≡ 일괄 패치 동등성 유지. (#35)
+
 ## [3.1.0] - 2026-06-12 — 에디터 통합 API (KorDoc Studio Phase A)
 
 > 에디터(KorDoc Studio)가 블록 클릭-편집으로 HWPX를 증분 수정할 수 있도록
