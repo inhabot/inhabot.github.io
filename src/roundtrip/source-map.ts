@@ -535,8 +535,22 @@ function finalizeTable(table: ScanTable): void {
  * 문단 텍스트 치환용 splice 생성 — filler-hwpx.ts replaceCellText와 동일 전략:
  * 첫 hp:t에 새 텍스트(이스케이프), 나머지 hp:t는 비움. run 구조/charPr 보존.
  * t가 없으면 첫 run 끝에 <hp:t> 삽입. 실패 시 null.
+ *
+ * IR 텍스트는 sanitize로 양끝 공백이 제거된 상태라, 통째 교체 시 원본의
+ * 선행 공백(들여쓰기)/후행 공백이 소실된다 — 원본 t-도메인 텍스트에서
+ * 양끝 공백을 복원해 새 텍스트에 입힌다 (재파싱 IR은 동일하게 유지됨).
  */
 export function buildParagraphSplices(para: ScanParagraph, newText: string, xml?: string): SpliceEdit[] | null {
+  if (newText && xml) {
+    const orig = paraTText(para, xml)
+    if (orig && orig.trim() !== "") {
+      const lead = orig.match(/^\s*/)![0]
+      const trail = orig.match(/\s*$/)![0]
+      if ((lead || trail) && newText.trim() !== "") {
+        newText = lead + newText.replace(/^\s+|\s+$/g, "") + trail
+      }
+    }
+  }
   const escaped = escapeXmlText(newText)
   if (para.tRanges.length > 0) {
     const splices: SpliceEdit[] = []
