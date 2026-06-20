@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-06-20
+
+### Added
+
+- **MCP 도구 `patch_document`** — 원본 HWPX/HWP의 서식(글꼴·표·도장칸·이미지)을
+  보존한 채 편집된 마크다운의 바뀐 텍스트만 제자리 치환해 새 문서로 출력.
+  `parse_document` → (마크다운 편집) → `patch_document`의 라운드트립을 Claude/Cursor
+  등 MCP 클라이언트에서 바로 사용 가능. 포맷 자동 감지로 HWPX는 `patchHwpx`,
+  HWP 5.x는 `patchHwp` 경로를 탄다. 무손실 검증 결과와 미적용 항목을 함께 보고.
+  (`src/mcp.ts`)
+
 ## [3.2.1] - 2026-06-20
 
 ### Fixed
