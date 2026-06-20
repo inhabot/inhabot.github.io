@@ -7,10 +7,20 @@
  */
 
 import JSZip from "jszip"
+import {
+  type GongmunOptions,
+  type ResolvedGongmun,
+  resolveGongmun,
+  GongmunNumberer,
+  computeSuppression,
+  levelIndent,
+  mmToHwpunit,
+} from "./gongmun.js"
 
 const NS_SECTION = "http://www.hancom.co.kr/hwpml/2011/section"
 const NS_PARA = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 const NS_HEAD = "http://www.hancom.co.kr/hwpml/2011/head"
+const NS_CORE = "http://www.hancom.co.kr/hwpml/2011/core"
 const NS_OPF = "http://www.idpf.org/2007/opf/"
 const NS_HPF = "http://www.hancom.co.kr/schema/2011/hpf"
 const NS_OCF = "urn:oasis:names:tc:opendocument:xmlns:container"
@@ -66,6 +76,12 @@ export interface HwpxTheme {
 /** markdownToHwpx 옵션 */
 export interface MarkdownToHwpxOptions {
   theme?: HwpxTheme
+  /**
+   * 공문서 모드 — 지정 시 한국 행정 공문서 표준 서식으로 렌더링한다.
+   * (공식 여백, 명조 15pt 본문, 항목부호 8단계 행갈굼 정렬, 줄간격 등)
+   * 미지정 시 기존 범용 마크다운 변환 동작 그대로 유지.
+   */
+  gongmun?: GongmunOptions
 }
 
 const DEFAULT_TEXT_COLOR = "#000000"
@@ -95,14 +111,15 @@ export async function markdownToHwpx(
   options?: MarkdownToHwpxOptions,
 ): Promise<ArrayBuffer> {
   const theme = resolveTheme(options?.theme)
+  const gongmun = options?.gongmun ? resolveGongmun(options.gongmun) : null
   const blocks = parseMarkdownToBlocks(markdown)
-  const sectionXml = blocksToSectionXml(blocks, theme)
+  const sectionXml = blocksToSectionXml(blocks, theme, gongmun)
 
   const zip = new JSZip()
   zip.file("mimetype", "application/hwp+zip", { compression: "STORE" })
   zip.file("META-INF/container.xml", generateContainerXml())
   zip.file("Contents/content.hpf", generateManifest())
-  zip.file("Contents/header.xml", generateHeaderXml(theme))
+  zip.file("Contents/header.xml", generateHeaderXml(theme, gongmun))
   zip.file("Contents/section0.xml", sectionXml)
   // Preview/ — 한글 프로그램의 일부 버전(특히 macOS)이 존재 여부를 확인함
   zip.file("Preview/PrvText.txt", buildPrvText(blocks))
@@ -368,27 +385,104 @@ function charPr(
 
 // ─── paraPr 생성 헬퍼 ───────────────────────────────
 
-function paraPr(id: number, opts: { align?: string; spaceBefore?: number; spaceAfter?: number; lineSpacing?: number; indent?: number } = {}): string {
-  const { align = "JUSTIFY", spaceBefore = 0, spaceAfter = 0, lineSpacing = 160, indent = 0 } = opts
+function paraPr(id: number, opts: { align?: string; spaceBefore?: number; spaceAfter?: number; lineSpacing?: number; indent?: number; left?: number } = {}): string {
+  const { align = "JUSTIFY", spaceBefore = 0, spaceAfter = 0, lineSpacing = 160, indent = 0, left = 0 } = opts
   return `      <hh:paraPr id="${id}" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0" textDir="AUTO">
         <hh:align horizontal="${align}" vertical="BASELINE"/>
         <hh:heading type="NONE" idRef="0" level="0"/>
         <hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_WORD" widowOrphan="0" keepWithNext="0" keepLines="0" pageBreakBefore="0" lineWrap="BREAK"/>
         <hh:autoSpacing eAsianEng="0" eAsianNum="0"/>
-        <hh:margin indent="${indent}" left="0" right="0" prev="${spaceBefore}" next="${spaceAfter}"/>
+        <hh:margin><hc:intent value="${indent}" unit="HWPUNIT"/><hc:left value="${left}" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/><hc:prev value="${spaceBefore}" unit="HWPUNIT"/><hc:next value="${spaceAfter}" unit="HWPUNIT"/></hh:margin>
         <hh:lineSpacing type="PERCENT" value="${lineSpacing}"/>
         <hh:border borderFillIDRef="0" offsetLeft="0" offsetRight="0" offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/>
       </hh:paraPr>`
 }
 
-function generateHeaderXml(theme: ResolvedTheme): string {
+// ─── 공문서 모드 paraPr ID 매핑 ──────────────────────
+// 공문서 모드에서는 기존 0~7 paraPr 뒤에 항목 단계별(8단계) paraPr를 추가한다.
+// 단계 d(0~7) → paraPrIDRef = GONGMUN_LIST_BASE + d
+const GONGMUN_LIST_BASE = 8
+const GONGMUN_LIST_LEVELS = 8
+// 본문 크기 가운데정렬 단락(발신명의 등) — 항목단계 paraPr 다음 id
+const GONGMUN_CENTER = GONGMUN_LIST_BASE + GONGMUN_LIST_LEVELS
+
+/** charProperties 블록 생성 — 공문서 모드면 본문/제목 height를 표준값으로 */
+function buildCharProperties(theme: ResolvedTheme, gongmun: ResolvedGongmun | null): string {
+  // 비공문서(기존 동작): 본문 10pt
+  let body = 1000, code = 900, h1 = 1800, h2 = 1400, h3 = 1200, h4 = 1100
+  if (gongmun) {
+    body = gongmun.bodyHeight
+    code = Math.max(body - 200, 900)
+    h1 = gongmun.preset === "report" || gongmun.preset === "plan" ? 2000 : 1700
+    h2 = 1600
+    h3 = body
+    h4 = Math.max(body - 100, 1300)
+  }
+  const rows = [
+    charPr(0, body, false, false, 0, theme.body),
+    charPr(1, body, true, false, 0, theme.body),
+    charPr(2, body, false, true, 0, theme.body),
+    charPr(3, body, true, true, 0, theme.body),
+    charPr(4, code, false, false, 1),
+    charPr(5, h1, true, false, 1, theme.h1),
+    charPr(6, h2, true, false, 1, theme.h2),
+    charPr(7, h3, true, false, 1, theme.h3),
+    charPr(8, h4, true, false, 1, theme.h4),
+    charPr(CHAR_TABLE_HEADER, body, theme.tableHeaderBold, false, 0, theme.tableHeader),
+    charPr(CHAR_QUOTE, body, false, true, 0, theme.quote),
+  ]
+  return `<hh:charProperties itemCnt="${rows.length}">\n${rows.join("\n")}\n    </hh:charProperties>`
+}
+
+/** paraProperties 블록 생성 — 공문서 모드면 본문 줄간격·제목 가운데 + 항목단계 8종 추가 */
+function buildParaProperties(gongmun: ResolvedGongmun | null): string {
+  if (!gongmun) {
+    const base = [
+      paraPr(0),
+      paraPr(1, { align: "LEFT", spaceBefore: 800, spaceAfter: 200, lineSpacing: 180 }),
+      paraPr(2, { align: "LEFT", spaceBefore: 600, spaceAfter: 150, lineSpacing: 170 }),
+      paraPr(3, { align: "LEFT", spaceBefore: 400, spaceAfter: 100, lineSpacing: 160 }),
+      paraPr(4, { align: "LEFT", spaceBefore: 300, spaceAfter: 100, lineSpacing: 160 }),
+      paraPr(5, { align: "LEFT", lineSpacing: 130, indent: 400 }),
+      paraPr(6, { align: "LEFT", lineSpacing: 150, indent: 600 }),
+      paraPr(7, { align: "LEFT", lineSpacing: 160, indent: 600 }),
+    ]
+    return `<hh:paraProperties itemCnt="${base.length}">\n${base.join("\n")}\n    </hh:paraProperties>`
+  }
+  const ls = gongmun.lineSpacing
+  const titleAlign = gongmun.centerTitle ? "CENTER" : "LEFT"
+  const base = [
+    paraPr(0, { lineSpacing: ls }),
+    paraPr(1, { align: titleAlign, spaceBefore: 400, spaceAfter: 400, lineSpacing: ls }),
+    paraPr(2, { align: "LEFT", spaceBefore: 600, spaceAfter: 150, lineSpacing: ls }),
+    paraPr(3, { align: "LEFT", spaceBefore: 400, spaceAfter: 100, lineSpacing: ls }),
+    paraPr(4, { align: "LEFT", spaceBefore: 300, spaceAfter: 100, lineSpacing: ls }),
+    paraPr(5, { align: "LEFT", lineSpacing: 130, indent: 400 }),
+    paraPr(6, { align: "LEFT", lineSpacing: ls, indent: 600 }),
+    paraPr(7, { align: "LEFT", lineSpacing: ls, indent: 600 }),
+  ]
+  // 항목 단계별 paraPr (8 ~ 8+7): left/내어쓰기 indent
+  for (let d = 0; d < GONGMUN_LIST_LEVELS; d++) {
+    const { left, indent } = levelIndent(d, gongmun.bodyHeight, gongmun.numbering)
+    base.push(paraPr(GONGMUN_LIST_BASE + d, { align: "JUSTIFY", lineSpacing: ls, left, indent }))
+  }
+  // 가운데정렬 본문 단락(발신명의 등)
+  base.push(paraPr(GONGMUN_CENTER, { align: "CENTER", lineSpacing: ls }))
+  return `<hh:paraProperties itemCnt="${base.length}">\n${base.join("\n")}\n    </hh:paraProperties>`
+}
+
+function generateHeaderXml(theme: ResolvedTheme, gongmun: ResolvedGongmun | null): string {
+  // 본문 한글 글꼴 (공문서 gothic 프리셋이면 맑은 고딕)
+  const bodyFace = gongmun?.bodyFont === "gothic" ? "맑은 고딕" : "함초롬바탕"
+  const charPropsXml = buildCharProperties(theme, gongmun)
+  const paraPropsXml = buildParaProperties(gongmun)
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
-<hh:head xmlns:hh="${NS_HEAD}" xmlns:hp="${NS_PARA}" version="1.4" secCnt="1">
+<hh:head xmlns:hh="${NS_HEAD}" xmlns:hp="${NS_PARA}" xmlns:hc="${NS_CORE}" version="1.4" secCnt="1">
   <hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/>
   <hh:refList>
     <hh:fontfaces itemCnt="7">
       <hh:fontface lang="HANGUL" fontCnt="3">
-        <hh:font id="0" face="함초롬바탕" type="TTF" isEmbedded="0">
+        <hh:font id="0" face="${bodyFace}" type="TTF" isEmbedded="0">
           <hh:typeInfo familyType="FCAT_GOTHIC" weight="6" proportion="4" contrast="0" strokeVariation="1" armStyle="1" letterform="1" midline="1" xHeight="1"/>
         </hh:font>
         <hh:font id="1" face="함초롬돋움" type="TTF" isEmbedded="0">
@@ -457,32 +551,11 @@ function generateHeaderXml(theme: ResolvedTheme): string {
         <hh:fillInfo/>
       </hh:borderFill>
     </hh:borderFills>
-    <hh:charProperties itemCnt="11">
-${charPr(0, 1000, false, false, 0, theme.body)}
-${charPr(1, 1000, true, false, 0, theme.body)}
-${charPr(2, 1000, false, true, 0, theme.body)}
-${charPr(3, 1000, true, true, 0, theme.body)}
-${charPr(4, 900, false, false, 1)}
-${charPr(5, 1800, true, false, 1, theme.h1)}
-${charPr(6, 1400, true, false, 1, theme.h2)}
-${charPr(7, 1200, true, false, 1, theme.h3)}
-${charPr(8, 1100, true, false, 1, theme.h4)}
-${charPr(CHAR_TABLE_HEADER, 1000, theme.tableHeaderBold, false, 0, theme.tableHeader)}
-${charPr(CHAR_QUOTE, 1000, false, true, 0, theme.quote)}
-    </hh:charProperties>
+    ${charPropsXml}
     <hh:tabProperties itemCnt="0"/>
     <hh:numberings itemCnt="0"/>
     <hh:bullets itemCnt="0"/>
-    <hh:paraProperties itemCnt="8">
-${paraPr(0)}
-${paraPr(1, { align: "LEFT", spaceBefore: 800, spaceAfter: 200, lineSpacing: 180 })}
-${paraPr(2, { align: "LEFT", spaceBefore: 600, spaceAfter: 150, lineSpacing: 170 })}
-${paraPr(3, { align: "LEFT", spaceBefore: 400, spaceAfter: 100, lineSpacing: 160 })}
-${paraPr(4, { align: "LEFT", spaceBefore: 300, spaceAfter: 100, lineSpacing: 160 })}
-${paraPr(5, { align: "LEFT", lineSpacing: 130, indent: 400 })}
-${paraPr(6, { align: "LEFT", lineSpacing: 150, indent: 600 })}
-${paraPr(7, { align: "LEFT", lineSpacing: 160, indent: 600 })}
-    </hh:paraProperties>
+    ${paraPropsXml}
     <hh:styles itemCnt="1">
       <hh:style id="0" type="PARA" name="바탕글" engName="Normal" paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" langIDRef="1042" lockForm="0"/>
     </hh:styles>
@@ -493,16 +566,27 @@ ${paraPr(7, { align: "LEFT", lineSpacing: 160, indent: 600 })}
 
 // ─── 섹션 속성 (공문서 표준 여백) ────────────────────
 
-function generateSecPr(): string {
+function generateSecPr(gongmun: ResolvedGongmun | null): string {
   // A4: 210mm × 297mm → 59528 × 84188 HWPUNIT (1mm ≈ 283.46 HWPUNIT)
-  // 공문서 표준: 위 30mm(8504), 아래 15mm(4252), 왼쪽 20mm(5670), 오른쪽 15mm(4252)
-  // 머리말 10mm(2835), 꼬리말 10mm(2835)
+  // 비공문서(기존): 위 30 / 아래 15 / 좌 20 / 우 15mm, 머리말·꼬리말 10mm.
+  // 공문서 표준(편람 서식 작성방법 해설·시행규칙 별표4): 위 20 / 아래 10 / 좌 20 / 우 20mm,
+  //   머리말·꼬리말·제본 0mm. (기존 위30 등은 권위 출처 없는 값이라 공문서 모드에서만 교체)
+  const m = gongmun
+    ? {
+        top: mmToHwpunit(gongmun.margins.top),
+        bottom: mmToHwpunit(gongmun.margins.bottom),
+        left: mmToHwpunit(gongmun.margins.left),
+        right: mmToHwpunit(gongmun.margins.right),
+        header: 0,
+        footer: 0,
+      }
+    : { top: 8504, bottom: 4252, left: 5670, right: 4252, header: 2835, footer: 2835 }
   return `<hp:secPr textDirection="HORIZONTAL" spaceColumns="1134" tabStop="8000" outlineShapeIDRef="0" memoShapeIDRef="0" textVerticalWidthHead="0" masterPageCnt="0">` +
     `<hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0"/>` +
     `<hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/>` +
     `<hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" border="SHOW_ALL" fill="SHOW_ALL" hideFirstPageNum="0" hideFirstEmptyLine="0" showLineNumber="0"/>` +
     `<hp:pagePr landscape="WIDELY" width="59528" height="84188" gutterType="LEFT_ONLY">` +
-      `<hp:margin header="2835" footer="2835" gutter="0" left="5670" right="4252" top="8504" bottom="4252"/>` +
+      `<hp:margin header="${m.header}" footer="${m.footer}" gutter="0" left="${m.left}" right="${m.right}" top="${m.top}" bottom="${m.bottom}"/>` +
     `</hp:pagePr>` +
     `<hp:footNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/><hp:noteLine length="-1" type="SOLID" width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="283" belowLine="567" aboveLine="850"/><hp:numbering type="CONTINUOUS" newNum="1"/><hp:placement place="EACH_COLUMN" beneathText="0"/></hp:footNotePr>` +
     `<hp:endNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/><hp:noteLine length="14692344" type="SOLID" width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="0" belowLine="567" aboveLine="850"/><hp:numbering type="CONTINUOUS" newNum="1"/><hp:placement place="END_OF_DOCUMENT" beneathText="0"/></hp:endNotePr>` +
@@ -573,14 +657,46 @@ function generateTable(rows: string[][], theme: ResolvedTheme): string {
 
 // ─── 섹션 XML 생성 ──────────────────────────────────
 
-function blocksToSectionXml(blocks: MdBlock[], theme: ResolvedTheme): string {
+/**
+ * 공문서 모드 리스트 사전 처리 — 연속된 list_item run마다 단계별 부호 산출 +
+ * 단일 형제 부호 생략. block 인덱스 → {marker, depth} 매핑 반환.
+ */
+function precomputeGongmunList(
+  blocks: MdBlock[],
+  gongmun: ResolvedGongmun,
+): Map<number, { marker: string; depth: number }> {
+  const result = new Map<number, { marker: string; depth: number }>()
+  let i = 0
+  while (i < blocks.length) {
+    if (blocks[i].type !== "list_item") { i++; continue }
+    // 연속 run 수집
+    const run: number[] = []
+    while (i < blocks.length && blocks[i].type === "list_item") { run.push(i); i++ }
+    const depths = run.map((bi) => Math.min(Math.max(blocks[bi].indent || 0, 0), GONGMUN_LIST_LEVELS - 1))
+    // 단일 형제 부호 생략은 법정 번호(standard)에만. 불릿(report)은 항상 표시.
+    const suppress = gongmun.numbering === "standard"
+      ? computeSuppression(depths)
+      : depths.map(() => false)
+    const numberer = new GongmunNumberer(gongmun.numbering)
+    run.forEach((bi, k) => {
+      const marker = numberer.next(depths[k], suppress[k])
+      result.set(bi, { marker, depth: depths[k] })
+    })
+  }
+  return result
+}
+
+function blocksToSectionXml(blocks: MdBlock[], theme: ResolvedTheme, gongmun: ResolvedGongmun | null): string {
   const paraXmls: string[] = []
   let isFirst = true
   // 순서 있는 목록 카운터 — indent 레벨별 별도 유지. 다른 블록 만나면 해당 레벨 리셋.
   const orderedCounters: Record<number, number> = {}
   let prevWasOrdered = false
+  // 공문서 모드 리스트 사전 처리
+  const gongmunList = gongmun ? precomputeGongmunList(blocks, gongmun) : null
 
-  for (const block of blocks) {
+  for (let blockIdx = 0; blockIdx < blocks.length; blockIdx++) {
+    const block = blocks[blockIdx]
     let xml = ""
 
     // 순서 있는 list_item이 아니면 카운터 전부 리셋 (연속되지 않은 목록은 다시 1부터)
@@ -598,9 +714,16 @@ function blocksToSectionXml(blocks: MdBlock[], theme: ResolvedTheme): string {
         xml = generateParagraph(block.text || "", pId, cId)
         break
       }
-      case "paragraph":
-        xml = generateParagraph(block.text || "")
+      case "paragraph": {
+        // 공문서 모드: <center>…</center> → 가운데 정렬 (행정기관명·발신명의)
+        const ctr = gongmun && /^<center>([\s\S]*)<\/center>$/i.exec((block.text || "").trim())
+        if (ctr) {
+          xml = generateParagraph(ctr[1].trim(), GONGMUN_CENTER)
+        } else {
+          xml = generateParagraph(block.text || "")
+        }
         break
+      }
       case "code_block": {
         const codeLines = (block.text || "").split("\n")
         xml = codeLines.map(line => generateParagraph(line || " ", PARA_CODE)).join("\n  ")
@@ -615,6 +738,17 @@ function blocksToSectionXml(blocks: MdBlock[], theme: ResolvedTheme): string {
         )
         break
       case "list_item": {
+        // 공문서 모드: 항목부호 8단계 + paraPr 단계별 들여쓰기/내어쓰기
+        if (gongmun && gongmunList) {
+          const info = gongmunList.get(blockIdx)
+          const depth = info?.depth ?? 0
+          const marker = info?.marker ?? ""
+          const content = block.text || ""
+          // 부호 + 1타(공백 1개) + 내용 (부호 없으면 내용만)
+          const text = marker ? `${marker} ${content}` : content
+          xml = generateParagraph(text, GONGMUN_LIST_BASE + depth)
+          break
+        }
         const indent = block.indent || 0
         let marker: string
         if (block.ordered) {
@@ -645,7 +779,7 @@ function blocksToSectionXml(blocks: MdBlock[], theme: ResolvedTheme): string {
         if (block.rows) {
           if (isFirst) {
             // 테이블이 첫 블록이면 빈 단락에 secPr
-            const secRun = `<hp:run charPrIDRef="0">${generateSecPr()}<hp:t></hp:t></hp:run>`
+            const secRun = `<hp:run charPrIDRef="0">${generateSecPr(gongmun)}<hp:t></hp:t></hp:run>`
             paraXmls.push(`<hp:p paraPrIDRef="0" styleIDRef="0">${secRun}</hp:p>`)
             isFirst = false
           }
@@ -660,7 +794,7 @@ function blocksToSectionXml(blocks: MdBlock[], theme: ResolvedTheme): string {
     if (isFirst && block.type !== "table") {
       xml = xml.replace(
         /<hp:run charPrIDRef="(\d+)">/,
-        `<hp:run charPrIDRef="$1">${generateSecPr()}`
+        `<hp:run charPrIDRef="$1">${generateSecPr(gongmun)}`
       )
       isFirst = false
     }
@@ -670,7 +804,7 @@ function blocksToSectionXml(blocks: MdBlock[], theme: ResolvedTheme): string {
 
   // 블록이 없으면 빈 단락
   if (paraXmls.length === 0) {
-    paraXmls.push(`<hp:p paraPrIDRef="0" styleIDRef="0"><hp:run charPrIDRef="0">${generateSecPr()}<hp:t></hp:t></hp:run></hp:p>`)
+    paraXmls.push(`<hp:p paraPrIDRef="0" styleIDRef="0"><hp:run charPrIDRef="0">${generateSecPr(gongmun)}<hp:t></hp:t></hp:run></hp:p>`)
   }
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>

@@ -6,9 +6,10 @@ demo/node_modules/
 .tools/
 .vscode/
 
-# Claude Code 개인 설정 — .claude/memory/ 의 .md만 추적 (자동 생성 로그는 제외)
+# Claude Code 개인 설정 — .claude/memory/ 의 .md, .claude/skills/(배포용)만 추적
 .claude/*
 !.claude/memory/
+!.claude/skills/
 .claude/memory/.changes-*.log
 .claude/memory/*.log
 

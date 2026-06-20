@@ -332,6 +332,78 @@ program
     }
   })
 
+// 공문서 프리셋 별칭(한글/영문) → 내부 preset 키
+const GONGMUN_PRESET_ALIAS: Record<string, "official" | "report" | "plan" | "notice" | "minutes"> = {
+  official: "official", 기안문: "official", 시행문: "official", 공문: "official", 공문서: "official",
+  report: "report", 보고서: "report",
+  plan: "plan", 계획서: "plan", 계획: "plan",
+  notice: "notice", 통지: "notice", 알림: "notice", 안내: "notice",
+  minutes: "minutes", 회의록: "minutes",
+}
+
+program
+  .command("generate <markdown>")
+  .alias("gen")
+  .description("마크다운 → 공문서 HWPX 생성 — kordoc generate 보고서.md -o 보고서.hwpx --preset 보고서 (markdown에 '-' 지정 시 stdin)")
+  .option("-o, --output <path>", "출력 HWPX 경로 (기본: <입력>.hwpx)")
+  .option("--preset <name>", "공문서 프리셋: 기안문(official)·보고서(report)·계획서(plan)·통지(notice)·회의록(minutes)", "기안문")
+  .option("--font <type>", "본문 글꼴: myeongjo(함초롬바탕) 또는 gothic(맑은 고딕)")
+  .option("--pt <size>", "본문 글자 크기(pt)")
+  .option("--line-spacing <percent>", "본문 줄간격(%)")
+  .option("--plain", "공문서 모드 끄기 (범용 마크다운 변환)")
+  .option("--silent", "진행 메시지 숨기기")
+  .action(async (markdown: string, opts) => {
+    try {
+      const rootOpts = program.opts()
+      const output: string | undefined = opts.output ?? rootOpts.output
+      const silent: boolean = opts.silent ?? rootOpts.silent
+
+      // 입력: '-' 이면 stdin, 아니면 파일
+      let md: string
+      let baseName = "document"
+      if (markdown === "-") {
+        md = readFileSync(0, "utf-8")
+      } else {
+        const inPath = resolve(markdown)
+        md = readFileSync(inPath, "utf-8")
+        baseName = basename(inPath).replace(/\.(md|markdown|txt)$/i, "")
+      }
+
+      // 공문서 옵션 구성
+      let gongmun: import("./index.js").GongmunOptions | undefined
+      if (!opts.plain) {
+        const preset = GONGMUN_PRESET_ALIAS[String(opts.preset).trim()]
+        if (!preset) {
+          process.stderr.write(`[kordoc] 알 수 없는 프리셋: ${opts.preset} (기안문/보고서/계획서/통지/회의록)\n`)
+          process.exit(1)
+        }
+        gongmun = { preset }
+        if (opts.font) {
+          if (opts.font !== "myeongjo" && opts.font !== "gothic") {
+            process.stderr.write(`[kordoc] --font 은 myeongjo 또는 gothic\n`)
+            process.exit(1)
+          }
+          gongmun.bodyFont = opts.font
+        }
+        if (opts.pt) gongmun.bodyPt = Number(opts.pt)
+        if (opts.lineSpacing) gongmun.lineSpacing = Number(opts.lineSpacing)
+      }
+
+      const buf = await markdownToHwpx(md, gongmun ? { gongmun } : undefined)
+      const outPath = resolve(output ?? (markdown === "-" ? `${baseName}.hwpx` : markdown.replace(/\.(md|markdown|txt)$/i, "") + ".hwpx"))
+      mkdirSync(dirname(outPath), { recursive: true })
+      writeFileSync(outPath, Buffer.from(buf))
+
+      if (!silent) {
+        const mode = gongmun ? `공문서:${gongmun.preset}` : "범용"
+        process.stderr.write(`[kordoc] HWPX 생성 (${mode}) → ${outPath}\n`)
+      }
+    } catch (err) {
+      process.stderr.write(`[kordoc] 오류: ${sanitizeError(err)}\n`)
+      process.exit(1)
+    }
+  })
+
 program
   .command("mcp")
   .description("MCP 서버 실행 (Claude / Cursor / Windsurf 연동)")

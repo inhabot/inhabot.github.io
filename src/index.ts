@@ -310,6 +310,12 @@ export { fillHwpx } from "./form/filler-hwpx.js"
 export type { HwpxFillResult } from "./form/filler-hwpx.js"
 export { markdownToHwpx } from "./hwpx/generator.js"
 export type { HwpxTheme, MarkdownToHwpxOptions } from "./hwpx/generator.js"
+export type {
+  GongmunOptions,
+  GongmunPreset,
+  GongmunNumbering,
+  GongmunFont,
+} from "./hwpx/gongmun.js"
 export { patchHwpx } from "./roundtrip/patcher.js"
 export { patchHwp } from "./roundtrip/hwp5-patch.js"
 export type { PatchResult, PatchSkip, PatchOptions } from "./types.js"

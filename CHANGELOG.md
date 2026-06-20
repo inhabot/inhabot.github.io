@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-06-19
+
+### Added
+
+- **공문서 모드(`markdownToHwpx(md, { gongmun })`)** — 마크다운을 한국 행정
+  공문서 표준 서식의 HWPX로 렌더링. 행정안전부 「행정업무운영편람」·시행규칙 근거.
+  - **항목부호 8단계 자동화**: 중첩 리스트 깊이 → `1. 가. 1) 가) (1) (가) ① ㉮`
+    (마크다운 마커 종류 무시, 깊이로 강제). 가나다 소진 시 단모음 연속(거·너·더),
+    5·6단계 괄호 3글자, 7·8단계 단일 유니코드. 상위 항목 진행 시 하위 카운터 리셋.
+  - **둘째 줄 내어쓰기 정렬(hanging indent)**: 단계별 `paraPr left`+음수 `indent`로
+    부호는 좌측, 둘째 줄부터 내용 첫 글자에 정렬. 1타 = bodyHeight/2 HWPUNIT 동적 환산.
+  - **단일 형제 부호 생략**(2-pass): 같은 단계 항목이 하나뿐이면 부호 미부여(법정).
+    불릿(report)에는 미적용.
+  - **공식 여백**: 위 20 / 아래 10 / 좌 20 / 우 20mm, 머리말·꼬리말 0(편람 서식기준).
+    (기존 비표준 위30 등은 공문서 모드에서만 교체, 기본 동작은 보존.)
+  - **본문 15pt 명조(함초롬바탕)** 기본 + 맑은 고딕(`bodyFont: 'gothic'`) 옵션,
+    줄간격·글자크기 프리셋/옵션화.
+  - **문서종류 프리셋**: `official`(기안문)·`report`(보고서, □○-ㆍ 불릿)·`plan`·
+    `notice`·`minutes`.
+  - **가운데 정렬**: `<center>…</center>` → 행정기관명·발신명의용 가운데 단락.
+- **CLI `kordoc generate <md>`** (별칭 `gen`) — 마크다운 파일/stdin → 공문서 HWPX.
+  `--preset 기안문|보고서|계획서|통지|회의록`(한글·영문 별칭), `--font`, `--pt`,
+  `--line-spacing`, `--plain`(범용 변환) 지원.
+- **공문서 작성 스킬** `.claude/skills/gongmunseo/` — 내용→공문서 HWPX 오케스트레이터
+  (SKILL.md + 표준 레퍼런스 + 종류별 템플릿 5종).
+- **표준 레퍼런스 문서** `docs/gongmunseo-reference.md`(공문서 서식 SSOT),
+  `docs/gongmunseo-engine-spec.md`(구현 매핑 스펙).
+
 ## [3.1.1] - 2026-06-13
 
 ### Fixed
