@@ -679,6 +679,25 @@ export function buildRangeSplices(
 }
 
 /** splice 일괄 적용 — 겹침 검증 후 뒤에서부터 치환 */
+/**
+ * 섹션 내 모든 <hp:linesegarray> 제거 splice 목록.
+ *
+ * hp:linesegarray는 문단 각 줄의 레이아웃(위치·크기) 정보를 담는데, hp:t 텍스트만
+ * 바꾸면 이 정보가 새 텍스트와 어긋난다. 한컴 한글은 이를 "변조"로 감지해 보안
+ * 경고를 띄운다(한컴 개발자포럼 권고). 선택적(optional)인 요소라 제거해도 뷰어가
+ * 레이아웃을 다시 계산하므로, 텍스트가 바뀐 섹션은 전체 linesegarray를 비운다
+ * (일부만 비우면 한컴이 문서 전체 정합성 검사에서 여전히 경고를 띄움).
+ */
+export function allLinesegRemovalSplices(xml: string): SpliceEdit[] {
+  const segRe = /<(\w+:)?linesegarray\b[^>]*?(?:\/>|>[\s\S]*?<\/\1linesegarray>)/g
+  const splices: SpliceEdit[] = []
+  let m: RegExpExecArray | null
+  while ((m = segRe.exec(xml)) !== null) {
+    splices.push({ start: m.index, end: m.index + m[0].length, replacement: "" })
+  }
+  return splices
+}
+
 export function applySplices(xml: string, splices: SpliceEdit[]): string {
   const sorted = [...splices].sort((a, b) => a.start - b.start)
   for (let i = 1; i < sorted.length; i++) {

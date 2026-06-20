@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-06-20
+
+### Fixed
+
+- **patchHwpx 변조 경고 제거** — 패치한 HWPX를 한컴 한글로 열면 "문서가
+  손상되었거나 변조되었을 가능성이 있습니다 / [문서 보안 설정]을 [낮음]으로"
+  경고가 뜨던 문제. 원인은 텍스트(`hp:t`)만 치환하고 문단 줄 레이아웃 캐시인
+  `<hp:linesegarray>`를 그대로 둬 텍스트와 어긋난 것. 텍스트가 바뀐 섹션의
+  `linesegarray`를 전부 제거해(선택 요소 — 뷰어가 열 때 재계산) 한글이 변조로
+  감지하지 않도록 수정. 일부만 제거하면 한글의 문서 전체 정합성 검사에서
+  여전히 경고가 발생하므로 섹션 단위로 비운다.
+  (`src/roundtrip/source-map.ts` `allLinesegRemovalSplices`, `patcher.ts`)
+
 ## [3.2.0] - 2026-06-19
 
 ### Added

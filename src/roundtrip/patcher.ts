@@ -17,7 +17,7 @@ import { blocksToMarkdown } from "../table/builder.js"
 import { normalizedSimilarity } from "../diff/text-diff.js"
 import type { IRBlock, IRTable, PatchOptions, PatchResult, PatchSkip, DiffResult, BlockDiff } from "../types.js"
 import {
-  scanSectionXml, buildParagraphSplices, applySplices,
+  scanSectionXml, buildParagraphSplices, applySplices, allLinesegRemovalSplices,
   type SectionScan, type ScanParagraph, type ScanCell, type ScanTable, type SpliceEdit,
 } from "./source-map.js"
 import { patchZipEntries } from "./zip-patch.js"
@@ -105,6 +105,9 @@ export async function patchHwpx(
   try {
     for (let i = 0; i < scans.length; i++) {
       if (sectionSplices[i].length === 0) continue
+      // 텍스트가 바뀐 섹션은 줄 레이아웃 캐시(linesegarray)를 전부 비워 한컴 변조
+      // 경고를 막는다 (텍스트 변경으로 캐시가 어긋남 — 뷰어가 열 때 재계산)
+      sectionSplices[i].push(...allLinesegRemovalSplices(scans[i].xml))
       const newXml = applySplices(scans[i].xml, sectionSplices[i])
       replacements.set(sectionPaths[i], encoder.encode(newXml))
     }
