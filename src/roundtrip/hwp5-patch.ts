@@ -20,7 +20,7 @@ import { deflateRawSync } from "zlib"
 import { createRequire } from "module"
 import { parseHwp5Document } from "../hwp5/parser.js"
 import {
-  decompressStream, parseFileHeader, createParaTextState, appendParaText,
+  decompressStream, parseFileHeader, createParaTextState, appendParaText, isExtendedOnlyCtrlChar,
   TAG_PARA_HEADER, TAG_PARA_TEXT, TAG_CHAR_SHAPE, TAG_CTRL_HEADER, TAG_LIST_HEADER, TAG_TABLE,
   FLAG_COMPRESSED, FLAG_ENCRYPTED, FLAG_DISTRIBUTION, FLAG_DRM,
 } from "../hwp5/record.js"
@@ -548,19 +548,27 @@ function patchGfmCells(
         ctx.skipped.push({ reason, before: summarize(origRows[r][c]), after: summarize(editedRows[r][c]) })
         return 0
       }
-      const before = gfmCellToPlain(origRows[r][c])
-      const after = gfmCellToPlain(editedRows[r][c])
-      if (before === null || after === null) { cellSkip("서식/링크/이미지 포함 셀 수정은 미지원 (v1)"); continue }
-      if (after.includes("\n")) { cellSkip("셀 내 줄바꿈 추가는 미지원 (v1)"); continue }
-
       const cell = scanTable.cells.get(`${r},${c}`)
       if (!cell) { cellSkip("병합 영역 셀 — 앵커 셀이 아니므로 미지원"); continue }
-      if (cell.paras.length !== 1) { cellSkip("복수 문단 셀 수정은 미지원 (v1)"); continue }
-      const para = cell.paras[0]
-      if (normForMatch(para.rawText) !== normForMatch(before)) { cellSkip("셀 텍스트 불일치 — 소스맵 신뢰 불가"); continue }
-      if (sanitizeText(after) !== after) { cellSkip("공백 정규화 불안정 텍스트 — 미지원"); continue }
 
-      applied += stageParaPatch(ctx.scans[para.sectionIndex], para, after, cellSkip)
+      // 셀 내 여러 문단은 GFM에서 <br>로 이어진다 — 분할해 각 문단과 1:1 매핑한다.
+      // (단일 문단 셀도 분할 1개로 동일 경로. 문단 수가 다르면 추가/삭제이므로 미지원.)
+      const beforeParts = origRows[r][c].split(/<br\s*\/?>/i)
+      const afterParts = editedRows[r][c].split(/<br\s*\/?>/i)
+      if (beforeParts.length !== cell.paras.length || afterParts.length !== cell.paras.length) {
+        cellSkip("셀 문단 수 변경 — 미지원 (문단 추가/삭제)"); continue
+      }
+      for (let k = 0; k < cell.paras.length; k++) {
+        const before = gfmCellToPlain(beforeParts[k])
+        const after = gfmCellToPlain(afterParts[k])
+        if (before === null || after === null) { cellSkip("서식/링크/이미지 포함 셀 수정은 미지원 (v1)"); break }
+        if (before === after) continue
+        if (after.includes("\n")) { cellSkip("셀 내 줄바꿈 추가는 미지원 (v1)"); break }
+        const para = cell.paras[k]
+        if (normForMatch(para.rawText) !== normForMatch(before)) { cellSkip("셀 텍스트 불일치 — 소스맵 신뢰 불가"); break }
+        if (sanitizeText(after) !== after) { cellSkip("공백 정규화 불안정 텍스트 — 미지원"); break }
+        applied += stageParaPatch(ctx.scans[para.sectionIndex], para, after, cellSkip)
+      }
     }
   }
   return applied
@@ -681,17 +689,113 @@ function gfmCellToPlain(md: string): string | null {
   let t = md.trim()
   const bold = t.match(/^\*\*([\s\S]+)\*\*$/)
   if (bold) t = bold[1]
-  if (/[*`]|!\[|\]\(|<(?!br\s*\/?>)/i.test(t)) return null
+  if (/[*`]|!\[|\]\(/.test(t)) return null
+  // '<'는 HTML 태그/autolink 시작(뒤에 영문자·'/')일 때만 서식으로 간주.
+  // 통계표의 부등호 셀("<0.01", "≤5") 등 평문 '<'는 허용. ('<br>'은 줄바꿈 셀로 별도 게이트가 처리)
+  if (/<(?!br\s*\/?>)[a-zA-Z/]/i.test(t)) return null
   return unescapeGfm(unescapeGfmCell(t))
 }
 
 // ─── 바이너리 패치 스테이징 ──────────────────────────
 
-const PARA_BREAK = Buffer.from([0x0d, 0x00])
+/**
+ * PARA_TEXT를 [선두 비가시 control][순수 텍스트 코어][말미 비가시 control/문단끝]로 분해.
+ * - 코어는 0x20+ 일반 문자(서로게이트 포함)만. 탭·하이픈·NBSP·줄바꿈 등 "가시 control"이
+ *   코어 안이나 가장자리에 있으면 텍스트 재매핑이 모호하므로 null(미지원).
+ * - 선두/말미에는 개체 앵커(0x0b)·필드(0x03/0x04)·자동번호 등 "비가시 control"과 문단끝(0x0d)만 허용.
+ * appendParaText(record.ts)의 바이트 전진 규칙을 그대로 미러한다 — 어긋나면 한컴 변조감지.
+ */
+export function splitParaText(data: Buffer):
+  | { prefix: Buffer; prefixUnits: number; core: string; suffix: Buffer; suffixUnits: number }
+  | null {
+  interface Tok { start: number; end: number; units: number; plain: boolean; visible: boolean }
+  const toks: Tok[] = []
+  let i = 0
+  while (i + 1 < data.length) {
+    const ch = data.readUInt16LE(i)
+    const start = i
+    i += 2
+    if (ch >= 0x20) {
+      let units = 1
+      if (ch >= 0xd800 && ch <= 0xdbff && i + 1 < data.length) {
+        const lo = data.readUInt16LE(i)
+        if (lo >= 0xdc00 && lo <= 0xdfff) { i += 2; units = 2 }
+      }
+      toks.push({ start, end: i, units, plain: true, visible: true })
+      continue
+    }
+    switch (ch) {
+      case 0x00: case 0x18: case 0x19: case 0x1e: case 0x1f:
+        // 줄바꿈/고정폭·비분리 공백/하이픈 — 가시(텍스트에 기여), 2바이트
+        toks.push({ start, end: i, units: 1, plain: false, visible: true }); break
+      case 0x09: // 탭 — 가시, 2+14바이트
+        if (i + 14 <= data.length) i += 14
+        toks.push({ start, end: i, units: 1, plain: false, visible: true }); break
+      case 0x0d: // 문단끝 — 비가시
+        toks.push({ start, end: i, units: 1, plain: false, visible: false }); break
+      case 0x0a: // 구역/단 정의 또는 수식 래퍼
+        if (i + 16 <= data.length && data.readUInt16LE(i) === 0x000b) {
+          i += 16; toks.push({ start, end: i, units: 1, plain: false, visible: false })  // 수식 등 비가시
+        } else {
+          if (i + 14 <= data.length) i += 14
+          toks.push({ start, end: i, units: 1, plain: false, visible: true })            // "\n" 가시
+        }
+        break
+      default: {
+        const ext = isExtendedOnlyCtrlChar(ch)
+        const inl = (ch >= 4 && ch <= 9) || (ch >= 19 && ch <= 20)
+        if ((ext || inl) && i + 14 <= data.length) i += 14
+        toks.push({ start, end: i, units: 1, plain: false, visible: false })  // 개체/필드 등 비가시
+        break
+      }
+    }
+  }
+  if (i !== data.length) return null  // 토큰화가 데이터를 정확히 소비 못함 — 안전상 미지원
+
+  let firstP = -1, lastP = -1
+  for (let k = 0; k < toks.length; k++) if (toks[k].plain) { if (firstP < 0) firstP = k; lastP = k }
+  if (firstP < 0) return null                                                      // 일반 텍스트 없음
+  for (let k = firstP; k <= lastP; k++) if (!toks[k].plain) return null            // 코어 내부에 control
+  for (let k = 0; k < firstP; k++) if (toks[k].visible) return null                // 선두에 가시 control
+  for (let k = lastP + 1; k < toks.length; k++) if (toks[k].visible) return null   // 말미에 가시 control
+
+  const prefixEnd = toks[firstP].start
+  const coreEnd = toks[lastP].end
+  // nChars·char shape position은 WCHAR 개수 단위 — control의 확장 WCHAR(개체/필드=8 WCHAR 등)도
+  // 모두 포함한다. 바이트÷2로 계산해야 한컴의 nChars(=PARA_TEXT WCHAR 총수)와 일치한다.
+  const prefixUnits = prefixEnd / 2
+  const suffixUnits = (data.length - coreEnd) / 2
+  return {
+    prefix: data.subarray(0, prefixEnd),
+    prefixUnits,
+    core: data.subarray(prefixEnd, coreEnd).toString("utf16le"),
+    suffix: data.subarray(coreEnd),
+    suffixUnits,
+  }
+}
+
+/**
+ * CHAR_SHAPE(글자모양 run) 레코드를 코어 시작 위치 기준으로 재구성.
+ * 선두 control 영역의 run은 보존하고 코어 이후는 코어 첫 글자 서식으로 단일화한다
+ * — 텍스트 길이가 바뀌어도 position이 안정 (기존 "첫 run 통일" 정책의 일반화).
+ */
+function rebuildCharShape(csData: Buffer, coreStartUnit: number): { buf: Buffer; count: number } {
+  const pairs: Array<[number, number]> = []
+  for (let o = 0; o + 8 <= csData.length; o += 8) pairs.push([csData.readUInt32LE(o), csData.readUInt32LE(o + 4)])
+  if (pairs.length === 0) return { buf: Buffer.from(csData.subarray(0, 8)), count: 1 }
+  let coreId = pairs[0][1]
+  for (const [p, id] of pairs) if (p <= coreStartUnit) coreId = id
+  const kept = pairs.filter(([p]) => p < coreStartUnit)
+  if (kept.length === 0 || kept[kept.length - 1][1] !== coreId) kept.push([coreStartUnit, coreId])
+  const buf = Buffer.alloc(kept.length * 8)
+  kept.forEach(([p, id], k) => { buf.writeUInt32LE(p >>> 0, k * 8); buf.writeUInt32LE(id >>> 0, k * 8 + 4) })
+  return { buf, count: kept.length }
+}
 
 /**
  * 문단 텍스트 교체를 섹션 repl 맵에 스테이징.
  * PARA_TEXT 치환 + PARA_HEADER nChars + CHAR_SHAPE/LINE_SEG 정합화.
+ * 개체 앵커·필드 등 비가시 control이 문단 가장자리에 있어도 그 블록은 보존하고 코어만 교체한다.
  */
 function stageParaPatch(
   scan: SectionScan5, para: ScanPara5, newPlain: string,
@@ -700,7 +804,7 @@ function stageParaPatch(
   if (!scan.safe) return skip("섹션 레코드 재직렬화 불일치 — 안전을 위해 이 섹션은 미지원")
   if (para.textIdx === -1) return skip("빈 문단 텍스트 추가는 미지원 (v1)")
   if (para.textIdx === -2) return skip("복수 PARA_TEXT 레코드 문단 — 미지원 (v1)")
-  if (para.ctrlMask !== 0) return skip("컨트롤 문자 포함 문단(탭/개체/필드/특수공백) — 미지원 (v1)")
+  // 컨트롤 문자(개체 앵커/필드 등)는 splitParaText에서 가장자리 보존 가능 여부를 판정한다.
   if (para.rangeTagCount > 0) return skip("범위 태그(형광펜/교정부호) 문단 — 미지원 (v1)")
   if (para.charShapeIdx < 0 || para.lineSegIdx < 0) return skip("문단 레코드 구성 비정형 — 미지원")
   if (scan.repl.has(para.headerIdx)) return skip("동일 문단 중복 수정 — 첫 수정만 적용")
@@ -710,52 +814,43 @@ function stageParaPatch(
   const headerRec = records[para.headerIdx]
   const textRec = records[para.textIdx]
   const charShapeRec = records[para.charShapeIdx]
-  const lineSegRec = records[para.lineSegIdx]
-  if (charShapeRec.data.length < 8 || lineSegRec.data.length < 36) {
-    return skip("CHAR_SHAPE/LINE_SEG 레코드 비정형 — 미지원")
+  if (charShapeRec.data.length < 8) {
+    return skip("CHAR_SHAPE 레코드 비정형 — 미지원")
   }
 
-  // 무결성 게이트: rawText로 PARA_TEXT를 바이트 단위 재구성할 수 있어야 함
-  const hadBreak = textRec.data.length >= 2 && textRec.data.readUInt16LE(textRec.data.length - 2) === 0x000d
-  const expect = hadBreak
-    ? Buffer.concat([Buffer.from(para.rawText, "utf16le"), PARA_BREAK])
-    : Buffer.from(para.rawText, "utf16le")
-  if (!expect.equals(textRec.data)) return skip("PARA_TEXT 재구성 불일치 — 원문 보존 불가로 미지원")
+  // PARA_TEXT를 [선두 control][텍스트 코어][말미 control/문단끝]로 분해
+  const seg = splitParaText(textRec.data)
+  if (!seg) {
+    return skip(para.ctrlMask !== 0
+      ? "컨트롤 문자(탭/필드/특수공백 등 텍스트 중간) 포함 문단 — 미지원 (v1)"
+      : "PARA_TEXT 재구성 불일치 — 원문 보존 불가로 미지원")
+  }
+  // 코어가 추출 텍스트(rawText)와 일치해야 안전 (가시 control 없음 보장)
+  if (seg.core !== para.rawText) return skip("PARA_TEXT 재구성 불일치 — 원문 보존 불가로 미지원")
 
   // 원문 leading/trailing 공백 보존 (IR은 트림된 텍스트)
   const lead = para.rawText.match(/^\s*/)![0]
   const trail = para.rawText.match(/\s*$/)![0]
   const newRaw = para.rawText.trim() === para.rawText ? newPlain : lead + newPlain + trail
 
-  // PARA_TEXT
-  const newText = hadBreak
-    ? Buffer.concat([Buffer.from(newRaw, "utf16le"), PARA_BREAK])
-    : Buffer.from(newRaw, "utf16le")
+  // PARA_TEXT = 선두 control + 새 텍스트 + 말미 control/문단끝 (control 블록 바이트 보존)
+  const newText = Buffer.concat([seg.prefix, Buffer.from(newRaw, "utf16le"), seg.suffix])
   scan.repl.set(para.textIdx, newText)
 
-  // PARA_HEADER — nChars(플래그 비트 보존) + charShapeCount/lineSegCount
+  // PARA_HEADER — nChars(상위 플래그 비트 보존) + charShapeCount/lineSegCount
   const newHeader = Buffer.from(headerRec.data)
-  const nChars = newRaw.length + (hadBreak ? 1 : 0)
+  const nChars = seg.prefixUnits + newRaw.length + seg.suffixUnits
   newHeader.writeUInt32LE(((para.nCharsRaw & 0x80000000) | nChars) >>> 0, 0)
 
-  // CHAR_SHAPE — 여러 run이면 첫 run 스타일로 통일 (HWPX 패처와 동일 정책)
-  if (charShapeRec.data.length > 8) {
-    newHeader.writeUInt16LE(1, 12)
-    scan.repl.set(para.charShapeIdx, Buffer.from(charShapeRec.data.subarray(0, 8)))
-  }
-  const csData = scan.repl.get(para.charShapeIdx) ?? Buffer.from(charShapeRec.data)
-  if (csData.readUInt32LE(0) !== 0) {
-    csData.writeUInt32LE(0, 0)
-    scan.repl.set(para.charShapeIdx, csData)
-  }
+  // CHAR_SHAPE — 선두 control run 보존 + 코어는 첫 글자 서식으로 단일화
+  const cs = rebuildCharShape(charShapeRec.data, seg.prefixUnits)
+  scan.repl.set(para.charShapeIdx, cs.buf)
+  newHeader.writeUInt16LE(cs.count, 12)
 
-  // LINE_SEG — 단일 세그먼트로 재구성 (레이아웃 캐시, 한/글이 열 때 재계산)
-  if (lineSegRec.data.length > 36 || lineSegRec.data.readUInt32LE(0) !== 0) {
-    const seg = Buffer.from(lineSegRec.data.subarray(0, 36))
-    seg.writeUInt32LE(0, 0)
-    newHeader.writeUInt16LE(1, 16)
-    scan.repl.set(para.lineSegIdx, seg)
-  }
+  // LINE_SEG는 원본 그대로 둔다 — 한컴은 줄 레이아웃(LINE_SEG)을 재계산하지 않고 그대로
+  // 렌더하므로, 세그먼트를 줄이면(여러 줄→1줄) 글자가 한 줄에 겹쳐 박힌다. 텍스트 길이가
+  // 바뀌어도 한컴이 마지막 세그 기준으로 재배치하므로 원본 유지가 안전하다.
+  // (실측: 원본유지는 길이 변경에도 정상 오픈, 단일 세그먼트화하면 글자 겹침)
 
   scan.repl.set(para.headerIdx, newHeader)
   return 1

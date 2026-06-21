@@ -399,7 +399,7 @@ function ctrlIdToDiskAscii(id: number): string {
 }
 
 /** 확장 전용 컨트롤 문자 (CTRL_HEADER 자식 레코드 1개와 대응) — rhwp is_extended_only_ctrl_char */
-function isExtendedOnlyCtrlChar(ch: number): boolean {
+export function isExtendedOnlyCtrlChar(ch: number): boolean {
   return (ch >= 1 && ch <= 3) || (ch >= 11 && ch <= 12) || (ch >= 14 && ch <= 18) || (ch >= 21 && ch <= 23)
 }
 
