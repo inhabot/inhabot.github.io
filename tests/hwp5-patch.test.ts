@@ -103,6 +103,50 @@ function table2x2(cells: string[][]): Buffer {
   return Buffer.concat(parts)
 }
 
+/** 병합셀 표 (HTML 렌더) — (0,0)이 colSpan=2로 첫 행 병합, 둘째 행은 일반 셀 2개 */
+function tableMerged(headerText: string, leftText: string, rightText: string): Buffer {
+  const anchorHeader = Buffer.alloc(24)
+  const ctrlChar = Buffer.alloc(16)
+  ctrlChar.writeUInt16LE(0x0b, 0)
+  ctrlChar.write(" lbt", 2, "ascii")
+  ctrlChar.writeUInt16LE(0x0b, 14)
+  const anchorText = Buffer.concat([ctrlChar, Buffer.from([0x0d, 0x00])])
+  anchorHeader.writeUInt32LE(anchorText.length / 2, 0)
+  anchorHeader.writeUInt32LE(1 << 11, 4)
+  anchorHeader.writeUInt16LE(1, 12)
+  anchorHeader.writeUInt16LE(1, 16)
+
+  const tableData = Buffer.alloc(8)
+  tableData.writeUInt16LE(2, 4) // rows
+  tableData.writeUInt16LE(2, 6) // cols
+
+  const parts = [
+    rec(0x42, 0, anchorHeader),
+    rec(0x43, 1, anchorText),
+    rec(0x44, 1, Buffer.alloc(8)),
+    rec(0x45, 1, Buffer.alloc(36)),
+    rec(0x47, 1, Buffer.concat([Buffer.from(" lbt", "ascii"), Buffer.alloc(42)])),
+    rec(0x4d, 2, tableData),
+  ]
+  // (0,0) colSpan=2 (병합), (1,0), (1,1)
+  const defs = [
+    { col: 0, row: 0, cs: 2, rs: 1, text: headerText },
+    { col: 0, row: 1, cs: 1, rs: 1, text: leftText },
+    { col: 1, row: 1, cs: 1, rs: 1, text: rightText },
+  ]
+  for (const d of defs) {
+    const lh = Buffer.alloc(34)
+    lh.writeUInt16LE(1, 0)       // paraCount
+    lh.writeUInt16LE(d.col, 8)   // colAddr
+    lh.writeUInt16LE(d.row, 10)  // rowAddr
+    lh.writeUInt16LE(d.cs, 12)   // colSpan
+    lh.writeUInt16LE(d.rs, 14)   // rowSpan
+    parts.push(rec(0x48, 2, lh))
+    parts.push(paragraph(d.text, 2))
+  }
+  return Buffer.concat(parts)
+}
+
 /**
  * 선두에 개체(0x0b, 16바이트) 앵커 + 본문 텍스트가 있는 문단.
  * CHAR_SHAPE는 multi-run [(0,id0),(8,id1)] — 개체(pos 0~7) / 텍스트(pos 8~).
@@ -387,5 +431,47 @@ describe("patchHwp — 안전 게이트", () => {
     for (const p of c2.FullPaths as string[]) {
       assert.ok(names1.has(p), `원본에 없던 엔트리 주입됨: ${JSON.stringify(p)}`)
     }
+  })
+})
+
+describe("patchHwp — 표 매핑 (시그니처 디스앰비규에이션)", () => {
+  it("같은 시그니처 표 2개 — 내용으로 올바른 표에 매핑 (서수 밀림 방지)", async () => {
+    const hwp = buildHwp([
+      table2x2([["사과", "1"], ["배", "2"]]),
+      table2x2([["서울", "9"], ["부산", "8"]]),
+    ])
+    const md = parseHwp5Document(Buffer.from(hwp)).markdown
+    const r = await patchHwp(hwp, md.replace("| 부산 | 8 |", "| 부산 | 88 |"))
+    assert.equal(r.success, true)
+    assert.equal(r.applied, 1)
+    const re = parseHwp5Document(Buffer.from(r.data!)).markdown
+    assert.ok(re.includes("| 부산 | 88 |"), "둘째 표 셀 수정 반영")
+    assert.ok(re.includes("| 사과 | 1 |"), "첫 표는 무변경 보존")
+    assert.ok(re.includes("| 서울 | 9 |"))
+  })
+})
+
+describe("patchHwp — HTML 병합셀 표", () => {
+  it("병합셀 표가 HTML로 렌더되고 일반 셀 수정이 적용된다", async () => {
+    const hwp = buildHwp([tableMerged("머리글", "왼쪽 칸", "오른쪽 칸")])
+    const md = parseHwp5Document(Buffer.from(hwp)).markdown
+    assert.ok(md.includes("<table") && /colspan="2"/i.test(md), `HTML 병합 렌더 확인: ${md}`)
+    const r = await patchHwp(hwp, md.replace("오른쪽 칸", "오른쪽 칸 수정"))
+    assert.equal(r.success, true)
+    assert.equal(r.applied, 1)
+    assert.equal(r.skipped.length, 0)
+    const re = parseHwp5Document(Buffer.from(r.data!)).markdown
+    assert.ok(re.includes("오른쪽 칸 수정"))
+    assert.ok(re.includes("왼쪽 칸"), "미편집 셀 보존")
+    assert.ok(re.includes("머리글"))
+  })
+
+  it("병합 헤더 셀(colspan=2) 수정도 적용된다", async () => {
+    const hwp = buildHwp([tableMerged("머리글", "왼쪽", "오른쪽")])
+    const md = parseHwp5Document(Buffer.from(hwp)).markdown
+    const r = await patchHwp(hwp, md.replace("머리글", "새 머리글"))
+    assert.equal(r.success, true)
+    assert.equal(r.applied, 1)
+    assert.ok(parseHwp5Document(Buffer.from(r.data!)).markdown.includes("새 머리글"))
   })
 })

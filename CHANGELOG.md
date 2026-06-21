@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-06-21
+
+### Added
+
+- **HWP5 라운드트립 표 패치 — HTML 병합셀 표 지원** (`patchHwp`). rowspan/colspan으로
+  병합된 셀과 `<br>` 다중문단 셀의 텍스트 수정. builder의 `tableToHtml` 렌더를 좌표 추적
+  버전으로 재현(`replicateTableToHtml` 자기검증 + 셀 경계 되읽기 대칭검증)해 앵커 좌표로
+  셀 문단을 치환한다 — 오매핑 시 graceful skip. 중첩표 셀은 미지원(skip).
+- **개체 앵커 본문 문단 텍스트 수정** — 도형/이미지가 문단 선두에 `0x0b`로 앵커된 본문
+  (정부 보도자료 다수)을 지원. `PARA_TEXT`를 [선두 비가시 control][순수 텍스트 코어]
+  [말미 control/문단끝]로 분해해 control 바이트를 보존하고 코어만 교체.
+- **복수 문단 셀 부분 수정** — GFM `<br>` 분할로 셀 내 각 문단을 1:1 매핑, 변경된 문단만 치환.
+
+### Fixed
+
+- **표 개수 불일치로 표 셀 수정이 전부 막히던 문제** — `flattenLayoutTables`가 레이아웃
+  표를 문단으로 해체하면 IR 표 서수와 바이너리 표 서수가 어긋나 단순 서수 인덱싱이 밀려
+  엉뚱한 표가 수정될 위험이 있었다(게이트가 해당 문서의 모든 표 수정을 차단). 문서 순서를
+  보존한 rows×cols 시그니처 매칭 + 셀내용 디스앰비규에이션으로 교체해 정확한 표에 매핑한다.
+- **`nChars`/`CHAR_SHAPE`/`LINE_SEG` 정합** — 개체·필드 등 inline control의 확장 WCHAR를
+  `nChars`(=PARA_TEXT WCHAR 총수)에 반영하고, `LINE_SEG`(줄 레이아웃 캐시)는 원본 유지
+  (단일화 시 여러 줄이 한 줄에 겹쳐 박힘). 한컴오피스 변조감지 경고 없이 정상 렌더.
+
 ## [3.3.0] - 2026-06-20
 
 ### Added

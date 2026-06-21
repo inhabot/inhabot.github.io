@@ -30,6 +30,7 @@ import {
 } from "./patcher.js"
 import {
   splitMarkdownUnits, normForMatch, sanitizeText, parseGfmTable, unescapeGfmCell, unescapeGfm, escapeGfm, summarize,
+  replicateTableToHtml, replicateHtmlTable, parseHtmlTable, htmlCellInnerToLines, extractTopLevelTables,
   type MdUnit,
 } from "./markdown-units.js"
 import { stripCellTokens, extractCellTokens } from "./table-patch.js"
@@ -318,14 +319,7 @@ export async function patchHwp(
   const pairs = alignUnits(origUnits.map(u => u.raw), editedUnits.map(u => u.raw))
 
   const paraMap = resolveParaMappings(origBlocks, scans)
-  const scanTables = scans.flatMap(s => s.tables)
-  const obTableOrdinals = new Map<number, number>()
-  {
-    let ordinal = 0
-    for (let i = 0; i < origBlocks.length; i++) {
-      if (origBlocks[i].type === "table" && origBlocks[i].table) obTableOrdinals.set(i, ordinal++)
-    }
-  }
+  const tableMap = resolveTableMappings(origBlocks, scans.flatMap(s => s.tables))
 
   // 5) 변경 적용 (스테이징)
   for (const [oi, ei] of pairs) {
@@ -334,7 +328,7 @@ export async function patchHwp(
       const edited = editedUnits[ei]
       if (orig.raw === edited.raw) continue
       applied += handleModified(orig, edited, {
-        origBlocks, paraMap, scans, scanTables, obTableOrdinals, skipped,
+        origBlocks, paraMap, scans, tableMap, skipped,
       })
     } else if (oi !== null) {
       skipped.push({ reason: "블록 삭제는 미지원 (v1) — 원본 유지", before: summarize(origUnits[oi].raw) })
@@ -439,14 +433,59 @@ function resolveParaMappings(blocks: IRBlock[], scans: SectionScan5[]): Map<numb
   return result
 }
 
+/**
+ * IR 표 블록 ↔ 스캔 표 매핑. flattenLayoutTables가 일부 표를 문단으로 해체하면
+ * IR 표 수 < 바이너리 표 수가 되어 단순 서수 인덱싱이 밀린다(엉뚱한 표 수정 위험).
+ * 문서 순서를 보존한 채 rows×cols 시그니처로 매칭하고, 같은 시그니처 표가 여러 개면
+ * 셀 텍스트 정합 점수로 택일한다. 매핑 못 한 표는 누락(조회 시 skip → 안전).
+ */
+function resolveTableMappings(blocks: IRBlock[], scanTables: ScanTable5[]): Map<number, ScanTable5> {
+  const result = new Map<number, ScanTable5>()
+  let si = 0
+  for (let i = 0; i < blocks.length; i++) {
+    const table = blocks[i].table
+    if (blocks[i].type !== "table" || !table) continue
+    const cands: number[] = []
+    for (let k = si; k < scanTables.length; k++) {
+      if (scanTables[k].rows === table.rows && scanTables[k].cols === table.cols) cands.push(k)
+    }
+    if (cands.length === 0) continue
+    let pick = cands[0]
+    if (cands.length > 1) {
+      let best = tableContentScore(table, scanTables[cands[0]])
+      for (let ci = 1; ci < cands.length; ci++) {
+        const sc = tableContentScore(table, scanTables[cands[ci]])
+        if (sc > best) { best = sc; pick = cands[ci] }
+      }
+    }
+    result.set(i, scanTables[pick])
+    si = pick + 1
+  }
+  return result
+}
+
+/** 앵커 셀 좌표가 겹치는 셀들의 정규화 텍스트 일치 개수 (표 디스앰비규에이션용) */
+function tableContentScore(irTable: IRTable, scanTable: ScanTable5): number {
+  let matched = 0
+  for (const [key, scanCell] of scanTable.cells) {
+    const comma = key.indexOf(",")
+    const r = Number(key.slice(0, comma)), c = Number(key.slice(comma + 1))
+    const irCell = irTable.cells[r]?.[c]
+    if (!irCell) continue
+    const a = normForMatch(scanCell.paras.map(p => p.rawText).join(" "))
+    const b = normForMatch(stripCellTokens(irCell.text))
+    if (a && a === b) matched++
+  }
+  return matched
+}
+
 // ─── 변경 처리 ───────────────────────────────────────
 
 interface PatchCtx5 {
   origBlocks: IRBlock[]
   paraMap: Map<number, ParaMapping5>
   scans: SectionScan5[]
-  scanTables: ScanTable5[]
-  obTableOrdinals: Map<number, number>
+  tableMap: Map<number, ScanTable5>
   skipped: PatchSkip[]
 }
 
@@ -464,12 +503,10 @@ function handleModified(orig: OrigUnit, edited: MdUnit, ctx: PatchCtx5): number 
 
   if (block.type === "table" && block.table) {
     if (orig.kind !== edited.kind) return skip("표 ↔ 비표 변경은 미지원 (표 구조 변경)")
-    if (ctx.obTableOrdinals.size !== ctx.scanTables.length) return skip("표 개수 불일치 — 소스맵 신뢰 불가")
-    const ordinal = ctx.obTableOrdinals.get(orig.blockIdx)
-    const scanTable = ordinal !== undefined ? ctx.scanTables[ordinal] : undefined
-    if (!scanTable) return skip("표 소스맵 매핑 실패")
+    const scanTable = ctx.tableMap.get(orig.blockIdx)
+    if (!scanTable) return skip("표 소스맵 매핑 실패 — 표 개수/구조 불일치로 신뢰 불가")
     if (orig.kind === "gfm-table") return patchGfmCells(scanTable, orig, edited, ctx, skip)
-    if (orig.kind === "html-table") return skip("HTML 표(병합/줄바꿈 셀) 수정은 HWP5 미지원 (v1)")
+    if (orig.kind === "html-table") return patchHtmlCells5(block.table, scanTable, orig, edited, ctx, skip)
     return patchTextChunk5(block.table, scanTable, orig, edited, ctx, skip)
   }
 
@@ -568,6 +605,75 @@ function patchGfmCells(
         if (normForMatch(para.rawText) !== normForMatch(before)) { cellSkip("셀 텍스트 불일치 — 소스맵 신뢰 불가"); break }
         if (sanitizeText(after) !== after) { cellSkip("공백 정규화 불안정 텍스트 — 미지원"); break }
         applied += stageParaPatch(ctx.scans[para.sectionIndex], para, after, cellSkip)
+      }
+    }
+  }
+  return applied
+}
+
+// ── HTML 표 (병합셀/줄바꿈 셀) — HWPX patchHtmlTableRaw 미러 ──
+
+/** <img> 태그 추출 (셀 내 이미지 변경 감지) */
+function extractImgTags5(inner: string): string {
+  return (inner.match(/<img\s(?:"[^"]*"|'[^']*'|[^>"'])*?>/gi) || []).join(" ")
+}
+
+/**
+ * 병합셀/줄바꿈 셀 표 패치. builder의 tableToHtml 렌더를 좌표 추적 버전으로 재현해
+ * 편집된 셀의 격자 좌표(=앵커 좌표)를 역산, scanTable.cells 앵커로 셀 문단을 치환한다.
+ * 자기검증(replicateTableToHtml===원문) + 셀 경계 되읽기 대칭 검증으로 오매핑을 차단.
+ * 중첩표 셀은 HWP5 스캔이 중첩표를 수집하지 않으므로 미지원(skip).
+ */
+function patchHtmlCells5(
+  table: IRTable, scanTable: ScanTable5, orig: OrigUnit, edited: MdUnit, ctx: PatchCtx5,
+  skip: (reason: string) => number,
+): number {
+  // 자기검증 — builder 렌더와 동일해야 좌표 신뢰 가능
+  if (replicateTableToHtml(table) !== orig.raw) return skip("표 좌표 재현 불일치 — 매핑 신뢰 불가")
+  const replica = replicateHtmlTable(table)
+  // 되읽기 대칭 검증 — 셀 텍스트에 리터럴 '</td>' 등이 있으면 셀 경계가 어긋나 미편집 셀이
+  // 잘려 저장될 수 있음. 원문을 되읽어 replica와 대조한다.
+  const origRows = parseHtmlTable(orig.raw)
+  if (!origRows || origRows.length !== replica.length
+    || origRows.some((r, i) => r.cells.length !== replica[i].cells.length
+      || r.cells.some((c, j) => c.inner !== replica[i].cells[j].inner))) {
+    return skip("셀 경계 모호 (리터럴 태그 의심) — 매핑 신뢰 불가")
+  }
+  const editedRows = parseHtmlTable(edited.raw)
+  if (!editedRows) return skip("편집된 HTML 표 파싱 실패")
+  if (editedRows.length !== replica.length) return skip("표 행 추가/삭제는 미지원 (표 구조 변경)")
+
+  let applied = 0
+  for (let r = 0; r < replica.length; r++) {
+    if (editedRows[r].cells.length !== replica[r].cells.length) {
+      skip(`표 ${r + 1}행 셀 수 변경은 미지원`)
+      continue
+    }
+    for (let c = 0; c < replica[r].cells.length; c++) {
+      const oc = replica[r].cells[c]
+      const ec = editedRows[r].cells[c]
+      if (oc.colSpan !== ec.colSpan || oc.rowSpan !== ec.rowSpan) {
+        skip("셀 병합(colspan/rowspan) 변경은 미지원")
+        continue
+      }
+      if (oc.inner === ec.inner) continue
+
+      const origContent = htmlCellInnerToLines(oc.inner)
+      const editedContent = htmlCellInnerToLines(ec.inner)
+      if (origContent.hadNonText || editedContent.hadNonText) {
+        if (extractImgTags5(oc.inner) !== extractImgTags5(ec.inner)) {
+          skip("셀 내 이미지 변경은 미지원")
+          continue
+        }
+        if (extractTopLevelTables(oc.inner).join("\n") !== extractTopLevelTables(ec.inner).join("\n")) {
+          skip("셀 내 중첩표 수정은 HWP5 미지원 (v1)")
+          continue
+        }
+      }
+      // 텍스트 라인 변경 (중첩표/이미지 제외분)
+      if (origContent.lines.join("\n") !== editedContent.lines.join("\n")) {
+        const newLines = editedContent.lines.map(l => unescapeGfm(l))
+        applied += applyCellEdit5(table, scanTable, oc.gridR!, oc.gridC!, newLines, ctx, oc.inner, ec.inner, origContent.lines.length)
       }
     }
   }
