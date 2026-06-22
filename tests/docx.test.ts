@@ -185,4 +185,45 @@ describe("DOCX 파서", () => {
     if (!result.success) return
     assert.equal(result.markdown, "")
   })
+
+  it("sdt(콘텐츠 컨트롤) 안의 인라인 run 텍스트 추출 — Google Docs 익스포트", async () => {
+    // <w:p><w:sdt><w:sdtContent><w:r><w:t>...</w:t></w:r></w:sdtContent></w:sdt></w:p>
+    const buffer = await createDocx(`
+      <w:p><w:sdt><w:sdtPr><w:tag w:val="goog_rdk_6"/></w:sdtPr><w:sdtContent>
+        <w:r><w:t>콘텐츠 컨트롤 안의 텍스트</w:t></w:r>
+      </w:sdtContent></w:sdt></w:p>
+    `)
+    const result = await parse(buffer)
+    assert.equal(result.success, true)
+    if (!result.success) return
+    assert.ok(result.markdown.includes("콘텐츠 컨트롤 안의 텍스트"), `markdown: ${result.markdown}`)
+  })
+
+  it("블록 sdt로 감싼 문단/표 추출", async () => {
+    const buffer = await createDocx(`
+      <w:sdt><w:sdtContent>
+        <w:p><w:r><w:t>블록 컨트롤 문단</w:t></w:r></w:p>
+      </w:sdtContent></w:sdt>
+    `)
+    const result = await parse(buffer)
+    assert.equal(result.success, true)
+    if (!result.success) return
+    assert.ok(result.markdown.includes("블록 컨트롤 문단"), `markdown: ${result.markdown}`)
+  })
+
+  it("sdt 안의 표 셀 텍스트 추출", async () => {
+    const buffer = await createDocx(`
+      <w:tbl>
+        <w:tr>
+          <w:tc><w:p><w:sdt><w:sdtContent><w:r><w:t>성명</w:t></w:r></w:sdtContent></w:sdt></w:p></w:tc>
+          <w:tc><w:p><w:sdt><w:sdtContent><w:r><w:t>홍길동</w:t></w:r></w:sdtContent></w:sdt></w:p></w:tc>
+        </w:tr>
+      </w:tbl>
+    `)
+    const result = await parse(buffer)
+    assert.equal(result.success, true)
+    if (!result.success) return
+    assert.ok(result.markdown.includes("성명"), `markdown: ${result.markdown}`)
+    assert.ok(result.markdown.includes("홍길동"), `markdown: ${result.markdown}`)
+  })
 })

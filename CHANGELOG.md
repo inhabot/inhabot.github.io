@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.1] - 2026-06-22
+
+### Fixed
+
+- **DOCX `w:sdt`(콘텐츠 컨트롤) 안의 텍스트 미추출** — Google Docs 익스포트는 본문을
+  거의 전부 `<w:sdt><w:sdtContent>`로 감싸는데(`goog_rdk` 태그), 파서가 직속 자식만
+  훑어 sdt 한 겹에 가린 문단·런·표 셀 텍스트를 모두 놓쳤다. `effectiveChildElements`로
+  sdt를 투명하게 평탄화 — 블록/인라인/중첩 sdt 모두 처리. (실측: 추출 1,442자→5,451자)
+- **병합셀 표에서 폼 필드 인식 크래시** — `extractFormFields`가 표를 직사각형으로 가정해
+  `cells[r][c]`를 무가드 인덱싱, colSpan/vMerge로 ragged해진 행에서 `undefined.text`로
+  터졌다(`문서 처리 중 오류`로 마스킹됨). `recognize.ts`·`filler.ts` 양쪽에 셀 가드 추가.
+
 ## [3.4.0] - 2026-06-21
 
 ### Added

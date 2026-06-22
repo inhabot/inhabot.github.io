@@ -84,4 +84,22 @@ describe("extractFormFields", () => {
     assert.ok(result.fields.length >= 4, `필드 수: ${result.fields.length}`)
     assert.ok(result.fields.some(f => f.label === "생년월일" && f.value === "1990-01-01"))
   })
+
+  it("병합셀로 행 길이가 cols보다 짧은 표(ragged)에서 크래시하지 않음", () => {
+    // DOCX 병합셀(colSpan/vMerge)은 cells[r] 길이 < table.cols 인 ragged 행을 만든다.
+    // extractFromTable이 cells[r][c]를 무가드로 인덱싱하면 undefined.text 크래시.
+    const table: IRTable = {
+      rows: 3,
+      cols: 4,
+      hasHeader: true,
+      cells: [
+        [{ text: "제목 한 줄", colSpan: 4, rowSpan: 1 }],        // 1칸이 4열 차지
+        [{ text: "성명", colSpan: 1, rowSpan: 1 }, { text: "홍길동", colSpan: 3, rowSpan: 1 }],
+        [{ text: "비고", colSpan: 1, rowSpan: 1 }],               // 행 길이 < cols
+      ],
+    }
+    const blocks: IRBlock[] = [{ type: "table", table }]
+    const result = extractFormFields(blocks)  // 크래시하지 않아야 함
+    assert.ok(result.fields.some(f => f.label === "성명" && f.value === "홍길동"))
+  })
 })

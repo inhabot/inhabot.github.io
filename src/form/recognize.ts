@@ -69,8 +69,9 @@ function extractFromTable(table: IRTable): FormField[] {
   if (table.cols >= 2) {
     for (let r = 0; r < table.rows; r++) {
       for (let c = 0; c < table.cols - 1; c++) {
-        const labelCell = table.cells[r][c]
-        const valueCell = table.cells[r][c + 1]
+        const labelCell = table.cells[r]?.[c]
+        const valueCell = table.cells[r]?.[c + 1]
+        if (!labelCell || !valueCell) continue
         if (isLabelCell(labelCell.text)) {
           fields.push({
             label: labelCell.text.trim().replace(/[:：]\s*$/, ""),
@@ -93,8 +94,8 @@ function extractFromTable(table: IRTable): FormField[] {
     if (allLabels) {
       for (let r = 1; r < table.rows; r++) {
         for (let c = 0; c < table.cols; c++) {
-          const label = headerRow[c].text.trim()
-          const value = table.cells[r][c].text.trim()
+          const label = headerRow[c]?.text.trim() ?? ""
+          const value = table.cells[r]?.[c]?.text.trim() ?? ""
           if (label && value) {
             fields.push({ label, value, row: r, col: c })
           }

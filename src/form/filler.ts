@@ -136,16 +136,19 @@ function fillTable(
 
     for (let r = 1; r < table.rows; r++) {
       for (let c = 0; c < table.cols; c++) {
-        const headerLabel = normalizeLabel(headerRow[c].text)
+        const headerCell = headerRow[c]
+        const valueCell = table.cells[r]?.[c]
+        if (!headerCell || !valueCell) continue
+        const headerLabel = normalizeLabel(headerCell.text)
         const matchKey = findMatchingKey(headerLabel, values)
         if (matchKey === undefined) continue
         if (matchedLabels.has(matchKey)) continue
 
         const newValue = values.get(matchKey)!
-        table.cells[r][c].text = newValue
+        valueCell.text = newValue
         matchedLabels.add(matchKey)
         filled.push({
-          label: headerRow[c].text.trim(),
+          label: headerCell.text.trim(),
           value: newValue,
           row: r,
           col: c,
