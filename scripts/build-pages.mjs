@@ -6,6 +6,11 @@ import { getPublicScenarios } from "../lib/scenarios.mjs";
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const publicDir = resolve(root, "public");
 const apiBase = String(process.env.PUBLIC_API_BASE_URL ?? "").replace(/\/+$/u, "");
+const requireApiBase = process.env.REQUIRE_API_BASE === "true";
+
+if (requireApiBase && !apiBase) {
+  throw new Error("PUBLIC_API_BASE_URL is required for the production Pages build.");
+}
 
 await mkdir(publicDir, { recursive: true });
 await writeFile(
