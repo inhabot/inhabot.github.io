@@ -1,4 +1,11 @@
-node_modules
-logs
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+node_modules/
+.DS_Store
+*.log
+logs/
 *.map
 !package-lock.json

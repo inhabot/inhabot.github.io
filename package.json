@@ -1,10 +1,16 @@
 {
   "name": "inhabot",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node ./scripts/build.mjs",
+    "build:pages": "node scripts/build-pages.mjs",
     "check:privacy": "node ./scripts/check-privacy.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "test": "node --test",
     "update-upstream": "node ./scripts/update-upstream.mjs"
   },
   "dependencies": {
