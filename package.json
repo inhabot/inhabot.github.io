@@ -1,0 +1,13 @@
+{
+  "name": "chat-rescue-mission-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:pages": "node scripts/build-pages.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

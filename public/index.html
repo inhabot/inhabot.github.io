@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="중학생이 AI 인물과 대화하며 개인정보, 오정보, 합성 이미지, 마음 건강 미션을 해결하는 교육용 웹서비스"
+    />
+    <title>채팅 구조대 | AI 디지털 관계 미션</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/config.js"></script>
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="view room-view active" id="room-view" aria-labelledby="room-title">
+        <header class="room-header">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true">C</span>
+            <div>
+              <p>AI 디지털 관계 미션</p>
+              <h1 id="room-title">채팅 구조대</h1>
+            </div>
+          </div>
+          <span class="api-status" id="api-status">연결 확인 중</span>
+        </header>
+
+        <div class="room-toolbar">
+          <div>
+            <strong>대화할 상황을 선택하세요</strong>
+            <p>실제 이름이나 개인정보 대신 가상 상황으로 연습합니다.</p>
+          </div>
+          <span id="room-count">채팅방 0</span>
+        </div>
+
+        <div class="room-list" id="room-list" aria-label="상황 채팅방 목록"></div>
+
+        <footer class="room-footer">
+          <strong>로그인·DB 저장 없음</strong>
+          <span>대화는 현재 탭에만 남고 새로고침하면 사라집니다.</span>
+        </footer>
+      </section>
+
+      <section class="view chat-view" id="chat-view" aria-labelledby="chat-title">
+        <header class="chat-header">
+          <button class="icon-button back-button" id="back-button" type="button" aria-label="채팅방 목록">
+            ←
+          </button>
+          <div class="chat-person">
+            <div class="avatar scenario-avatar" id="header-avatar" role="img"></div>
+            <div>
+              <h1 id="chat-title"></h1>
+              <p id="chat-category"></p>
+            </div>
+          </div>
+          <div class="chat-actions">
+            <button class="icon-button" id="download-button" type="button" aria-label="대화록 다운로드" title="대화록 다운로드">
+              ↓
+            </button>
+            <button class="mission-menu-button" id="mission-menu-button" type="button" aria-expanded="false">
+              <span class="hamburger" aria-hidden="true"><i></i><i></i><i></i></span>
+              미션
+              <strong id="mobile-mission-count">0/3</strong>
+            </button>
+          </div>
+        </header>
+
+        <div class="privacy-notice">
+          <strong>가상 상황</strong>
+          <span>실명·학교·연락처·계정은 입력하지 마세요.</span>
+        </div>
+
+        <div class="chat-layout">
+          <section class="conversation" aria-label="가상 인물과의 대화">
+            <div class="scenario-brief">
+              <span id="scenario-category"></span>
+              <p id="scenario-context"></p>
+              <strong id="scenario-role"></strong>
+            </div>
+
+            <div class="message-scroll" id="message-scroll" aria-live="polite">
+              <div class="date-chip">오늘</div>
+              <div class="messages" id="messages"></div>
+              <div class="typing" id="typing" hidden>
+                <span></span><span></span><span></span>
+              </div>
+              <div class="completion-message" id="completion-message" hidden>
+                <strong>상황 해결 완료</strong>
+                <p>세 가지 미션을 모두 수행했습니다. 어떤 말이 대화를 바꾸었는지 살펴보세요.</p>
+              </div>
+            </div>
+
+            <div class="coach-note" id="coach-note">
+              대화를 시작하면 미션 수행 정도와 다음 시도 안내가 여기에 표시됩니다.
+            </div>
+
+            <form class="composer" id="composer">
+              <label class="sr-only" for="message-input">내가 보낼 말</label>
+              <textarea
+                id="message-input"
+                rows="1"
+                maxlength="300"
+                placeholder="실제 친구에게 말하듯 입력해보세요."
+              ></textarea>
+              <button class="send-button" id="send-button" type="submit" aria-label="메시지 보내기">
+                ↑
+              </button>
+              <div class="composer-meta">
+                <span id="input-notice">AI는 인성을 평가하지 않고 미션 맥락만 살펴봅니다.</span>
+                <span id="char-count">0/300</span>
+              </div>
+            </form>
+          </section>
+
+          <aside class="mission-panel" id="mission-panel" aria-labelledby="mission-title">
+            <div class="mission-panel-header">
+              <div>
+                <p>MISSION BOARD</p>
+                <h2 id="mission-title">이번 채팅의 미션</h2>
+              </div>
+              <button class="icon-button mission-close" id="mission-close" type="button" aria-label="미션 패널 닫기">
+                ×
+              </button>
+            </div>
+
+            <div class="mission-progress">
+              <div>
+                <strong id="mission-count">0 / 3 완료</strong>
+                <span id="mission-progress-label">대화를 시작해보세요</span>
+              </div>
+              <div class="progress-track" aria-hidden="true">
+                <span id="mission-progress-bar"></span>
+              </div>
+            </div>
+
+            <div class="mission-list" id="mission-list"></div>
+
+            <div class="mission-legend">
+              <span><i class="legend-dot pending"></i>대기</span>
+              <span><i class="legend-dot insufficient"></i>미흡</span>
+              <span><i class="legend-dot completed"></i>완료</span>
+            </div>
+
+            <div class="mission-actions">
+              <button class="secondary-button" id="reset-button" type="button">이 채팅 다시 시작</button>
+              <button class="secondary-button export-button" id="export-button" type="button">대화 기록 내보내기</button>
+              <p>미션은 순서대로 진행됩니다. 이유와 구체적인 요청을 실제 대화처럼 표현해야 한 번에 하나씩 완료됩니다.</p>
+            </div>
+          </aside>
+        </div>
+
+        <div class="drawer-overlay" id="drawer-overlay" hidden></div>
+      </section>
+    </main>
+
+    <dialog class="action-dialog" id="export-dialog" aria-labelledby="export-dialog-title">
+      <div class="dialog-heading">
+        <div>
+          <p>EXPORT</p>
+          <h2 id="export-dialog-title">대화 기록 내보내기</h2>
+        </div>
+        <button class="icon-button dialog-close" id="export-close" type="button" aria-label="닫기">×</button>
+      </div>
+      <div class="export-options">
+        <button type="button" id="export-image-button">
+          <strong>스크린샷으로 내보내기</strong>
+          <span>전체 채팅 내용을 한 장의 PNG로 저장</span>
+        </button>
+        <button type="button" id="export-text-button">
+          <strong>텍스트로 내보내기</strong>
+          <span>대화와 미션 결과를 TXT로 저장</span>
+        </button>
+      </div>
+    </dialog>
+
+    <dialog class="action-dialog profanity-dialog" id="profanity-dialog" aria-labelledby="profanity-title">
+      <div class="dialog-heading">
+        <div>
+          <p>MESSAGE NOT SENT</p>
+          <h2 id="profanity-title">욕설은 보낼 수 없습니다</h2>
+        </div>
+      </div>
+      <p class="dialog-copy">내 감정과 바라는 행동을 상대가 이해할 수 있는 문장으로 바꿔보세요.</p>
+      <button class="primary-dialog-button" id="profanity-close" type="button">문장 다시 쓰기</button>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+  </body>
+</html>
