@@ -20,20 +20,41 @@ const MAX_DECOMPRESS_SIZE = 100 * 1024 * 1024
 
 // ─── XML 헬퍼 ──────────────────────────────────────────
 
-/** 네임스페이스 무시 태그 검색 — DOCX는 네임스페이스가 많음 */
-function getChildElements(parent: Element | Document, localName: string): Element[] {
+function matchesLocal(el: Element, localName: string): boolean {
+  return el.localName === localName || (el.tagName?.endsWith(`:${localName}`) ?? false)
+}
+
+/**
+ * sdt(콘텐츠 컨트롤)를 투명하게 평탄화한 직속 자식 엘리먼트.
+ * `<w:sdt>`는 `<w:sdtContent>`로 실제 내용을 감싸므로(Google Docs 익스포트가
+ * 본문 거의 전체를 sdt로 래핑), sdt를 만나면 sdtContent의 자식으로 펼쳐 본다.
+ * 블록 sdt(문단/표 래핑)와 인라인 sdt(run 래핑) 모두 동일하게 처리.
+ */
+function effectiveChildElements(parent: Element | Document): Element[] {
   const result: Element[] = []
   const children = parent.childNodes
   for (let i = 0; i < children.length; i++) {
     const node = children[i]
-    if (node.nodeType === 1) {
-      const el = node as Element
-      if (el.localName === localName || el.tagName?.endsWith(`:${localName}`)) {
-        result.push(el)
+    if (node.nodeType !== 1) continue
+    const el = node as Element
+    if (matchesLocal(el, "sdt")) {
+      // sdtContent 안으로 평탄화 (중첩 sdt 대비 재귀)
+      for (let j = 0; j < el.childNodes.length; j++) {
+        const c = el.childNodes[j]
+        if (c.nodeType === 1 && matchesLocal(c as Element, "sdtContent")) {
+          result.push(...effectiveChildElements(c as Element))
+        }
       }
+    } else {
+      result.push(el)
     }
   }
   return result
+}
+
+/** 네임스페이스 무시 + sdt 투명 처리 직속 자식 검색 — DOCX는 네임스페이스가 많음 */
+function getChildElements(parent: Element | Document, localName: string): Element[] {
+  return effectiveChildElements(parent).filter(el => matchesLocal(el, localName))
 }
 
 /** 재귀적으로 localName 매칭 — getElementsByTagName 대안 */
@@ -571,12 +592,10 @@ export async function parseDocxDocument(
 
   const blocks: IRBlock[] = []
   const bodyEl = body[0]
-  const children = bodyEl.childNodes
+  // sdt(콘텐츠 컨트롤)로 감싼 블록 문단/표도 펼쳐서 본다
+  const topLevel = effectiveChildElements(bodyEl)
 
-  for (let i = 0; i < children.length; i++) {
-    const node = children[i]
-    if (node.nodeType !== 1) continue
-    const el = node as Element
+  for (const el of topLevel) {
     const localName = el.localName ?? el.tagName?.split(":").pop()
 
     if (localName === "p") {

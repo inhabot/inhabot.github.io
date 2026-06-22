@@ -160,8 +160,8 @@ export async function parsePdf(buffer: ArrayBuffer, options?: ParseOptions): Pro
     }
   }
   try {
-    const { markdown, blocks, metadata, outline, warnings, isImageBased } = await parsePdfDocument(buffer, options)
-    return { success: true, fileType: "pdf", markdown, blocks, metadata, outline, warnings, isImageBased }
+    const { markdown, blocks, metadata, outline, warnings, isImageBased, pageQuality, qualitySummary } = await parsePdfDocument(buffer, options)
+    return { success: true, fileType: "pdf", markdown, blocks, metadata, outline, warnings, isImageBased, pageQuality, qualitySummary }
   } catch (err) {
     const isImageBased = err instanceof Error && "isImageBased" in err ? true : undefined
     return { success: false, fileType: "pdf", error: err instanceof Error ? err.message : "PDF 파싱 실패", code: classifyError(err), isImageBased }
@@ -302,13 +302,35 @@ export async function fillForm(
 // ─── 게임체인저 API ─────────────────────────────────
 
 export { compare, diffBlocks } from "./diff/compare.js"
-export { extractFormFields, isLabelCell } from "./form/recognize.js"
+export { extractFormFields, isLabelCell, extractFormSchema, inferFieldType } from "./form/recognize.js"
+export type { FormFieldType, FormFieldSchema, FormSchemaResult } from "./form/recognize.js"
 export { fillFormFields } from "./form/filler.js"
 export type { FillResult } from "./form/filler.js"
 export { fillHwpx } from "./form/filler-hwpx.js"
 export type { HwpxFillResult } from "./form/filler-hwpx.js"
 export { markdownToHwpx } from "./hwpx/generator.js"
 export type { HwpxTheme, MarkdownToHwpxOptions } from "./hwpx/generator.js"
+export type {
+  GongmunOptions,
+  GongmunPreset,
+  GongmunNumbering,
+  GongmunFont,
+} from "./hwpx/gongmun.js"
+export { patchHwpx } from "./roundtrip/patcher.js"
+export { patchHwp } from "./roundtrip/hwp5-patch.js"
+export type { PatchResult, PatchSkip, PatchOptions } from "./types.js"
+
+// ─── 에디터 통합 API (v3.1) ─────────────────────────
+
+export { HwpxSession, openHwpxDocument, patchHwpxBlocks } from "./roundtrip/session.js"
+export type {
+  BlockEdit, BlockCapability, BlockCapabilityInfo, CellCapability, BlockSourceRef,
+} from "./roundtrip/session.js"
+// 소스맵 저수준 API — 블록↔원본 바인딩을 직접 다루는 고급 사용자용
+export { scanSectionXml, buildParagraphSplices, buildRangeSplices, applySplices } from "./roundtrip/source-map.js"
+export type {
+  SectionScan, ScanParagraph, ScanCell, ScanTable, ScanParaKind, SpliceEdit, TRange,
+} from "./roundtrip/source-map.js"
 export { renderHtml, markdownToPdf, blocksToPdf } from "./print/renderer.js"
 export type { PrintPreset, PrintOptions, PageMargin } from "./print/renderer.js"
 
@@ -317,6 +339,7 @@ export type { PrintPreset, PrintOptions, PageMargin } from "./print/renderer.js"
 export { detectFormat, detectOle2Format, detectZipFormat, isHwpxFile, isOldHwpFile, isPdfFile, isZipFile } from "./detect.js"
 export type {
   ParseResult, ParseSuccess, ParseFailure, FileType,
+  PageQuality, DocumentQualitySummary,
   IRBlock, IRBlockType, IRTable, IRCell, CellContext,
   BoundingBox, InlineStyle, ImageData, ExtractedImage,
   DocumentMetadata, ParseOptions, ErrorCode,

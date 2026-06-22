@@ -72,12 +72,22 @@ export interface IRTable {
   cells: IRCell[][]
   /** 첫 행을 헤더로 렌더링할지 여부 (현재: rows > 1이면 true — 의미적 감지가 아닌 레이아웃 힌트) */
   hasHeader: boolean
+  /** 표 캡션 (예: "표 1. 부서별 예산") — v3.0 */
+  caption?: string
 }
 
 export interface IRCell {
   text: string
   colSpan: number
   rowSpan: number
+  /**
+   * 셀 내부 블록 콘텐츠 — v3.0.
+   * 중첩 표·이미지·다중 문단을 구조 그대로 보존한다.
+   * blocks가 있으면 text는 blocks의 평탄화 텍스트(하위 호환용)다.
+   */
+  blocks?: IRBlock[]
+  /** 제목 셀 여부 (HWP5 width_ref bit2 / HWPX header 속성) — v3.0 */
+  isHeader?: boolean
 }
 
 // ─── 메타데이터 ─────────────────────────────────────
@@ -164,6 +174,7 @@ export type WarningCode =
   | "MALFORMED_XML"
   | "PARTIAL_PARSE"
   | "LENIENT_CFB_RECOVERY"
+  | "NEEDS_OCR"
 
 /** 문서 구조 (헤딩 트리) */
 export interface OutlineItem {
@@ -214,6 +225,36 @@ export interface ParseSuccess extends ParseResultBase {
   warnings?: ParseWarning[]
   /** 추출된 이미지 목록 — 마크다운에서 파일명으로 참조됨 */
   images?: ExtractedImage[]
+  /** 페이지별 텍스트 품질 신호 — PDF에서만 제공 */
+  pageQuality?: PageQuality[]
+  /** 문서 단위 품질 요약 — PDF에서만 제공 */
+  qualitySummary?: DocumentQualitySummary
+}
+
+/** 페이지별 텍스트 품질 신호 (PDF 전용). 자세한 설명은 src/pdf/quality.ts */
+export interface PageQuality {
+  page: number
+  textChars: number
+  hangulRatio: number
+  controlCharRatio: number
+  replacementCharRatio: number
+  puaRatio: number
+  needsOcr: boolean
+  ocrReason?: "low_text" | "high_pua" | "high_control" | "high_replacement"
+}
+
+/** 문서 단위 품질 요약 (PDF 전용). */
+export interface DocumentQualitySummary {
+  totalPages: number
+  totalTextChars: number
+  avgHangulRatio: number
+  avgControlCharRatio: number
+  avgReplacementCharRatio: number
+  avgPuaRatio: number
+  lowTextPageCount: number
+  highPuaPageCount: number
+  needsOcr: boolean
+  ocrCandidatePages: number[]
 }
 
 /** 추출된 이미지 — ParseSuccess.images에 포함 */
@@ -261,6 +302,49 @@ export interface CellDiff {
 export interface DiffResult {
   stats: { added: number; removed: number; modified: number; unchanged: number }
   diffs: BlockDiff[]
+}
+
+// ─── 라운드트립 패치 (v3.0) ─────────────────────────
+
+/** 패치 중 매핑 실패/미지원으로 건너뛴 항목 — silent 실패 금지 */
+export interface PatchSkip {
+  /** 건너뛴 사유 */
+  reason: string
+  /** 원본 쪽 내용 요약 (최대 80자) */
+  before?: string
+  /** 편집 쪽 내용 요약 (최대 80자) */
+  after?: string
+}
+
+/** patchHwpx 옵션 */
+export interface PatchOptions {
+  /** 패치 후 재파싱 자동 검증 (기본 true) */
+  verify?: boolean
+}
+
+/** patchHwpx / patchBlocks 결과 */
+export interface PatchResult {
+  success: boolean
+  /** 패치된 HWPX (success=true) */
+  data?: Uint8Array
+  /** 적용된 변경 수 */
+  applied: number
+  /** 매핑 실패 항목 (이유 포함) */
+  skipped: PatchSkip[]
+  /**
+   * 무손실 검증 (patchHwpx/patchHwp 전용): 패치본 재파싱 vs 편집 마크다운의
+   * 잔차 diff — modified/added/removed가 0이어야 의도가 전부 반영된 것.
+   * session.patchBlocks는 이 필드를 채우지 않는다 (changes 참조).
+   */
+  verification?: DiffResult
+  /**
+   * 변경 가시화 (session.patchBlocks 전용): 패치 전 → 후 문서 diff —
+   * 적용된 편집 수만큼 modified가 나오는 것이 정상. verification과 의미가
+   * 정반대이므로 혼용 금지.
+   */
+  changes?: DiffResult
+  /** 실패 사유 (success=false) */
+  error?: string
 }
 
 // ─── 양식 인식 ──────────────────────────────────────
@@ -319,4 +403,8 @@ export interface InternalParseResult {
   images?: ExtractedImage[]
   /** PDF 전용: 이미지 기반 PDF 여부 */
   isImageBased?: boolean
+  /** PDF 전용: 페이지별 품질 신호 */
+  pageQuality?: PageQuality[]
+  /** PDF 전용: 문서 단위 품질 요약 */
+  qualitySummary?: DocumentQualitySummary
 }

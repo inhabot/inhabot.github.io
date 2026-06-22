@@ -1,6 +1,7 @@
 /** 양식(서식) 필드 인식 — 테이블 기반 label-value 패턴 매칭 */
 
 import type { IRBlock, IRTable, FormField, FormResult } from "../types.js"
+import { scanInlineSegments, normalizeLabel } from "./match.js"
 
 /** 한국 공문서 필드 라벨 키워드 */
 export const LABEL_KEYWORDS = new Set([
@@ -68,8 +69,9 @@ function extractFromTable(table: IRTable): FormField[] {
   if (table.cols >= 2) {
     for (let r = 0; r < table.rows; r++) {
       for (let c = 0; c < table.cols - 1; c++) {
-        const labelCell = table.cells[r][c]
-        const valueCell = table.cells[r][c + 1]
+        const labelCell = table.cells[r]?.[c]
+        const valueCell = table.cells[r]?.[c + 1]
+        if (!labelCell || !valueCell) continue
         if (isLabelCell(labelCell.text)) {
           fields.push({
             label: labelCell.text.trim().replace(/[:：]\s*$/, ""),
@@ -92,8 +94,8 @@ function extractFromTable(table: IRTable): FormField[] {
     if (allLabels) {
       for (let r = 1; r < table.rows; r++) {
         for (let c = 0; c < table.cols; c++) {
-          const label = headerRow[c].text.trim()
-          const value = table.cells[r][c].text.trim()
+          const label = headerRow[c]?.text.trim() ?? ""
+          const value = table.cells[r]?.[c]?.text.trim() ?? ""
           if (label && value) {
             fields.push({ label, value, row: r, col: c })
           }
@@ -106,16 +108,115 @@ function extractFromTable(table: IRTable): FormField[] {
 }
 
 function extractInlineFields(text: string): FormField[] {
+  // "라벨: 값" — 한 줄 다중 라벨("성명:  작성일자: ")은 세그먼트 단위로 분해.
+  // 값이 빈 라벨은 여기선 제외 (기존 계약 유지) — extractFormSchema가 수집한다.
   const fields: FormField[] = []
-  // "라벨: 값" 또는 "라벨 : 값" 패턴
-  const pattern = /([가-힣A-Za-z]{2,10})\s*[:：]\s*([^\n,;]{1,100})/g
-  let match
-  while ((match = pattern.exec(text)) !== null) {
-    const label = match[1].trim()
-    const value = match[2].trim()
-    if (value) {
-      fields.push({ label, value, row: -1, col: -1 })
+  for (const seg of scanInlineSegments(text)) {
+    if (seg.value) {
+      fields.push({ label: seg.label, value: seg.value, row: -1, col: -1 })
     }
   }
   return fields
+}
+
+// ─── 필드 스키마 (타입 추론) — v3.1 ─────────────────
+
+/** 양식 필드 타입 — 폼 UI 위젯 선택의 근거 (데이트피커/체크박스 등) */
+export type FormFieldType = "text" | "date" | "phone" | "email" | "amount" | "checkbox" | "idnum"
+
+/** 타입이 추론된 양식 필드 */
+export interface FormFieldSchema extends FormField {
+  type: FormFieldType
+  /** 라벨에 필수 표시(※·*·★·"(필수)")가 있을 때만 true */
+  required?: boolean
+  /** 값이 비어 있거나 플레이스홀더(밑줄/괄호 빈칸)뿐 — 채움 대상 */
+  empty: boolean
+}
+
+export interface FormSchemaResult {
+  fields: FormFieldSchema[]
+  /** 양식 확신도 (0-1, extractFormFields와 동일) */
+  confidence: number
+}
+
+/** 라벨 키워드 → 타입 (값 패턴이 우선, 라벨은 폴백) */
+const LABEL_TYPE_RULES: Array<[RegExp, FormFieldType]> = [
+  [/주민등록번호|외국인등록번호/, "idnum"],
+  [/생년월일|일시|날짜|일자|기간|연월일|년월일|신청일|작성일|발급일|접수일/, "date"],
+  [/전화|연락처|휴대폰|핸드폰|팩스/, "phone"],
+  [/이메일|전자우편|email/i, "email"],
+  [/금액|단가|수량|합계|소계|예산|비용|인원|급여|연봉/, "amount"],
+]
+
+/** 필드 타입 추론 — 기존 값의 패턴 우선, 없으면 라벨 키워드 */
+export function inferFieldType(label: string, value: string): FormFieldType {
+  if (/[□☑✓✔]/.test(value) || /[□☑✓✔]/.test(label)) return "checkbox"
+
+  const v = value.trim()
+  if (v) {
+    if (/^\d{6}[-\s]?[1-4]\d{6}$/.test(v)) return "idnum"
+    if (/^\d{4}\s*[-./년]\s*\d{1,2}\s*[-./월]\s*\d{1,2}\s*일?\s*\.?$/.test(v)) return "date"
+    if (/^0\d{1,2}[-.)\s]?\d{3,4}[-.\s]?\d{4}$/.test(v)) return "phone"
+    if (/^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/.test(v)) return "email"
+    // 단위 접미사 또는 천단위 콤마가 있을 때만 값 기반 amount — 맨 숫자
+    // (우편번호/접수번호/연도 등)는 라벨 폴백으로 넘긴다
+    if (/^[\d,.\s]+(?:원|명|건|개|회|부|매|%)$/.test(v) && /\d/.test(v)) return "amount"
+    if (/^\d{1,3}(?:,\d{3})+$/.test(v)) return "amount"
+  }
+
+  const norm = label.replace(/\s/g, "")
+  for (const [re, type] of LABEL_TYPE_RULES) {
+    if (re.test(norm)) return type
+  }
+  return "text"
+}
+
+/** 라벨의 필수 표시 감지 (※·*·★·"(필수)") */
+function isRequiredLabel(label: string): boolean {
+  return /[*※★]|\(\s*필수\s*\)|（\s*필수\s*）/.test(label)
+}
+
+/** 값이 비어 있거나 플레이스홀더(밑줄·괄호 빈칸·대시)뿐인지 */
+function isEmptyValue(value: string): boolean {
+  const v = value.trim()
+  if (!v) return true
+  return /^[\s_()（）\-—–~.·,]*$/.test(v)
+}
+
+/**
+ * 양식 필드 인식 + 타입/필수/빈값 추론 — 폼 UI 자동 생성용 (v3.1).
+ * extractFormFields 결과에 type(date/phone/amount/checkbox/...)·required·empty를 부여한다.
+ */
+export function extractFormSchema(blocks: IRBlock[]): FormSchemaResult {
+  const { fields, confidence } = extractFormFields(blocks)
+  const schemaFields: FormFieldSchema[] = fields.map(f => ({
+    ...f,
+    type: inferFieldType(f.label, f.value),
+    required: isRequiredLabel(f.label) || undefined,
+    empty: isEmptyValue(f.value),
+  }))
+
+  // 값이 빈 인라인 라벨("작성일자:")도 채움 대상으로 노출 —
+  // extractFormFields는 값 있는 필드만 수집하므로 여기서 보충한다
+  const seen = new Set(schemaFields.map(f => normalizeLabel(f.label)))
+  for (const block of blocks) {
+    if (block.type !== "paragraph" || !block.text) continue
+    for (const seg of scanInlineSegments(block.text)) {
+      if (seg.value) continue
+      const key = normalizeLabel(seg.label)
+      if (seen.has(key)) continue
+      seen.add(key)
+      schemaFields.push({
+        label: seg.label,
+        value: "",
+        row: -1,
+        col: -1,
+        type: inferFieldType(seg.label, ""),
+        required: isRequiredLabel(seg.label) || undefined,
+        empty: true,
+      })
+    }
+  }
+
+  return { confidence, fields: schemaFields }
 }

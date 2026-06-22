@@ -2,7 +2,7 @@
 
 import type { IRBlock, IRTable, FormField } from "../types.js"
 import { isLabelCell } from "./recognize.js"
-import { normalizeLabel, findMatchingKey, normalizeValues, resolveUnmatched, isKeywordLabel, fillInCellPatterns } from "./match.js"
+import { normalizeLabel, findMatchingKey, normalizeValues, resolveUnmatched, isKeywordLabel, fillInCellPatterns, scanInlineSegments, padInsertion } from "./match.js"
 
 /** 필드 채우기 결과 */
 export interface FillResult {
@@ -136,16 +136,19 @@ function fillTable(
 
     for (let r = 1; r < table.rows; r++) {
       for (let c = 0; c < table.cols; c++) {
-        const headerLabel = normalizeLabel(headerRow[c].text)
+        const headerCell = headerRow[c]
+        const valueCell = table.cells[r]?.[c]
+        if (!headerCell || !valueCell) continue
+        const headerLabel = normalizeLabel(headerCell.text)
         const matchKey = findMatchingKey(headerLabel, values)
         if (matchKey === undefined) continue
         if (matchedLabels.has(matchKey)) continue
 
         const newValue = values.get(matchKey)!
-        table.cells[r][c].text = newValue
+        valueCell.text = newValue
         matchedLabels.add(matchKey)
         filled.push({
-          label: headerRow[c].text.trim(),
+          label: headerCell.text.trim(),
           value: newValue,
           row: r,
           col: c,
@@ -155,29 +158,32 @@ function fillTable(
   }
 }
 
-/** 인라인 "라벨: 값" 패턴 교체 */
+/** 인라인 "라벨: 값" 패턴 교체 — 한 줄 다중 라벨은 세그먼트 단위로 처리 */
 function fillInlineFields(
   text: string,
   values: Map<string, string>,
   filled: FormField[],
   matchedLabels: Set<string>,
 ): string {
-  return text.replace(
-    /([가-힣A-Za-z]{2,10})\s*[:：]\s*([^\n,;]{0,100})/g,
-    (match, rawLabel: string, _oldValue: string) => {
-      const normalized = normalizeLabel(rawLabel)
-      const matchKey = findMatchingKey(normalized, values)
-      if (matchKey === undefined) return match
+  const segments = scanInlineSegments(text)
+  if (segments.length === 0) return text
 
-      const newValue = values.get(matchKey)!
-      matchedLabels.add(matchKey)
-      filled.push({
-        label: rawLabel.trim(),
-        value: newValue,
-        row: -1,
-        col: -1,
-      })
-      return `${rawLabel}: ${newValue}`
-    },
-  )
+  let out = ""
+  let pos = 0
+  for (const seg of segments) {
+    const matchKey = findMatchingKey(normalizeLabel(seg.label), values)
+    if (matchKey === undefined) continue
+
+    const newValue = values.get(matchKey)!
+    matchedLabels.add(matchKey)
+    filled.push({ label: seg.label.trim(), value: newValue, row: -1, col: -1 })
+    out += text.slice(pos, seg.valueStart)
+    // 빈 자리 삽입은 콜론·다음 라벨과 붙지 않게 공백 부착
+    out += seg.valueStart === seg.valueEnd
+      ? padInsertion(text, seg.valueStart, newValue)
+      : newValue
+    pos = seg.valueEnd
+  }
+  out += text.slice(pos)
+  return out
 }

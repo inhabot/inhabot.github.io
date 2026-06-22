@@ -16,7 +16,7 @@
  * 본 구현은 **텍스트 추출 전용** — 표/그림 레이아웃, 글자 속성, 캡션 위치 등은 모두 무시한다.
  * 표 셀과 그림 캡션, 머리말/꼬리말, 각주의 본문 텍스트는 재귀로 모아서 결과에 포함시킨다.
  *
- * 출처: rhwp/src/parser/hwp3/mod.rs (Apache-2.0). 알고리즘 1:1 포팅 + minimal 변형.
+ * 출처: rhwp/src/parser/hwp3/mod.rs (MIT). 알고리즘 1:1 포팅 + minimal 변형.
  */
 
 import { inflateRawSync } from "zlib"

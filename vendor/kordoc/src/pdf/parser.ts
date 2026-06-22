@@ -10,8 +10,9 @@ import { HEADING_RATIO_H1, HEADING_RATIO_H2, HEADING_RATIO_H3 } from "../types.j
 import { KordocError, safeMin, safeMax } from "../utils.js"
 import { parsePageRange } from "../page-range.js"
 import { blocksToMarkdown } from "../table/builder.js"
-import { extractLines, preprocessLines, filterPageBorderLines, buildTableGrids, extractCells, mapTextToCells, cellTextToString, detectEvenSpacedItems, type TextItem, type TableGrid, type ExtractedCell } from "./line-detector.js"
+import { extractLines, preprocessLines, filterPageBorderLines, buildTableGrids, extractCells, mapTextToCells, cellTextToString, detectEvenSpacedItems, spaceGapThreshold, extractImageRegions, normalizeUndersegmentedTable, type TextItem, type TableGrid, type ExtractedCell, type LineSegment } from "./line-detector.js"
 import { detectClusterTables, type ClusterItem } from "./cluster-detector.js"
+import { computePageQuality, summarizeDocumentQuality, stripControlChars, type PageQuality } from "./quality.js"
 // polyfill 먼저 (ES 모듈 호이스팅되므로 별도 파일 필수)
 import "./polyfill.js"
 import { getDocument, OPS, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs"
@@ -67,6 +68,8 @@ interface NormItem {
   isHidden: boolean
   /** pdfjs 공백 아이템이 이 아이템 직전에 있었음 — 단어 경계 힌트 */
   hasSpaceBefore?: boolean
+  /** 취소선이 그어진 텍스트 (신구조문대비표 삭제 표시 등) */
+  strike?: boolean
 }
 
 export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptions): Promise<InternalParseResult> {
@@ -85,6 +88,7 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
 
     const blocks: IRBlock[] = []
     const warnings: ParseWarning[] = []
+    const pageQuality: PageQuality[] = []
     let totalChars = 0
     let totalTextBytes = 0
     const effectivePageCount = Math.min(pageCount, MAX_PAGES)
@@ -96,6 +100,10 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
     // 전체 문서의 폰트 크기 빈도 수집 (헤딩 감지용) — 빈도 Map으로 메모리 절약
     const fontSizeFreq = new Map<number, number>()
     const pageHeights = new Map<number, number>()
+    // 큰 이미지가 있는 페이지 (needsOcr 경고 노이즈 필터 + SKIPPED_IMAGE)
+    const pagesWithLargeImage = new Set<number>()
+    // 텍스트 없는 큰 이미지 영역: page → count
+    const skippedImagePages = new Map<number, number>()
 
     let parsedPages = 0
     for (let i = 1; i <= effectivePageCount; i++) {
@@ -122,15 +130,37 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
         // 선 기반 테이블 감지를 위한 operatorList
         const opList = await page.getOperatorList()
 
+        // 이미지 영역 감지 — 텍스트 없는 큰 이미지는 무음 정보손실이므로 가시화 (ODL 아이디어)
+        const pageArea = viewport.width * viewport.height
+        if (pageArea > 0) {
+          const imageRegions = extractImageRegions(opList.fnArray, opList.argsArray)
+          let uncovered = 0
+          for (const r of imageRegions) {
+            const area = (r.x2 - r.x1) * (r.y2 - r.y1)
+            if (area < pageArea * 0.05) continue // 작은 장식 이미지 무시
+            pagesWithLargeImage.add(i)
+            const hasText = visible.some(it => {
+              const cx = it.x + it.w / 2
+              const cy = it.y + (it.h || it.fontSize) / 2
+              return cx >= r.x1 && cx <= r.x2 && cy >= r.y1 && cy <= r.y2
+            })
+            if (!hasText) uncovered++
+          }
+          if (uncovered > 0) skippedImagePages.set(i, uncovered)
+        }
+
         const pageBlocks = extractPageBlocksWithLines(visible, i, opList, viewport.width, viewport.height)
         for (const b of pageBlocks) blocks.push(b)
 
-        // 이미지 기반 PDF 감지 + 크기 제한용 문자 수 집계
+        // 이미지 기반 PDF 감지 + 크기 제한용 문자 수 집계 + 페이지 품질 신호
+        let pageText = ""
         for (const b of pageBlocks) {
           const t = b.text || ""
           totalChars += t.replace(/\s/g, "").length
           totalTextBytes += t.length * 2
+          pageText += pageText ? "\n" + t : t
         }
+        pageQuality.push(computePageQuality(i, pageText))
         if (totalTextBytes > MAX_TOTAL_TEXT) throw new KordocError("텍스트 추출 크기 초과")
         parsedPages++
         options?.onProgress?.(parsedPages, totalTarget)
@@ -142,6 +172,7 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
     }
 
     const parsedPageCount = parsedPages || (pageFilter ? pageFilter.size : effectivePageCount)
+    let isImageBased = false
     if (totalChars / Math.max(parsedPageCount, 1) < 10) {
       if (options?.ocr) {
         try {
@@ -149,13 +180,42 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
           const ocrBlocks = await ocrPages(doc, options.ocr, pageFilter, effectivePageCount)
           if (ocrBlocks.length > 0) {
             const ocrMarkdown = ocrBlocks.map(b => b.text || "").filter(Boolean).join("\n\n")
-            return { markdown: ocrMarkdown, blocks: ocrBlocks, metadata, warnings, isImageBased: true }
+            return { markdown: ocrMarkdown, blocks: ocrBlocks, metadata, warnings, isImageBased: true, pageQuality, qualitySummary: summarizeDocumentQuality(pageQuality) }
           }
         } catch {
-          // OCR 실패 시 원래 에러 반환
+          // OCR 실패 시 일반 경로로 폴백 (아래에서 NEEDS_OCR 경고)
         }
       }
-      throw Object.assign(new KordocError(`이미지 기반 PDF (${pageCount}페이지, ${totalChars}자)`), { isImageBased: true })
+      // OCR 미설정/실패 — 빈 출력을 무경고로 내보내지 않고 경고 + 플래그로 가시화 (v3.0)
+      isImageBased = true
+      warnings.push({
+        message: `이미지 기반 PDF (${pageCount}페이지, 텍스트 ${totalChars}자) — 텍스트 레이어가 없어 OCR이 필요합니다`,
+        code: "NEEDS_OCR",
+      })
+    }
+
+    // 페이지 단위 needsOcr 경고 — 텍스트+스캔 혼합 문서에서 스캔 페이지 무음 손실 방지.
+    // low_text는 빈 페이지(표지/간지)일 수 있으므로 큰 이미지가 있는 페이지만 경고.
+    if (!isImageBased) {
+      const OCR_REASON_MESSAGES: Record<string, string> = {
+        low_text: "텍스트가 거의 없는 페이지 (스캔/이미지 추정)",
+        high_pua: "글꼴 매핑 실패 (PUA 비율 높음) — 추출 텍스트 신뢰 불가",
+        high_control: "제어문자 비율 높음 — 추출 텍스트 신뢰 불가",
+        high_replacement: "대체문자(U+FFFD) 비율 높음 — 추출 텍스트 신뢰 불가",
+      }
+      for (const pq of pageQuality) {
+        if (!pq.needsOcr || !pq.ocrReason) continue
+        if (pq.ocrReason === "low_text" && !pagesWithLargeImage.has(pq.page)) continue
+        warnings.push({ page: pq.page, message: `${OCR_REASON_MESSAGES[pq.ocrReason]} — OCR 검토 필요`, code: "NEEDS_OCR" })
+      }
+    }
+
+    // 텍스트 없는 큰 이미지 영역 경고 — 그림/차트/도장 무음 누락 가시화
+    // (문서 전체가 이미지 기반이면 위의 NEEDS_OCR 단일 경고로 충분)
+    if (!isImageBased) {
+      for (const [page, count] of [...skippedImagePages.entries()].sort((a, b) => a[0] - b[0])) {
+        warnings.push({ page, message: `${count}개 이미지 영역에 추출 가능한 텍스트 없음 (그림/차트/도장 내용 누락 가능)`, code: "SKIPPED_IMAGE" })
+      }
     }
 
     // 머리글/바닥글 필터링 (기본 ON — 명시적 false일 때만 비활성화)
@@ -166,6 +226,10 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
         blocks.splice(removed[ri], 1)
       }
     }
+
+    // 페이지 걸친 표 병합 — 머리글/바닥글 제거 후 인접해진 표를 하나로
+    // (ODL TableBorderProcessor.checkNeighborTables 포팅)
+    mergeCrossPageTables(blocks)
 
     // 수식 OCR (선택) — 기본 텍스트 추출과 별개로 페이지 이미지 렌더 후 수식만 검출/인식.
     // 실패 시 경고만 기록하고 일반 텍스트 추출 결과는 그대로 반환한다.
@@ -189,15 +253,33 @@ export async function parsePdfDocument(buffer: ArrayBuffer, options?: ParseOptio
     // □/■ 마커 기반 서브헤딩 감지 (ODL 패턴)
     detectMarkerHeadings(blocks)
 
+    // 표 캡션 감지 — 표 직전/직후 '표 N./그림 N' 패턴 텍스트를 IRTable.caption으로
+    detectTableCaptions(blocks)
+
+    // 한국어 리스트 감지 — 공문서 계층 라벨(1.→가.→1)→가)→①) 시퀀스 검증
+    detectKoreanListBlocks(blocks)
+
     // outline 구축
     const outline: OutlineItem[] = blocks
       .filter(b => b.type === "heading" && b.level && b.text)
       .map(b => ({ level: b.level!, text: b.text!, pageNumber: b.pageNumber }))
 
+    // 메트릭 수집 끝났으니 블록 텍스트의 C0/C1 제어문자(NUL 등) 정리
+    sanitizeBlockControlChars(blocks)
+
     // blocksToMarkdown로 통일 — 헤딩 마크다운 반영 (HWP5/HWPX와 일관성)
     let markdown = cleanPdfText(blocksToMarkdown(blocks))
 
-    return { markdown, blocks, metadata, outline: outline.length > 0 ? outline : undefined, warnings: warnings.length > 0 ? warnings : undefined }
+    return {
+      markdown,
+      blocks,
+      metadata,
+      outline: outline.length > 0 ? outline : undefined,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      isImageBased: isImageBased || undefined,
+      pageQuality,
+      qualitySummary: summarizeDocumentQuality(pageQuality),
+    }
   } finally {
     await doc.destroy().catch(() => {})
   }
@@ -415,100 +497,216 @@ function detectMarkerHeadings(blocks: IRBlock[]): void {
 }
 
 // ═══════════════════════════════════════════════════════
-// XY-Cut 읽기 순서 알고리즘
+// XY-Cut++ 읽기 순서 알고리즘 (arXiv:2504.10258)
+//
+// OpenDataLoader PDF의 XYCutPlusPlusSorter를 TypeScript로 포팅.
+// Original work: Copyright 2025-2026 Hancom Inc. (Apache-2.0)
+// https://github.com/opendataloader-project/opendataloader-pdf
+//
+// 기존 XY-Cut 대비 개선 3종:
+//  ① cross-layout 전폭 요소(제목 등) 마스크 후 Y 위치로 재삽입
+//  ② 좁은 요소(쪽번호류) 아웃라이어 필터 후 수직 컷 재시도
+//  ③ 양방향(수평/수직) 컷을 모두 계산해 더 큰 갭 선택 + 최소 갭 5pt
 // ═══════════════════════════════════════════════════════
 
-interface TextRegion {
-  items: NormItem[]
-  minX: number; minY: number; maxX: number; maxY: number
-}
-
-/**
- * XY-Cut: 페이지를 재귀적으로 X/Y축 공백으로 분할하여 읽기 순서 결정.
- * - Y축 분할 (수평 공백 감지) → 위에서 아래
- * - X축 분할 (수직 공백 감지) → 왼쪽에서 오른쪽
- * - 분할 불가능하면 리프 노드 (하나의 텍스트 블록)
- */
 /** 재귀 깊이 제한 — 수천 아이템의 pathological 레이아웃에서 스택 오버플로 방지 */
 const MAX_XYCUT_DEPTH = 50
+/** 분할 최소 갭 (pt) — 미세 갭(1px급) 분할 방지 (ODL MIN_GAP_THRESHOLD) */
+const XYCUT_MIN_GAP = 5
+/** cross-layout 판정: 최대폭 대비 비율 (ODL beta) — ODL 기본값 2.0 (사실상 비활성) */
+const CROSS_LAYOUT_BETA = 2.0
+/** cross-layout 판정: 수평 겹침 비율 최소값 */
+const CROSS_OVERLAP_RATIO = 0.1
+/** cross-layout 판정: 최소 겹침 요소 수 */
+const CROSS_MIN_OVERLAPS = 2
+/** cross-layout 마스크 상한 — 전체의 20% 초과 마스크 시 비활성 (단일 컬럼 문서 보호) */
+const CROSS_MAX_MASK_RATIO = 0.2
+/** 좁은 요소 아웃라이어 필터: 영역 폭 대비 비율 (쪽번호·각주 마커) */
+const NARROW_ELEMENT_WIDTH_RATIO = 0.1
+
+interface CutInfo {
+  position: number
+  gap: number
+}
 
 function xyCutOrder(items: NormItem[], gapThreshold: number, depth = 0): NormItem[][] {
   if (items.length === 0) return []
   if (items.length <= 2 || depth >= MAX_XYCUT_DEPTH) return [items]
 
-  const region = computeRegion(items)
-
-  // Y축 분할 시도 (수평 공백 감지)
-  const ySplit = findYSplit(items, region, gapThreshold)
-  if (ySplit !== null) {
-    const upper = items.filter(i => i.y > ySplit)
-    const lower = items.filter(i => i.y <= ySplit)
-    // 빈 파티션 방어 — 한쪽이 비면 분할 의미 없음
-    if (upper.length > 0 && lower.length > 0 && upper.length < items.length) {
-      return [...xyCutOrder(upper, gapThreshold, depth + 1), ...xyCutOrder(lower, gapThreshold, depth + 1)]
+  // Phase 1 (최상위에서만): cross-layout 전폭 요소 마스크
+  if (depth === 0 && items.length >= 3) {
+    const cross = identifyCrossLayoutItems(items)
+    if (cross.size > 0 && cross.size <= items.length * CROSS_MAX_MASK_RATIO) {
+      const rest = items.filter(i => !cross.has(i))
+      if (rest.length > 0) {
+        const groups = xyCutOrder(rest, gapThreshold, 1)
+        return mergeCrossLayoutGroups(groups, [...cross])
+      }
     }
   }
 
-  // X축 분할 시도 (수직 공백 감지)
-  const xSplit = findXSplit(items, region, gapThreshold)
-  if (xSplit !== null) {
-    const left = items.filter(i => i.x + i.w / 2 < xSplit)
-    const right = items.filter(i => i.x + i.w / 2 >= xSplit)
+  // Phase 3: 양방향 컷 계산 → 더 큰 갭 선택 (기존: Y 무조건 우선 → 2단 인터리브)
+  const minGap = Math.max(XYCUT_MIN_GAP, gapThreshold)
+  const hCut = findHorizontalCut(items)
+  const vCut = findVerticalCutWithOutlierFilter(items, minGap)
+
+  const hValid = hCut.gap >= minGap
+  const vValid = vCut.gap >= minGap
+
+  // 축 선택: 기본 Y 우선 (한국 공문서는 단일 컬럼 위주 — 코퍼스 검증 결과 Y 우선이 안정적).
+  // 단, 수직 갭이 수평 갭보다 명백히 크면(1.5×) 컬럼 분리로 보고 X 우선
+  // → 2단 레이아웃에서 문단 간 수평 갭이 단 사이 수직 갭보다 먼저 잡혀 행 단위로
+  //   인터리브되는 문제 방지 (XY-Cut++ 양방향 컷의 보수적 적용)
+  let useHorizontal: boolean
+  if (hValid && vValid) useHorizontal = vCut.gap <= hCut.gap * 1.5
+  else if (hValid) useHorizontal = true
+  else if (vValid) useHorizontal = false
+  else return [items] // 분할 불가 → 리프 노드
+
+  if (useHorizontal) {
+    const upper = items.filter(i => i.y > hCut.position)
+    const lower = items.filter(i => i.y <= hCut.position)
+    if (upper.length > 0 && lower.length > 0 && upper.length < items.length) {
+      return [...xyCutOrder(upper, gapThreshold, depth + 1), ...xyCutOrder(lower, gapThreshold, depth + 1)]
+    }
+  } else {
+    const left = items.filter(i => i.x + i.w / 2 < vCut.position)
+    const right = items.filter(i => i.x + i.w / 2 >= vCut.position)
     if (left.length > 0 && right.length > 0 && left.length < items.length) {
       return [...xyCutOrder(left, gapThreshold, depth + 1), ...xyCutOrder(right, gapThreshold, depth + 1)]
     }
   }
 
-  // 분할 불가 → 리프 노드
   return [items]
 }
 
-function computeRegion(items: NormItem[]): TextRegion {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-  for (const i of items) {
-    if (i.x < minX) minX = i.x
-    if (i.y < minY) minY = i.y
-    if (i.x + i.w > maxX) maxX = i.x + i.w
-    if (i.y + i.h > maxY) maxY = i.y + i.h
+/**
+ * cross-layout 요소 식별: 폭 ≥ beta×최대폭 + 다른 요소 2개 이상과 수평 겹침.
+ * 전폭 제목/헤더가 컬럼 분할을 가로막는 것을 방지.
+ */
+function identifyCrossLayoutItems(items: NormItem[]): Set<NormItem> {
+  const cross = new Set<NormItem>()
+  if (items.length < 3) return cross
+
+  let maxWidth = 0
+  for (const i of items) { if (i.w > maxWidth) maxWidth = i.w }
+  const threshold = CROSS_LAYOUT_BETA * maxWidth
+
+  for (const item of items) {
+    if (item.w < threshold) continue
+    let overlaps = 0
+    for (const other of items) {
+      if (other === item) continue
+      const left = Math.max(item.x, other.x)
+      const right = Math.min(item.x + item.w, other.x + other.w)
+      const overlapW = right - left
+      if (overlapW <= 0) continue
+      const smaller = Math.min(item.w, other.w)
+      if (smaller > 0 && overlapW / smaller >= CROSS_OVERLAP_RATIO) {
+        overlaps++
+        if (overlaps >= CROSS_MIN_OVERLAPS) break
+      }
+    }
+    if (overlaps >= CROSS_MIN_OVERLAPS) cross.add(item)
   }
-  return { items, minX, minY, maxX, maxY }
+  return cross
 }
 
-/** Y축 분할점 찾기 — 수평 공백 밴드 중 가장 넓은 갭 */
-function findYSplit(items: NormItem[], _region: TextRegion, gapThreshold: number): number | null {
-  // 아이템을 Y좌표로 정렬 (내림차순 — 위에서 아래)
+/** cross-layout 요소를 Y 위치 기준으로 그룹 시퀀스에 재삽입 (각자 단독 그룹) */
+function mergeCrossLayoutGroups(groups: NormItem[][], cross: NormItem[]): NormItem[][] {
+  if (cross.length === 0) return groups
+  const sortedCross = [...cross].sort((a, b) => (b.y + b.h) - (a.y + a.h) || a.x - b.x)
+  const groupTop = (g: NormItem[]) => {
+    let top = -Infinity
+    for (const i of g) { const t = i.y + i.h; if (t > top) top = t }
+    return top
+  }
+
+  const result: NormItem[][] = []
+  let gi = 0, ci = 0
+  while (gi < groups.length || ci < sortedCross.length) {
+    if (ci >= sortedCross.length) { result.push(groups[gi++]); continue }
+    if (gi >= groups.length) { result.push([sortedCross[ci++]]); continue }
+    const crossTop = sortedCross[ci].y + sortedCross[ci].h
+    if (crossTop >= groupTop(groups[gi])) result.push([sortedCross[ci++]])
+    else result.push(groups[gi++])
+  }
+  return result
+}
+
+/**
+ * 수평 컷(Y축 분할) — Y 프로젝션에서 가장 넓은 갭.
+ * 갭/분할점 계산은 기존 findYSplit과 동일 (y-h를 하단으로 보는 bbox 모델 유지 —
+ * 코퍼스 검증 결과 모델 변경 시 행 분할점이 이동해 회귀 발생).
+ */
+function findHorizontalCut(items: NormItem[]): CutInfo {
+  if (items.length < 2) return { position: 0, gap: 0 }
   const sorted = [...items].sort((a, b) => b.y - a.y)
-  let bestGap = gapThreshold
-  let bestSplit: number | null = null
+  let largestGap = 0
+  let position = 0
 
   for (let i = 1; i < sorted.length; i++) {
     const prevBottom = sorted[i - 1].y - sorted[i - 1].h
     const currTop = sorted[i].y
     const gap = prevBottom - currTop
-    if (gap > bestGap) {
-      bestGap = gap
-      bestSplit = (prevBottom + currTop) / 2
+    if (gap > largestGap) {
+      largestGap = gap
+      position = (prevBottom + currTop) / 2
     }
   }
-  return bestSplit
+  return { position, gap: largestGap }
 }
 
-/** X축 분할점 찾기 — 수직 공백 밴드 중 가장 넓은 갭 */
-function findXSplit(items: NormItem[], _region: TextRegion, gapThreshold: number): number | null {
-  const sorted = [...items].sort((a, b) => a.x - b.x)
-  let bestGap = gapThreshold
-  let bestSplit: number | null = null
+/**
+ * 수직 컷(X축 분할) — 갭이 안 나오면 좁은 요소(쪽번호류) 제외 후 재시도.
+ * 쪽번호가 2단 컬럼 사이 갭을 가로막는 경우 복구 (ODL ②).
+ */
+function findVerticalCutWithOutlierFilter(items: NormItem[], minGap: number): CutInfo {
+  const edgeCut = findVerticalCut(items)
+  if (edgeCut.gap >= minGap) return edgeCut
 
-  for (let i = 1; i < sorted.length; i++) {
-    const prevRight = sorted[i - 1].x + sorted[i - 1].w
-    const currLeft = sorted[i].x
-    const gap = currLeft - prevRight
-    if (gap > bestGap) {
-      bestGap = gap
-      bestSplit = (prevRight + currLeft) / 2
+  if (items.length >= 3) {
+    let minX = Infinity, maxX = -Infinity
+    for (const i of items) {
+      if (i.x < minX) minX = i.x
+      const r = i.x + i.w
+      if (r > maxX) maxX = r
+    }
+    const narrowThreshold = (maxX - minX) * NARROW_ELEMENT_WIDTH_RATIO
+    const filtered = items.filter(i => i.w >= narrowThreshold)
+    // 아웃라이어는 소수여야 함 (쪽번호 1~2개) — 단어 단위 아이템이 대량 필터되면
+    // 본문에서 가짜 컬럼 갭이 만들어지므로 70% 이상 유지될 때만 재시도
+    if (filtered.length >= 2 && filtered.length < items.length && filtered.length >= items.length * 0.7) {
+      const filteredCut = findVerticalCut(filtered)
+      if (filteredCut.gap > edgeCut.gap && filteredCut.gap >= minGap) {
+        return filteredCut
+      }
     }
   }
-  return bestSplit
+  return edgeCut
+}
+
+/** 수직 컷 — X 프로젝션에서 가장 넓은 갭 */
+function findVerticalCut(items: NormItem[]): CutInfo {
+  if (items.length < 2) return { position: 0, gap: 0 }
+  const sorted = [...items].sort((a, b) => a.x - b.x || (a.x + a.w) - (b.x + b.w))
+  let largestGap = 0
+  let position = 0
+  let prevRight: number | null = null
+
+  for (const it of sorted) {
+    const left = it.x
+    const right = it.x + it.w
+    if (prevRight !== null && left > prevRight) {
+      const gap = left - prevRight
+      if (gap > largestGap) {
+        largestGap = gap
+        position = (prevRight + left) / 2
+      }
+    }
+    prevRight = prevRight === null ? right : Math.max(prevRight, right)
+  }
+  return { position, gap: largestGap }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -535,6 +733,10 @@ function extractPageBlocksWithLines(
   // 굵은 선 필터 + 근접 평행 선 병합
   ;({ horizontals, verticals } = preprocessLines(horizontals, verticals))
 
+  // 1.7단계: 취소선 감지 — 텍스트 중심을 가로지르는 얇은 수평선 (ODL StrikethroughProcessor)
+  markStrikethroughItems(items, horizontals)
+  wrapStrikethroughRuns(items)
+
   // 2단계: 선으로 테이블 그리드 구성
   const grids = buildTableGrids(horizontals, verticals)
 
@@ -544,6 +746,74 @@ function extractPageBlocksWithLines(
 
   // Fallback: 기존 휴리스틱 (선이 없는 PDF)
   return extractPageBlocksFallback(items, pageNum)
+}
+
+// ─── 취소선 감지 (ODL StrikethroughProcessor 포팅) ─────
+// Original work: Copyright 2025-2026 Hancom Inc. (Apache-2.0)
+// https://github.com/opendataloader-project/opendataloader-pdf
+
+/** 취소선 최대 두께 (pt) — 굵은 선은 배경 채움/테두리 */
+const STRIKE_MAX_THICKNESS = 2.0
+/** 취소선 두께 / 텍스트 높이 최대 비율 */
+const STRIKE_MAX_THICKNESS_RATIO = 0.25
+/** 선 Y와 텍스트 중심 Y의 허용 오차 (텍스트 높이 비율) */
+const STRIKE_CENTER_TOLERANCE = 0.25
+/** 선이 텍스트를 덮어야 하는 최소 수평 비율 */
+const STRIKE_MIN_OVERLAP_RATIO = 0.8
+/** 선 폭 / 매칭 텍스트 총폭 최대 비율 — 표 구분선/배경선 오탐 방지 */
+const STRIKE_MAX_LINE_TO_TEXT_RATIO = 1.5
+
+/**
+ * 텍스트 중심을 가로지르는 얇은 수평선을 찾아 해당 아이템에 strike 마킹.
+ * 법령 개정문(신구조문대비표)의 삭제 표시 텍스트 보존용.
+ */
+function markStrikethroughItems(items: NormItem[], horizontals: LineSegment[]): void {
+  if (items.length === 0 || horizontals.length === 0) return
+
+  for (const line of horizontals) {
+    if (line.lineWidth > STRIKE_MAX_THICKNESS) continue
+    const matches: NormItem[] = []
+    for (const item of items) {
+      const h = item.h > 0 ? item.h : item.fontSize
+      if (h <= 0 || item.w <= 0) continue
+      if (line.lineWidth > h * STRIKE_MAX_THICKNESS_RATIO) continue
+      // 글자 중심 근사: baseline(y) + 높이의 40% (한글 x-height 중앙)
+      const centerY = item.y + h * 0.4
+      if (Math.abs(line.y1 - centerY) > h * STRIKE_CENTER_TOLERANCE) continue
+      const overlap = Math.min(line.x2, item.x + item.w) - Math.max(line.x1, item.x)
+      if (overlap / item.w < STRIKE_MIN_OVERLAP_RATIO) continue
+      matches.push(item)
+    }
+    if (matches.length === 0) continue
+    // 선 폭이 매칭 텍스트 총폭의 1.5배 이내여야 취소선 (표 괘선 오탐 방지)
+    let totalW = 0
+    for (const m of matches) totalW += m.w
+    if (totalW <= 0 || (line.x2 - line.x1) / totalW > STRIKE_MAX_LINE_TO_TEXT_RATIO) continue
+    for (const m of matches) m.strike = true
+  }
+}
+
+/**
+ * strike 마킹된 연속 아이템 run을 ~~...~~ 마크다운으로 감싼다.
+ * (같은 시각적 줄에서 인접한 마킹 아이템들을 하나의 run으로 묶음)
+ */
+function wrapStrikethroughRuns(items: NormItem[]): void {
+  const struck = items.filter(i => i.strike)
+  if (struck.length === 0) return
+
+  // 줄 단위 그룹핑 (y ±3) 후 x 순 정렬
+  const lines = new Map<number, NormItem[]>()
+  for (const item of struck) {
+    const key = Math.round(item.y / 3)
+    const arr = lines.get(key) || []
+    arr.push(item)
+    lines.set(key, arr)
+  }
+  for (const arr of lines.values()) {
+    arr.sort((a, b) => a.x - b.x)
+    arr[0].text = "~~" + arr[0].text
+    arr[arr.length - 1].text = arr[arr.length - 1].text + "~~"
+  }
 }
 
 /**
@@ -594,10 +864,10 @@ function extractBlocksWithGrids(
     const cells = extractCells(grid, horizontals, verticals)
     if (cells.length === 0) continue
 
-    // 텍스트→셀 매핑
+    // 텍스트→셀 매핑 (hasSpaceBefore 전파 — 셀 텍스트 단어 공백 복원)
     const textItems: TextItem[] = tableItems.map(i => ({
       text: i.text, x: i.x, y: i.y, w: i.w, h: i.h,
-      fontSize: i.fontSize, fontName: i.fontName,
+      fontSize: i.fontSize, fontName: i.fontName, hasSpaceBefore: i.hasSpaceBefore,
     }))
     const cellTextMap = mapTextToCells(textItems, cells)
 
@@ -623,15 +893,34 @@ function extractBlocksWithGrids(
       }
     }
 
+    // 과소분할 표 재구성 (ODL TableStructureNormalizer):
+    // 행≤2 + 열≥3 + 셀 안에 텍스트 줄이 뭉친 표는 줄 centerY 기반 row band로 행 복원
+    let finalGrid = irGrid
+    let finalRows = numRows
+    if (numRows <= 2 && numCols >= 3) {
+      const rebuilt = normalizeUndersegmentedTable(irGrid, grid.colXs, textItems)
+      if (rebuilt) {
+        finalGrid = rebuilt.map(row => row.map(rawText => {
+          const cleaned = rawText.replace(/^[\s]*[-–—]\s*\d+\s*[-–—][\s]*$/gm, "").trim()
+          return {
+            text: cleaned.split("\n").map(line => collapseEvenSpacing(line)).join("\n"),
+            colSpan: 1,
+            rowSpan: 1,
+          }
+        }))
+        finalRows = finalGrid.length
+      }
+    }
+
     const irTable: IRTable = {
-      rows: numRows,
+      rows: finalRows,
       cols: numCols,
-      cells: irGrid,
-      hasHeader: numRows > 1,
+      cells: finalGrid,
+      hasHeader: finalRows > 1,
     }
 
     // 빈 테이블(모든 셀이 빈 문자열) 스킵
-    const hasContent = irGrid.some(row => row.some(cell => cell.text.trim() !== ""))
+    const hasContent = finalGrid.some(row => row.some(cell => cell.text.trim() !== ""))
     if (!hasContent) continue
 
     const tableBbox: BoundingBox = {
@@ -662,7 +951,7 @@ function extractBlocksWithGrids(
     // 클러스터 기반 테이블 감지 (XY-Cut 전에 실행 — 테이블이 쪼개지지 않도록)
     const clusterItems: ClusterItem[] = remaining.map(i => ({
       text: i.text, x: i.x, y: i.y, w: i.w, h: i.h,
-      fontSize: i.fontSize, fontName: i.fontName,
+      fontSize: i.fontSize, fontName: i.fontName, hasSpaceBefore: i.hasSpaceBefore,
     }))
     const clusterResults = detectClusterTables(clusterItems, pageNum)
     if (clusterResults.length > 0) {
@@ -706,6 +995,67 @@ function extractBlocksWithGrids(
   return mergeAdjacentTableBlocks(blocks)
 }
 
+/**
+ * 페이지 걸친 표 병합 — ODL TableBorderProcessor.checkNeighborTables 포팅.
+ * Original work: Copyright 2025-2026 Hancom Inc. (Apache-2.0)
+ *
+ * 페이지 N의 마지막 표와 페이지 N+1의 첫 표가:
+ *  - 블록 배열에서 인접 (사이에 본문 블록 없음 — 머리글/바닥글 제거 후 기준)
+ *  - 열 수 동일
+ *  - 좌우 경계 근접 (폭 대비 0.2 비율 이내, ODL NEIGHBOUR_TABLE_EPSILON)
+ * 이면 한 표로 병합. 반복 헤더 행(첫 행 텍스트 동일)은 제거.
+ */
+const NEIGHBOR_TABLE_EPSILON = 0.2
+
+export function mergeCrossPageTables(blocks: IRBlock[]): void {
+  for (let i = blocks.length - 2; i >= 0; i--) {
+    const prev = blocks[i]
+    const curr = blocks[i + 1]
+    if (prev.type !== "table" || curr.type !== "table" || !prev.table || !curr.table) continue
+    if (!prev.pageNumber || !curr.pageNumber || curr.pageNumber !== prev.pageNumber + 1) continue
+    if (prev.table.cols !== curr.table.cols) continue
+    if (!prev.bbox || !curr.bbox) continue
+
+    // 좌우 경계 근접 검증 (폭 대비 비율)
+    const width = Math.max(prev.bbox.width, curr.bbox.width, 1)
+    const leftDiff = Math.abs(prev.bbox.x - curr.bbox.x)
+    const rightDiff = Math.abs((prev.bbox.x + prev.bbox.width) - (curr.bbox.x + curr.bbox.width))
+    if (leftDiff > width * NEIGHBOR_TABLE_EPSILON || rightDiff > width * NEIGHBOR_TABLE_EPSILON) continue
+
+    // 반복 헤더 행 제거: 다음 표 첫 행이 이전 표 첫 행과 동일하면 중복 헤더
+    let currCells = curr.table.cells
+    if (currCells.length > 1 && prev.table.cells.length > 0 &&
+        rowTextsEqual(prev.table.cells[0], currCells[0])) {
+      currCells = currCells.slice(1)
+    }
+    if (currCells.length === 0) {
+      blocks.splice(i + 1, 1)
+      continue
+    }
+
+    const merged: IRTable = {
+      rows: prev.table.rows + currCells.length,
+      cols: prev.table.cols,
+      cells: [...prev.table.cells, ...currCells],
+      hasHeader: prev.table.hasHeader,
+      caption: prev.table.caption,
+    }
+    blocks[i] = { ...prev, table: merged }
+    blocks.splice(i + 1, 1)
+  }
+}
+
+/** 두 행의 셀 텍스트가 모두 동일한지 (공백 정규화 후 비교) */
+function rowTextsEqual(a: import("../types.js").IRCell[], b: import("../types.js").IRCell[]): boolean {
+  if (a.length !== b.length) return false
+  const norm = (t: string) => t.replace(/\s+/g, "")
+  for (let i = 0; i < a.length; i++) {
+    if (norm(a[i].text) !== norm(b[i].text)) return false
+  }
+  // 빈 행끼리의 비교는 의미 없음
+  return a.some(c => c.text.trim() !== "")
+}
+
 /** 같은 열 수의 연속 테이블 블록을 하나로 합침 */
 function mergeAdjacentTableBlocks(blocks: IRBlock[]): IRBlock[] {
   if (blocks.length <= 1) return blocks
@@ -741,7 +1091,7 @@ function extractPageBlocksFallback(items: NormItem[], pageNum: number): IRBlock[
   // 1단계: 클러스터 기반 테이블 감지 우선 (헤더 감지 시 정확도 높음)
   const clusterItems: ClusterItem[] = items.map(i => ({
     text: i.text, x: i.x, y: i.y, w: i.w, h: i.h,
-    fontSize: i.fontSize, fontName: i.fontName,
+    fontSize: i.fontSize, fontName: i.fontName, hasSpaceBefore: i.hasSpaceBefore,
   }))
   const clusterResults = detectClusterTables(clusterItems, pageNum)
 
@@ -760,7 +1110,7 @@ function extractPageBlocksFallback(items: NormItem[], pageNum: number): IRBlock[
     // 테이블에 속하지 않은 나머지 텍스트 → 일반 블록
     const remaining = items.filter((_, idx) => !usedIndices.has(idx))
     if (remaining.length > 0) {
-      const yLines = groupByY(remaining)
+      const yLines = mergeSuperscriptLines(groupByY(remaining))
       for (const line of yLines) {
         const text = mergeLineSimple(line)
         if (!text.trim()) continue
@@ -776,7 +1126,7 @@ function extractPageBlocksFallback(items: NormItem[], pageNum: number): IRBlock[
     })
   } else {
     // 2단계: 레거시 컬럼 감지 (3+ 열)
-    const allYLines = groupByY(items)
+    const allYLines = mergeSuperscriptLines(groupByY(items))
     const columns = detectColumns(allYLines)
 
     if (columns && columns.length >= 3) {
@@ -793,7 +1143,7 @@ function extractPageBlocksFallback(items: NormItem[], pageNum: number): IRBlock[
 
       for (const group of orderedGroups) {
         if (group.length === 0) continue
-        const yLines = groupByY(group)
+        const yLines = mergeSuperscriptLines(groupByY(group))
 
         const groupColumns = detectColumns(yLines)
         if (groupColumns && groupColumns.length >= 3) {
@@ -910,19 +1260,20 @@ function normalizeItems(rawItems: PdfTextItem[]): NormItem[] {
   }
 
   // 2. 공백 아이템 위치를 NormItem.hasSpaceBefore로 전파
-  // 같은 Y라인(±3px)에서 공백 아이템의 x가 현재 아이템 직전(왼쪽)에 있으면 표시
+  // 같은 Y라인(±3px)에서 공백 바로 오른쪽의 "가장 가까운" 아이템에만 표시.
+  // (기존: 20px 윈도 내 모든 아이템 마킹 → "기관 [공백] 내부에서"의 '부'까지
+  //  오마킹되어 "내 부에서" 과다 공백 발생 — 인접 아이템 1개로 제한)
   if (spacePositions.length > 0) {
-    for (const item of deduped) {
-      for (const sp of spacePositions) {
-        // 같은 Y라인(±3px) + 공백이 아이템 왼쪽에 인접 (0 ~ 20px 이내)
-        if (Math.abs(sp.y - item.y) <= 3) {
-          const dist = item.x - sp.x
-          if (dist >= 0 && dist <= 20) {
-            item.hasSpaceBefore = true
-            break
-          }
+    for (const sp of spacePositions) {
+      let nearest: NormItem | null = null
+      for (const item of deduped) {
+        if (Math.abs(sp.y - item.y) > 3) continue
+        const dist = item.x - sp.x
+        if (dist >= -1 && dist <= 20 && (!nearest || item.x < nearest.x)) {
+          nearest = item
         }
       }
+      if (nearest) nearest.hasSpaceBefore = true
     }
   }
 
@@ -973,6 +1324,45 @@ function groupByY(items: NormItem[]): NormItem[][] {
   }
   if (curLine.length > 0) lines.push(curLine)
   return lines
+}
+
+/**
+ * 첨자 줄 병합 — 본문 줄보다 살짝 위에 뜬 작은 글자 조각(각주 마커 `*`, 원문자 ①,
+ * 덧말)이 groupByY에서 별도 줄로 분리된 것을 본문 줄에 흡수한다.
+ * 조각 줄(아이템 ≤3개·각 ≤8자·글자 박스가 인접 줄보다 확실히 작음)이 인접 줄과
+ * 수직으로 겹치면 같은 시각적 줄이다. mergeLineSimple이 x순 정렬하므로
+ * 병합 후 원래 인라인 위치("①근로자...")가 복원된다.
+ */
+function mergeSuperscriptLines(lines: NormItem[][]): NormItem[][] {
+  if (lines.length <= 1) return lines
+  const band = (line: NormItem[]) => {
+    let bottom = Infinity, top = -Infinity
+    for (const i of line) {
+      const h = i.h > 0 ? i.h : i.fontSize
+      if (i.y < bottom) bottom = i.y
+      if (i.y + h > top) top = i.y + h
+    }
+    return { bottom, top, height: top - bottom }
+  }
+  const isFrag = (line: NormItem[]) =>
+    line.length <= 3 && line.every(i => i.text.trim().length <= 8)
+
+  const result: NormItem[][] = [lines[0]]
+  for (let i = 1; i < lines.length; i++) {
+    const prev = result[result.length - 1]
+    const curr = lines[i]
+    const a = band(prev)
+    const b = band(curr)
+    const overlap = Math.min(a.top, b.top) - Math.max(a.bottom, b.bottom)
+    const prevIsFrag = isFrag(prev) && a.height <= b.height * 0.8 && overlap >= a.height * 0.5
+    const currIsFrag = isFrag(curr) && b.height <= a.height * 0.8 && overlap >= b.height * 0.5
+    if (prevIsFrag || currIsFrag) {
+      result[result.length - 1] = [...prev, ...curr]
+    } else {
+      result.push(curr)
+    }
+  }
+  return result
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1317,12 +1707,8 @@ function mergeLineSimple(items: NormItem[]): string {
       result += sorted[i].text
       continue
     }
-    // 매우 작은 갭 — 공백 없이 붙임
-    if (gap < avgFs * 0.15) { /* no space */ }
-    // 한글 관련 작은 갭 — PDF 문자 개별 배치 잔재
-    else if (gap < avgFs * 0.35 && (/[가-힣]$/.test(result) || /^[가-힣]/.test(sorted[i].text))) { /* no space */ }
-    // 3px+ 갭 = 공백 (단어 구분)
-    else if (gap > 3) result += " "
+    // 폰트 크기 비례 공백 임계값 — 고정 px 기준은 Type3/대형 폰트에서 공백 소실·과다 유발
+    if (gap > spaceGapThreshold(avgFs)) result += " "
     result += sorted[i].text
   }
   return result
@@ -1331,9 +1717,24 @@ function mergeLineSimple(items: NormItem[]): string {
 
 
 
+/** 블록 트리의 텍스트에서 비표시 제어문자를 in-place로 제거한다. */
+function sanitizeBlockControlChars(blocks: IRBlock[]): void {
+  for (const b of blocks) {
+    if (b.text) b.text = stripControlChars(b.text)
+    if (b.table) {
+      for (const row of b.table.cells) {
+        for (const cell of row) {
+          if (cell.text) cell.text = stripControlChars(cell.text)
+        }
+      }
+    }
+    if (b.children) sanitizeBlockControlChars(b.children)
+  }
+}
+
 export function cleanPdfText(text: string): string {
   return mergeKoreanLines(
-    text
+    stripControlChars(text)
       // 문서 시작 단독 페이지 번호
       .replace(/^\d{1,4}\n/, "")
       // "- 2 -" 스타일 페이지 번호 (독립 라인 및 목록 항목 형태 포함)
@@ -1355,6 +1756,10 @@ export function cleanPdfText(text: string): string {
     })
     // 마커 뒤 2글자 균등배분 합침 ("□ 일 시" → "□ 일시", "□ 장 소" → "□ 장소")
     .replace(/([□■◆○●▶ㅇ])\s+([가-힣])\s+([가-힣])/g, "$1 $2$3")
+    // 취소선 복원: builder escapeGfm이 ~를 \~로 이스케이프 — 쌍(~~)만 되살림
+    .replace(/\\~\\~/g, "~~")
+    // 인접 취소선 run이 붙어 생긴 빈 마크(~~~~) 정리
+    .replace(/~~~~/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
 }
@@ -1367,6 +1772,209 @@ function startsWithMarker(line: string): boolean {
 
 function isStandaloneHeader(line: string): boolean {
   return /^제\d+[조항호장절](\([^)]*\))?(\s+\S+){0,7}$/.test(line.trim())
+}
+
+// ═══════════════════════════════════════════════════════
+// 표 캡션 감지 (ODL CaptionProcessor의 패턴 기반 서브셋)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * 캡션 라벨 패턴 — '표 1.', '<표 2>', '[표 3-1]', '그림 4', 'Table 1', 'Figure 2' 등.
+ * 숫자(또는 원문자)가 반드시 있어야 함 — '표지', '그림자' 같은 일반 단어 오탐 방지.
+ */
+const TABLE_CAPTION_RE = /^[<\[(【〈]?\s*(표|그림|도표|Table|Figure|Fig\.?)\s*[\d①-⑮][\d.\-]*\s*[\])】〉>]?[.:]?\s*/i
+
+/** 캡션 후보 최대 길이 */
+const CAPTION_MAX_LENGTH = 100
+/** 캡션-표 수직 거리 한계 (pt) */
+const CAPTION_MAX_GAP = 30
+
+/**
+ * 표 블록 직전/직후의 짧은 캡션 패턴 텍스트를 IRTable.caption으로 연결하고
+ * 해당 paragraph 블록은 제거한다 (중복 출력 방지 — builder가 표 위에 캡션 출력).
+ */
+export function detectTableCaptions(blocks: IRBlock[]): void {
+  const isCaptionCandidate = (b: IRBlock | undefined, table: IRBlock): b is IRBlock => {
+    if (!b || b.type !== "paragraph" || !b.text) return false
+    if (b.pageNumber !== table.pageNumber) return false
+    const text = b.text.trim()
+    if (!text || text.length > CAPTION_MAX_LENGTH || text.includes("\n")) return false
+    if (!TABLE_CAPTION_RE.test(text)) return false
+    // 수직 근접 + 수평 겹침 검증 (bbox 있을 때만)
+    if (b.bbox && table.bbox) {
+      const capTop = b.bbox.y + b.bbox.height
+      const capBottom = b.bbox.y
+      const tblTop = table.bbox.y + table.bbox.height
+      const tblBottom = table.bbox.y
+      const gap = capBottom >= tblTop ? capBottom - tblTop : tblBottom - capTop
+      if (gap > CAPTION_MAX_GAP) return false
+      const overlap = Math.min(b.bbox.x + b.bbox.width, table.bbox.x + table.bbox.width) -
+        Math.max(b.bbox.x, table.bbox.x)
+      if (overlap < Math.min(b.bbox.width, table.bbox.width) * 0.3) return false
+    }
+    return true
+  }
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]
+    if (block.type !== "table" || !block.table || block.table.caption) continue
+
+    // 직전 블록 우선 (한국 공문서는 표 위 캡션이 일반적), 다음 블록 차선
+    if (isCaptionCandidate(blocks[i - 1], block)) {
+      block.table.caption = blocks[i - 1].text!.trim()
+      blocks.splice(i - 1, 1)
+      i--
+    } else if (isCaptionCandidate(blocks[i + 1], block)) {
+      block.table.caption = blocks[i + 1].text!.trim()
+      blocks.splice(i + 1, 1)
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// 한국어 리스트 감지 — 공문서 계층 라벨 시퀀스 검증
+// (ODL ListProcessor의 한국어 서브셋 — 가나다 시퀀스, '붙임' 패턴)
+// ═══════════════════════════════════════════════════════
+
+/** 한국 공문서 항목 기호 시퀀스 (가나다순) */
+const KOREAN_LIST_SEQ = "가나다라마바사아자차카타파하"
+
+interface ListLabel {
+  family: "arabicDot" | "korDot" | "arabicParen" | "korParen" | "circled"
+  ord: number
+}
+
+/** 블록 텍스트에서 리스트 라벨 파싱 — 시퀀스 검증 가능한 라벨만 */
+function parseListLabel(text: string): ListLabel | null {
+  let m = text.match(/^(\d{1,2})\.(?!\d)\s+/)
+  if (m) return { family: "arabicDot", ord: parseInt(m[1], 10) }
+  m = text.match(/^([가-하])\.\s+/)
+  if (m) {
+    const idx = KOREAN_LIST_SEQ.indexOf(m[1])
+    if (idx >= 0) return { family: "korDot", ord: idx + 1 }
+  }
+  m = text.match(/^(\d{1,2})\)\s*/)
+  if (m) return { family: "arabicParen", ord: parseInt(m[1], 10) }
+  m = text.match(/^([가-하])\)\s*/)
+  if (m) {
+    const idx = KOREAN_LIST_SEQ.indexOf(m[1])
+    if (idx >= 0) return { family: "korParen", ord: idx + 1 }
+  }
+  m = text.match(/^([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮])\s*/)
+  if (m) return { family: "circled", ord: m[1].charCodeAt(0) - 0x2460 + 1 }
+  return null
+}
+
+/** '붙임' 패턴 (ODL ATTACHMENTS_PATTERN) — 공문서 첨부 표기 */
+const ATTACHMENT_RE = /^붙\s*임\s*(\d+[.:]?)?\s/
+
+/**
+ * 라벨 시퀀스 검증 기반 한국어 리스트 감지.
+ *
+ * 1) paragraph 블록의 선두 라벨(1./가./1)/가)/①)을 파싱
+ * 2) 같은 family의 라벨이 +1씩 증가하는 체인(2개+)만 리스트로 확정
+ *    — "2026. 6. 9." 같은 날짜/단발 번호 오탐 방지
+ * 3) 상위 family 항목 사이에 낀 하위 family 항목은 children으로 중첩 (들여쓰기)
+ * 4) '붙임 1 ...' 패턴은 시퀀스 없이도 리스트 항목으로 인정
+ */
+export function detectKoreanListBlocks(blocks: IRBlock[]): void {
+  // ── 1단계: 라벨 수집 ──
+  interface Labeled {
+    idx: number
+    label: ListLabel
+  }
+  const labeled: Labeled[] = []
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]
+    if ((b.type !== "paragraph" && b.type !== "list") || !b.text) continue
+    const label = parseListLabel(b.text.trim())
+    if (label) labeled.push({ idx: i, label })
+  }
+
+  // ── 2단계: family별 시퀀스 체인 검증 ──
+  // 체인: 같은 family + ord가 +1씩 증가 + 블록 간격 ≤ 20 (사이에 하위 항목/본문 허용)
+  const validated = new Set<number>()
+  const byFamily = new Map<string, Labeled[]>()
+  for (const l of labeled) {
+    const arr = byFamily.get(l.label.family) || []
+    arr.push(l)
+    byFamily.set(l.label.family, arr)
+  }
+  for (const arr of byFamily.values()) {
+    let chain: Labeled[] = []
+    for (const item of arr) {
+      const prev = chain[chain.length - 1]
+      if (prev && item.label.ord === prev.label.ord + 1 && item.idx - prev.idx <= 20) {
+        chain.push(item)
+      } else {
+        if (chain.length >= 2) for (const c of chain) validated.add(c.idx)
+        chain = [item]
+      }
+    }
+    if (chain.length >= 2) for (const c of chain) validated.add(c.idx)
+  }
+
+  // ── 3단계: 변환 + 중첩 ──
+  // familyStack: 현재 리스트 run에서 등장한 family 순서 (얕은 → 깊은)
+  let familyStack: string[] = []
+  let lastTopLevelList: IRBlock | null = null
+  const toRemove = new Set<number>()
+
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]
+
+    // 표/헤딩/구분선은 리스트 run 종료
+    if (b.type === "table" || b.type === "heading" || b.type === "separator") {
+      familyStack = []
+      lastTopLevelList = null
+      continue
+    }
+    if ((b.type !== "paragraph" && b.type !== "list") || !b.text) continue
+
+    const text = b.text.trim()
+
+    // '붙임' 패턴 — 시퀀스 불요
+    if (b.type === "paragraph" && ATTACHMENT_RE.test(text)) {
+      blocks[i] = { ...b, type: "list", listType: "unordered" }
+      continue
+    }
+
+    if (!validated.has(i)) continue
+    const label = parseListLabel(text)!
+
+    // family 깊이 결정 — 처음 보는 family는 스택에 push
+    let depth = familyStack.indexOf(label.family)
+    if (depth < 0) {
+      familyStack.push(label.family)
+      depth = familyStack.length - 1
+    } else {
+      // 상위 family로 복귀하면 더 깊은 family 제거
+      familyStack = familyStack.slice(0, depth + 1)
+    }
+
+    const listType: "ordered" | "unordered" = label.family === "arabicDot" ? "ordered" : "unordered"
+    const listBlock: IRBlock = { ...b, type: "list", listType }
+
+    if (depth === 0) {
+      blocks[i] = listBlock
+      lastTopLevelList = listBlock
+    } else if (lastTopLevelList) {
+      // 하위 항목 → 직전 상위 항목의 children으로 (마크다운 들여쓰기)
+      if (!lastTopLevelList.children) lastTopLevelList.children = []
+      lastTopLevelList.children.push(listBlock)
+      toRemove.add(i)
+    } else {
+      // 상위 항목 없이 시작된 하위 family — 평면 리스트로
+      blocks[i] = listBlock
+      lastTopLevelList = listBlock
+    }
+  }
+
+  // 제거는 뒤에서부터
+  if (toRemove.size > 0) {
+    const sorted = [...toRemove].sort((a, b) => b - a)
+    for (const idx of sorted) blocks.splice(idx, 1)
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1530,20 +2138,23 @@ function detectSpecialKoreanTables(blocks: IRBlock[]): IRBlock[] {
 // ─── 머리글/바닥글 감지 ────────────────────────────
 
 /**
- * 머리글/바닥글 감지 — 2-pass 하이브리드:
- *  1) 텍스트 반복 패턴 (숫자 normalization) — 고정 문구
- *  2) y 위치 클러스터 (±3pt) — 텍스트가 페이지별로 달라도(챕터명 등) 위치가 반복되면 제거
+ * 머리글/바닥글 감지 — 텍스트 반복 패턴 (숫자 normalization).
+ *
+ * v3.0.x: y 위치 클러스터 규칙(같은 y 버킷이 3+페이지 반복이면 텍스트가 달라도 제거)을
+ * 삭제했다. 본문도 페이지마다 같은 y에서 시작/끝나므로 (균일한 상하 여백), 위치 반복만으로는
+ * 머리글/바닥글과 본문 첫/마지막 줄을 구분할 수 없다 — 인사말씀·보고서류에서 본문 문단
+ * 첫 줄과 섹션 제목("붙임 1" 등)이 통째로 제거되는 사고가 corpus에서 다수 확인됨.
+ * 페이지 번호("- 1 -")처럼 가변 숫자가 있는 고정 문구는 # normalization으로 충분히 잡힌다.
  */
-function removeHeaderFooterBlocks(
+export function removeHeaderFooterBlocks(
   blocks: IRBlock[],
   pageHeights: Map<number, number>,
   warnings: ParseWarning[],
 ): number[] {
   const ZONE_RATIO = 0.12   // 상하 12% (10% 초과 여백 대응)
   const MIN_REPEAT = 3       // 최소 3페이지 반복
-  const Y_BUCKET = 5         // y 좌표 클러스터링 버킷 (pt)
 
-  type ZoneEntry = { blockIdx: number; page: number; y: number; text: string }
+  type ZoneEntry = { blockIdx: number; page: number; text: string }
   const topEntries: ZoneEntry[] = []
   const bottomEntries: ZoneEntry[] = []
 
@@ -1555,7 +2166,7 @@ function removeHeaderFooterBlocks(
 
     const blockTop = ph - (b.bbox.y + b.bbox.height)
     const blockBottom = ph - b.bbox.y
-    const entry: ZoneEntry = { blockIdx: bi, page: b.pageNumber, y: b.bbox.y, text: b.text.trim() }
+    const entry: ZoneEntry = { blockIdx: bi, page: b.pageNumber, text: b.text.trim() }
 
     if (blockBottom <= ph * ZONE_RATIO) bottomEntries.push(entry)
     else if (blockTop >= ph * (1 - ZONE_RATIO)) topEntries.push(entry)
@@ -1584,24 +2195,10 @@ function removeHeaderFooterBlocks(
       }
     }
 
-    // (2) y 위치 클러스터 — bucket별 등장 페이지 수
-    const bucketPages = new Map<number, Set<number>>()
-    for (const e of entries) {
-      const bucket = Math.round(e.y / Y_BUCKET)
-      const pages = bucketPages.get(bucket) || new Set<number>()
-      pages.add(e.page)
-      bucketPages.set(bucket, pages)
-    }
-    const repeatedBuckets = new Set<number>()
-    for (const [b, pages] of bucketPages) {
-      if (pages.size >= MIN_REPEAT) repeatedBuckets.add(b)
-    }
-
-    // 제거 대상: 텍스트 반복 OR 위치 반복
+    // 제거 대상: 텍스트 반복 패턴 매칭
     for (const e of entries) {
       const norm = e.text.replace(/\d+/g, "#")
-      const bucket = Math.round(e.y / Y_BUCKET)
-      if (repeatedPatterns.has(norm) || repeatedBuckets.has(bucket)) {
+      if (repeatedPatterns.has(norm)) {
         removeSet.add(e.blockIdx)
       }
     }

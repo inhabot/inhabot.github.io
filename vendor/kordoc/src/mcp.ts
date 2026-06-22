@@ -5,7 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
 import { readFileSync, writeFileSync, realpathSync, openSync, readSync, closeSync, statSync, mkdirSync } from "fs"
 import { resolve, isAbsolute, extname, dirname } from "path"
-import { parse, detectFormat, detectZipFormat, blocksToMarkdown, compare, extractFormFields, fillFormFields, markdownToHwpx, fillHwpx } from "./index.js"
+import { parse, detectFormat, detectZipFormat, blocksToMarkdown, compare, extractFormFields, fillFormFields, markdownToHwpx, fillHwpx, patchHwpx, patchHwp } from "./index.js"
 import { VERSION, toArrayBuffer, sanitizeError, KordocError } from "./utils.js"
 import { extractHwp5MetadataOnly } from "./hwp5/parser.js"
 import { extractHwpxMetadataOnly } from "./hwpx/parser.js"
@@ -515,6 +515,71 @@ server.tool(
       }
       return {
         content: [{ type: "text", text: `[${summary}]\n\n${markdown}` }],
+      }
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `오류: ${sanitizeError(err)}` }],
+        isError: true,
+      }
+    }
+  }
+)
+
+// ─── 도구: patch_document ────────────────────────────
+
+server.tool(
+  "patch_document",
+  "원본 HWPX/HWP의 서식(글꼴·표·도장칸·이미지)을 1바이트도 건드리지 않고, 편집된 마크다운의 바뀐 텍스트만 제자리 치환해 새 문서로 출력합니다. parse_document로 얻은 마크다운을 수정해 넘기세요 — 양식 빈칸 채우기·문구 수정에 적합하며 한컴 한글에서 변조 경고 없이 열립니다. (블록 추가/삭제·표 구조 변경은 미지원, 미적용 항목은 결과에 보고)",
+  {
+    file_path: z.string().min(1).describe("원본 문서의 절대 경로 (HWPX 또는 HWP 5.x)"),
+    edited_markdown: z.string().min(1).describe("parse_document 출력 마크다운을 편집한 전체 마크다운. 바뀐 문단/셀 텍스트만 반영하고 블록 수·순서는 원본과 같게 유지하세요"),
+    output_path: z.string().min(1).describe("출력 파일 저장 절대 경로 (원본과 같은 확장자: .hwpx 또는 .hwp)"),
+  },
+  async ({ file_path, edited_markdown, output_path }) => {
+    try {
+      const { buffer } = readValidatedFile(file_path)
+      const format = detectFormat(buffer)
+      let isHwpx = format === "hwpx"
+      if (isHwpx) {
+        const zipFormat = await detectZipFormat(buffer)
+        isHwpx = zipFormat === "hwpx"
+      }
+      if (!isHwpx && format !== "hwp") {
+        return {
+          content: [{ type: "text", text: `patch_document는 HWPX 또는 HWP 5.x만 지원합니다 (감지된 포맷: ${format}).` }],
+          isError: true,
+        }
+      }
+
+      const original = new Uint8Array(buffer)
+      const result = isHwpx
+        ? await patchHwpx(original, edited_markdown)
+        : await patchHwp(original, edited_markdown)
+
+      if (!result.success || !result.data) {
+        return {
+          content: [{ type: "text", text: `패치 실패: ${result.error ?? "알 수 없는 오류"}` }],
+          isError: true,
+        }
+      }
+
+      const out = resolve(output_path)
+      mkdirSync(dirname(out), { recursive: true })
+      writeFileSync(out, Buffer.from(result.data))
+
+      const v = result.verification?.stats
+      const lossless = v ? (v.modified === 0 && v.added === 0 && v.removed === 0) : undefined
+      const lines = [
+        `✓ ${result.applied}개 변경 적용 (${isHwpx ? "HWPX" : "HWP"}, 원본 서식 보존) → ${out}`,
+        lossless === true ? "검증: 편집 내용과 재파싱 결과 완전 일치" :
+          lossless === false ? `검증 잔차: 수정 ${v!.modified} · 추가 ${v!.added} · 삭제 ${v!.removed} (반영 안 된 편집 있음)` : null,
+        result.skipped.length > 0
+          ? `미적용 ${result.skipped.length}건:\n` + result.skipped.map(s => `  - ${s.reason}`).join("\n")
+          : null,
+      ].filter(Boolean)
+
+      return {
+        content: [{ type: "text", text: lines.join("\n") }],
       }
     } catch (err) {
       return {

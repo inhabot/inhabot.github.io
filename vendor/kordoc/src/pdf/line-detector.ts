@@ -234,6 +234,75 @@ export function extractLines(
   return { horizontals, verticals }
 }
 
+// ─── 이미지 영역 추출 (정보손실 가시화용) ─────────────
+
+/** 페이지 내 이미지 XObject가 그려진 영역 (PDF 사용자 공간 좌표) */
+export interface ImageRegion {
+  x1: number; y1: number; x2: number; y2: number
+}
+
+/** 2D 어파인 행렬 곱 — t 적용 후 m 적용 (pdfjs Util.transform과 동일 순서) */
+function multiplyTransform(m: number[], t: number[]): number[] {
+  return [
+    m[0] * t[0] + m[2] * t[1],
+    m[1] * t[0] + m[3] * t[1],
+    m[0] * t[2] + m[2] * t[3],
+    m[1] * t[2] + m[3] * t[3],
+    m[0] * t[4] + m[2] * t[5] + m[4],
+    m[1] * t[4] + m[3] * t[5] + m[5],
+  ]
+}
+
+/**
+ * pdfjs operatorList에서 이미지 paint 영역을 추출.
+ * save/restore/transform으로 CTM을 추적하고, 이미지는 단위 정사각형(0,0)-(1,1)에
+ * CTM을 적용한 bbox로 계산한다 (PDF 이미지 렌더링 규약).
+ */
+export function extractImageRegions(
+  fnArray: Uint32Array | number[],
+  argsArray: unknown[][],
+): ImageRegion[] {
+  const regions: ImageRegion[] = []
+  let ctm = [1, 0, 0, 1, 0, 0]
+  const stack: number[][] = []
+
+  for (let i = 0; i < fnArray.length; i++) {
+    const op = fnArray[i]
+    switch (op) {
+      case OPS.save:
+        stack.push(ctm)
+        break
+      case OPS.restore:
+        ctm = stack.pop() || [1, 0, 0, 1, 0, 0]
+        break
+      case OPS.transform: {
+        const t = argsArray[i] as number[]
+        if (Array.isArray(t) && t.length >= 6) ctm = multiplyTransform(ctm, t)
+        break
+      }
+      case OPS.paintImageXObject:
+      case OPS.paintInlineImageXObject:
+      case OPS.paintImageMaskXObject:
+      case OPS.paintImageXObjectRepeat: {
+        // 단위 정사각형 4꼭짓점에 CTM 적용
+        const corners = [[0, 0], [1, 0], [0, 1], [1, 1]]
+        let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity
+        for (const [u, v] of corners) {
+          const x = ctm[0] * u + ctm[2] * v + ctm[4]
+          const y = ctm[1] * u + ctm[3] * v + ctm[5]
+          if (x < x1) x1 = x
+          if (x > x2) x2 = x
+          if (y < y1) y1 = y
+          if (y > y2) y2 = y
+        }
+        if (x2 - x1 > 0 && y2 - y1 > 0) regions.push({ x1, y1, x2, y2 })
+        break
+      }
+    }
+  }
+  return regions
+}
+
 function classifyAndAdd(
   seg: { x1: number; y1: number; x2: number; y2: number },
   lineWidth: number,
@@ -789,6 +858,20 @@ export interface TextItem {
   text: string
   x: number; y: number; w: number; h: number
   fontSize: number; fontName: string
+  /** pdfjs 공백 아이템이 이 아이템 직전에 있었음 — 단어 경계 힌트 (parser.ts NormItem에서 전파) */
+  hasSpaceBefore?: boolean
+}
+
+/**
+ * 공백 삽입 갭 임계값 — 폰트 크기 비례.
+ * 절대 px(3px) 기준은 Type3 폰트(예: fontSize 10.5에서 단어 갭 2.7px)에서 공백이
+ * 소실되고, 작은 폰트에서는 과다 삽입됨. fontSize×0.17 비례 기준으로 교체
+ * (veraPDF wcag-algs TEXT_LINE_SPACE_RATIO 아이디어의 클린룸 재구현 — 코드 비복사).
+ */
+export const SPACE_GAP_RATIO = 0.17
+
+export function spaceGapThreshold(fontSize: number): number {
+  return Math.max(fontSize * SPACE_GAP_RATIO, 1)
 }
 
 /**
@@ -883,14 +966,13 @@ export function cellTextToString(items: TextItem[]): string {
 
       const gap = s[j].x - (s[j - 1].x + s[j - 1].w)
       const avgFs = (s[j].fontSize + s[j - 1].fontSize) / 2
-      const prevIsKorean = /[가-힣]$/.test(result)
-      const currIsKorean = /^[가-힣]/.test(s[j].text)
-      if (gap < avgFs * 0.15) {
-        result += s[j].text
-      } else if (gap < avgFs * 0.35 && (prevIsKorean || currIsKorean)) {
-        result += s[j].text
-      } else {
+      // pdfjs 공백 아이템 힌트 — 단어 경계 확정 (Type3 폰트 글자 분리 셀 텍스트 복원)
+      if (s[j].hasSpaceBefore && gap >= avgFs * 0.05) {
         result += " " + s[j].text
+      } else if (gap > spaceGapThreshold(avgFs)) {
+        result += " " + s[j].text
+      } else {
+        result += s[j].text
       }
     }
     return result
@@ -912,6 +994,15 @@ function detectEvenSpacedItems(items: TextItem[]): boolean[] {
   for (let i = 0; i < items.length; i++) {
     // 균등배분 = 한글 1자 개별 배치. 2자 단어는 균등배분이 아니라 실제 단어.
     const isShortKorean = /^[가-힣]{1}$/.test(items[i].text) || /^[\d]{1}$/.test(items[i].text)
+
+    // 명시적 공백 글리프가 직전에 있으면 단어 경계 — 균등배분 run 분리.
+    // (Type3 폰트가 글자를 1자씩 배치하면서 공백 글리프를 따로 두는 경우,
+    //  진짜 단어 경계를 균등배분으로 오판해 문장 전체가 붙는 것을 방지)
+    if (isShortKorean && runStart >= 0 && items[i].hasSpaceBefore) {
+      if (i - runStart >= 3) markEvenRun(items, result, runStart, i)
+      runStart = i
+      continue
+    }
 
     // 이전 아이템과의 갭이 fontSize*3+ 이면 run 끊기 (다른 영역)
     if (isShortKorean && runStart >= 0 && i > 0) {
@@ -961,6 +1052,169 @@ function markEvenRun(items: TextItem[], result: boolean[], start: number, end: n
 }
 
 export { detectEvenSpacedItems }
+
+// ─── 과소분할 표 재구성 (ODL TableStructureNormalizer 포팅) ──
+//
+// 행 구분선이 생략된 표(헤더 아래만 선이 있는 한국 공문서 표)는 본문 전체가
+// 1~2행으로 합쳐진다. 셀 안에 텍스트 줄이 8개+ 뭉친 경우 줄의 centerY로
+// row band를 재유도해 행을 복원한다. 품질이 개선될 때만 교체.
+//
+// Original work: Copyright 2025-2026 Hancom Inc. (Apache-2.0)
+// https://github.com/opendataloader-project/opendataloader-pdf
+
+const MAX_UNDERSEGMENTED_ROWS = 2
+const MIN_UNDERSEGMENTED_COLUMNS = 3
+const MIN_UNDERSEGMENTED_TEXT_LINES = 8
+const MIN_ROW_BAND_MISMATCH = 2
+const MIN_ROW_BAND_EPSILON = 3.0
+const ROW_BAND_EPSILON_RATIO = 0.6
+
+interface RowBand {
+  centerY: number
+  avgHeight: number
+  topY: number
+  bottomY: number
+  lineCount: number
+  /** 컬럼별 아이템 */
+  itemsByCol: TextItem[][]
+}
+
+/** 아이템 중심 Y (h가 0이면 fontSize 대용) */
+function itemCenterY(item: TextItem): number {
+  return item.y + (item.h > 0 ? item.h : item.fontSize) / 2
+}
+
+function itemHeight(item: TextItem): number {
+  return item.h > 0 ? item.h : item.fontSize
+}
+
+/** 아이템을 colXs 경계 기준 컬럼에 배정 (중심 X 기준, 범위 밖이면 최근접) */
+function findColumnIndex(item: TextItem, colXs: number[]): number {
+  const cx = item.x + item.w / 2
+  for (let c = 0; c < colXs.length - 1; c++) {
+    if (cx >= colXs[c] && cx <= colXs[c + 1]) return c
+  }
+  let best = 0
+  let bestDist = Infinity
+  for (let c = 0; c < colXs.length - 1; c++) {
+    const center = (colXs[c] + colXs[c + 1]) / 2
+    const d = Math.abs(cx - center)
+    if (d < bestDist) { bestDist = d; best = c }
+  }
+  return best
+}
+
+/** 아이템들을 Y 기준 시각적 줄로 그룹핑 */
+function groupItemsToVisualLines(items: TextItem[]): TextItem[][] {
+  if (items.length === 0) return []
+  const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x)
+  const lines: TextItem[][] = []
+  let cur: TextItem[] = [sorted[0]]
+  let curY = sorted[0].y
+  for (let i = 1; i < sorted.length; i++) {
+    const tol = Math.max(3, Math.min(sorted[i].fontSize, cur[0].fontSize) * 0.6)
+    if (Math.abs(sorted[i].y - curY) <= tol) {
+      cur.push(sorted[i])
+    } else {
+      lines.push(cur)
+      cur = [sorted[i]]
+      curY = sorted[i].y
+    }
+  }
+  lines.push(cur)
+  return lines
+}
+
+/**
+ * 과소분할 표 재구성. 조건(행≤2 + 열≥3 + dense 컬럼 2개+)을 만족하고
+ * row band 재유도가 품질을 개선할 때만 새 셀 행렬을 반환, 아니면 null.
+ *
+ * @param originalCells 기존 셀 행렬 (품질 비교용)
+ * @param colXs 그리드 열 경계
+ * @param items 표 영역 내 텍스트 아이템
+ */
+export function normalizeUndersegmentedTable(
+  originalCells: { text: string }[][],
+  colXs: number[],
+  items: TextItem[],
+): string[][] | null {
+  const numRows = originalCells.length
+  const numCols = colXs.length - 1
+  if (numRows > MAX_UNDERSEGMENTED_ROWS || numCols < MIN_UNDERSEGMENTED_COLUMNS) return null
+  if (items.length === 0) return null
+
+  // 1) 컬럼별 의미있는 줄 수 — dense 컬럼(8줄+) 2개 이상이어야 과소분할로 판정
+  const itemsByCol: TextItem[][] = Array.from({ length: numCols }, () => [])
+  for (const item of items) {
+    if (!item.text.trim()) continue
+    itemsByCol[findColumnIndex(item, colXs)].push(item)
+  }
+  let denseColumns = 0
+  for (const colItems of itemsByCol) {
+    if (groupItemsToVisualLines(colItems).length >= MIN_UNDERSEGMENTED_TEXT_LINES) denseColumns++
+  }
+  if (denseColumns < 2) return null
+
+  // 2) 전체 줄에서 row band 유도 — centerY 근접(epsilon) 또는 수직 겹침이면 같은 band
+  const allLines = groupItemsToVisualLines(items.filter(i => i.text.trim()))
+  const bands: RowBand[] = []
+  for (const line of allLines) {
+    let cy = 0, h = 0
+    for (const it of line) { cy += itemCenterY(it); h += itemHeight(it) }
+    cy /= line.length
+    h /= line.length
+    const top = cy + h / 2
+    const bottom = cy - h / 2
+
+    let matched: RowBand | null = null
+    for (const band of bands) {
+      const epsilon = Math.max(MIN_ROW_BAND_EPSILON, Math.min(band.avgHeight, h) * ROW_BAND_EPSILON_RATIO)
+      if (Math.abs(band.centerY - cy) <= epsilon ||
+          (bottom <= band.topY && top >= band.bottomY)) {
+        matched = band
+        break
+      }
+    }
+    if (!matched) {
+      matched = { centerY: 0, avgHeight: 0, topY: -Infinity, bottomY: Infinity, lineCount: 0, itemsByCol: Array.from({ length: numCols }, () => []) }
+      bands.push(matched)
+    }
+    matched.centerY = (matched.centerY * matched.lineCount + cy) / (matched.lineCount + 1)
+    matched.avgHeight = (matched.avgHeight * matched.lineCount + h) / (matched.lineCount + 1)
+    matched.topY = Math.max(matched.topY, top)
+    matched.bottomY = Math.min(matched.bottomY, bottom)
+    matched.lineCount++
+    for (const it of line) {
+      matched.itemsByCol[findColumnIndex(it, colXs)].push(it)
+    }
+  }
+
+  // 3) band 수가 기존 행 수 + 2 이상이어야 재구축 의미 있음
+  if (bands.length < numRows + MIN_ROW_BAND_MISMATCH) return null
+
+  bands.sort((a, b) => b.centerY - a.centerY)
+
+  // 4) 셀 행렬 재구축
+  const rebuilt: string[][] = bands.map(band =>
+    band.itemsByCol.map(colItems => colItems.length > 0 ? cellTextToString(colItems) : ""),
+  )
+
+  // 5) 품질 검증: 비어있지 않은 행 수가 늘고, 비어있지 않은 열 수가 줄지 않아야 교체
+  const countNonEmptyRows = (cells: { text: string }[][] | string[][]) =>
+    cells.filter(row => row.some(c => (typeof c === "string" ? c : c.text).trim() !== "")).length
+  const countNonEmptyCols = (cells: { text: string }[][] | string[][], cols: number) => {
+    let n = 0
+    for (let c = 0; c < cols; c++) {
+      if (cells.some(row => row[c] != null && (typeof row[c] === "string" ? row[c] as string : (row[c] as { text: string }).text).trim() !== "")) n++
+    }
+    return n
+  }
+
+  if (countNonEmptyRows(rebuilt) <= countNonEmptyRows(originalCells)) return null
+  if (countNonEmptyCols(rebuilt, numCols) < countNonEmptyCols(originalCells, numCols)) return null
+
+  return rebuilt
+}
 
 /**
  * 셀 내 텍스트 아이템을 읽기 순서로 정렬 후 합치기 — 줄바꿈 병합 전용.
