@@ -1,4 +1,4 @@
-import { generateHwpxFromMarkdown, parseDocument } from "./browser-kordoc.js";
+import { generateHwpxFromMarkdown, parseDocument, parsePdfToMarkdown } from "./browser-kordoc.js";
 
 self.onmessage = async (event) => {
   const { action, id, payload } = event.data;
@@ -10,6 +10,9 @@ self.onmessage = async (event) => {
         break;
       case "markdown-to-hwpx":
         await handleGenerate(id, payload);
+        break;
+      case "pdf-to-markdown":
+        await handlePdf(id, payload);
         break;
       default:
         throw new Error(`지원하지 않는 작업입니다: ${action}`);
@@ -44,6 +47,16 @@ async function handleParse(id, payload) {
     id,
     result,
   });
+}
+
+async function handlePdf(id, payload) {
+  const result = await parsePdfToMarkdown(payload.buffer, {
+    onProgress(current, total) {
+      self.postMessage({ type: "progress", id, current, total });
+    },
+  });
+
+  self.postMessage({ type: "result", id, result });
 }
 
 async function handleGenerate(id, payload) {

@@ -1,9 +1,12 @@
 import JSZip from "jszip";
 import { KORDOC_VERSION } from "./browser-kordoc.js";
+import { setupPdfModes } from "./pdf-modes.js";
 
 const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
 const TAB_PARSE = "parse";
 const TAB_GENERATE = "generate";
+const TAB_MARKDOWN_PDF = "markdown-pdf";
+const TAB_PDF_MARKDOWN = "pdf-markdown";
 const DEFAULT_HWPX_OPTIONS = Object.freeze({});
 const TAB_COPY = {
   [TAB_PARSE]: {
@@ -13,6 +16,12 @@ const TAB_COPY = {
   [TAB_GENERATE]: {
     description: "Markdown(.md) 파일을 업로드해주세요. 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.",
     queueHint: "Markdown(.md) 파일을 업로드해주세요. 직접 붙여넣은 텍스트도 바로 HWPX로 저장할 수 있습니다.",
+  },
+  [TAB_MARKDOWN_PDF]: {
+    description: "Markdown(.md) 파일을 업로드해주세요. 변환 후 인쇄 창에서 PDF로 저장할 수 있습니다.",
+  },
+  [TAB_PDF_MARKDOWN]: {
+    description: "PDF(.pdf) 파일을 업로드해주세요. 텍스트와 표를 Markdown으로 추출합니다.",
   },
 };
 const state = {
@@ -730,4 +739,5 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+setupPdfModes({ runWorkerJob, downloadBlob, formatSize, sanitizeFilename, stripExtension, escapeHtml, timestamp });
 render();

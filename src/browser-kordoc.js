@@ -4,6 +4,7 @@ import { parseHwp5Document } from "../vendor/kordoc/src/hwp5/parser.ts";
 import { parseHwpmlDocument } from "../vendor/kordoc/src/hwpml/parser.ts";
 import { markdownToHwpx } from "../vendor/kordoc/src/hwpx/generator.ts";
 import { parseHwpxDocument } from "../vendor/kordoc/src/hwpx/parser.ts";
+import { parsePdfDocument } from "../vendor/kordoc/src/pdf/parser.ts";
 import { VERSION as KORDOC_VERSION, classifyError } from "../vendor/kordoc/src/utils.ts";
 
 export { KORDOC_VERSION };
@@ -104,6 +105,27 @@ export async function generateHwpxFromMarkdown(markdown, options) {
       error: error instanceof Error ? error.message : "HWPX 생성 실패",
       code: classifyError(error),
     };
+  }
+}
+
+export async function parsePdfToMarkdown(buffer, options) {
+  if (!buffer || buffer.byteLength < 4 || detectFormat(buffer) !== "pdf") {
+    return {
+      success: false,
+      fileType: "pdf",
+      error: "올바른 PDF 파일을 선택해주세요.",
+      code: "UNSUPPORTED_FORMAT",
+    };
+  }
+
+  try {
+    const result = await parsePdfDocument(buffer, options);
+    return {
+      ...toSuccess("pdf", result),
+      isImageBased: result.isImageBased,
+    };
+  } catch (error) {
+    return toFailure("pdf", error, "PDF 파싱 실패");
   }
 }
 

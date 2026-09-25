@@ -62,6 +62,24 @@ body[data-mode="generate"] {
   --bg-end: #f4ece2;
 }
 
+body[data-mode="markdown-pdf"] {
+  --accent: #315c9a;
+  --accent-strong: #244875;
+  --bg-orb-left: rgba(49, 92, 154, 0.17);
+  --bg-orb-right: rgba(103, 156, 196, 0.13);
+  --bg-start: #f6f9fb;
+  --bg-end: #eaf0f5;
+}
+
+body[data-mode="pdf-markdown"] {
+  --accent: #586249;
+  --accent-strong: #3f4935;
+  --bg-orb-left: rgba(88, 98, 73, 0.17);
+  --bg-orb-right: rgba(187, 151, 85, 0.12);
+  --bg-start: #faf9f2;
+  --bg-end: #f0eee4;
+}
+
 body::before {
   content: "";
   position: fixed;
@@ -192,6 +210,10 @@ pre {
   line-height: 1.7;
 }
 
+.site-footer p + p {
+  margin-top: 6px;
+}
+
 .site-footer a {
   color: var(--accent-strong);
   font-weight: 600;
@@ -245,7 +267,7 @@ pre {
 
 .tablist {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -654,9 +676,12 @@ body[data-mode="generate"] .row-action {
     grid-template-columns: 1fr;
   }
 
-  .tablist,
   .compose-grid {
     grid-template-columns: 1fr;
+  }
+
+  .tablist {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .shell {

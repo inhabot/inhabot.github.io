@@ -19,6 +19,13 @@ const aliases = {
 const aliasPlugin = {
   name: "browser-builtins",
   setup(pluginBuild) {
+    // Formula OCR needs Node-only model downloads; the PDF tab only uses text extraction.
+    pluginBuild.onResolve({ filter: /^\.\/formula\/index\.js$/ }, (args) => {
+      if (args.importer.endsWith("/pdf/parser.ts")) {
+        return { path: path.resolve("src/shims/pdf-formula.js") };
+      }
+      return undefined;
+    });
     for (const [specifier, replacement] of Object.entries(aliases)) {
       const filter = new RegExp(`^${specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
       pluginBuild.onResolve({ filter }, () => ({ path: replacement }));
