@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getPublicScenarios } from "../lib/scenarios.mjs";
@@ -13,6 +13,7 @@ if (requireApiBase && !apiBase) {
 }
 
 await mkdir(publicDir, { recursive: true });
+await cp(resolve(root, "edu"), resolve(publicDir, "edu"), { recursive: true });
 await writeFile(
   resolve(publicDir, "scenarios.json"),
   `${JSON.stringify({ scenarios: getPublicScenarios() }, null, 2)}\n`,

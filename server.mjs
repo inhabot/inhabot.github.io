@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { extname, join, normalize, resolve } from "node:path";
+import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildDemoResponse } from "./lib/demo.mjs";
 import { normalizeMissionStates } from "./lib/mission-policy.mjs";
@@ -205,15 +205,21 @@ async function handleChat(req, res) {
 }
 
 async function serveStatic(req, res) {
-  const requestPath =
-    req.url === "/" ? "/index.html" : new URL(req.url, "http://local").pathname;
+  const requestedUrl = new URL(req.url, "http://local");
+  if (requestedUrl.pathname === "/edu") {
+    res.writeHead(302, { Location: `/edu/${requestedUrl.search}` });
+    return res.end();
+  }
+  const isEdu = requestedUrl.pathname.startsWith("/edu/");
+  const baseDir = isEdu ? resolve(__dirname, "edu") : publicDir;
+  const requestPath = isEdu ? requestedUrl.pathname.slice(4) : requestedUrl.pathname;
   const normalizedPath = normalize(decodeURIComponent(requestPath)).replace(
     /^(\.\.[/\\])+/,
     ""
   );
-  const filePath = resolve(publicDir, `.${normalizedPath}`);
+  const filePath = resolve(baseDir, `.${normalizedPath}`);
 
-  if (!filePath.startsWith(publicDir)) {
+  if (filePath !== baseDir && !filePath.startsWith(`${baseDir}${sep}`)) {
     res.statusCode = 403;
     return res.end("Forbidden");
   }

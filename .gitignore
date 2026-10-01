@@ -9,3 +9,4 @@ node_modules/
 logs/
 *.map
 !package-lock.json
+/public/edu/
