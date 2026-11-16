@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f0e3">
+<meta name="description" content="교실을 걸어 다니며 수험생의 행동을 관찰하는 1인칭 3D 시험감독 게임.">
+<title>펜 내려! · 1인칭 시험감독관</title>
+<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="panels.css">
+</head>
+<body>
+<header class="top"><div class="topinner">
+ <div class="brand"><span class="logo" data-i="badge"></span><strong>펜 내려<span>!</span></strong><span class="brandline"></span><small>시험감독관</small></div>
+ <nav aria-label="게임 메뉴"><button class="nav" id="help"><i data-i="book"></i><span>감독 수첩</span></button><button class="nav" id="history"><i data-i="history"></i><span>내 기록</span></button><button id="audio" class="square" aria-label="효과음 끄기"></button></nav>
+</div></header>
+<main class="wrap">
+<div class="hero">
+ <section id="arena" class="arena" aria-label="1인칭 3D 시험실">
+  <canvas id="room" tabindex="0" aria-label="3D 교실. WASD 또는 방향키로 이동하고 화면을 끌어 시선을 돌리세요."></canvas>
+  <div class="preview-note"><span class="pulse"></span><span id="preview-room">제1시험실</span></div>
+  <div class="preview-view"><i data-i="eye"></i> 감독관 시점</div>
+  <div class="gamehud live-only">
+   <div class="hstage"><span class="hud-kicker">STAGE <b id="hud-stage">01</b></span><strong id="hud-name">첫 순찰</strong></div>
+   <div class="hcounters"><div class="hcount"><i data-i="person"></i><span id="hud-count">0 / 2</span><small>검거</small></div><div class="htime"><i data-i="clock"></i><span id="hud-time">연습</span></div></div>
+   <button id="zoom" type="button" aria-pressed="false">2× 확대</button>
+   <button id="pause" class="hud-pause" aria-label="일시정지"><i data-i="pause"></i></button>
+  </div>
+  <div id="objective" class="objective live-only" role="status"><i data-i="flag"></i><span id="objective-text"></span></div>
+  <div id="crosshair" class="crosshair live-only" aria-hidden="true"></div>
+  <div id="notice" class="notice" aria-live="polite"></div>
+  <div id="evidence" class="evidence" hidden><canvas id="detail" aria-hidden="true"></canvas><div><small id="evidence-title"></small><b id="evidence-copy"></b></div></div>
+  <div class="live-only move-corner"><div id="joystick" class="joystick" role="group" aria-label="이동 조이스틱">
+    <i class="jmark n"></i><i class="jmark s"></i><i class="jmark w"></i><i class="jmark e"></i><span id="stick"></span></div><small>이동</small></div>
+  <div id="look-guide" class="look-guide live-only"><i data-i="swipe"></i><span>드래그로 둘러보기</span></div>
+  <section id="inspect" class="inspect" aria-label="가까운 수험생 검사" hidden><div class="inspect-header"><span><i data-i="focus"></i><b id="candidate">수험생</b></span><small id="inspect-progress"></small></div><div id="parts"></div></section>
+  <div class="keys live-only"><kbd>WASD</kbd> 이동 <span>·</span> 드래그 시점 <span>·</span> <kbd>1–5</kbd> 항목 검사</div>
+  <div id="replay" hidden><canvas id="film"></canvas><button id="close-film">재생 닫기 ×</button></div>
+ </section>
+ <section class="brief" aria-labelledby="brief-name">
+  <div class="brief-meta"><span class="eyebrow"><i></i> MISSION BRIEF</span><span class="folio" id="folio">01 / 05</span></div>
+  <div class="mission-heading"><span id="stage-label" class="stage-label">STAGE 01</span><h1 id="brief-name">첫 순찰</h1><p id="brief-desc">두 수험생의 행동을 살펴보세요. 가까이 다가가 단서가 보인 항목을 검사하세요.</p></div>
+  <div class="brief-stats"><div><i data-i="people"></i><span>수험생</span><b id="brief-seats">2명</b></div><div><i data-i="clock"></i><span>제한 시간</span><b id="brief-time">90초</b></div></div>
+  <button id="start" class="start"><span id="start-copy">첫 순찰 시작</span><i data-i="arrow"></i></button>
+  <button id="challenge" class="challenge"><i data-i="ticket"></i> 도전 코드로 입장</button>
+ </section>
+</div>
+<section class="chapters" aria-label="단계 선택"><div class="striphead"><h2>순찰 코스</h2><small id="unlocked-label"></small></div><div id="chapter-list" class="chapter-list"></div></section>
+<footer><span class="foot-icon" data-i="badge"></span> 펜 내려! <span class="footer-right">PROCTOR PATROL</span></footer>
+</main>
+<dialog id="codebox"><form id="codeform"><div class="code-head"><h2>도전 코드로 입장</h2><button type="button" id="code-close" aria-label="닫기">×</button></div>
+<label for="code">공유받은 시험 코드</label><input id="code" placeholder="시험 코드 또는 도전 링크" required autocomplete="off" spellcheck="false" maxlength="300">
+<p id="code-error" role="status"></p><button class="start" type="submit">시험장 열기<i data-i="arrow"></i></button></form></dialog>
+<script src="engine.js"></script><script src="art.js"></script><script src="actors.js"></script><script src="environment.js"></script><script src="scene.js"></script><script src="panels.js"></script><script src="app.js"></script>
+</body></html>
