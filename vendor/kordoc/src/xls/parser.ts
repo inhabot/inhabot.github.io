@@ -13,14 +13,13 @@
 
 import type {
   IRBlock,
-  CellContext,
   DocumentMetadata,
   InternalParseResult,
   ParseOptions,
   ParseWarning,
 } from "../types.js"
 import { KordocError } from "../utils.js"
-import { buildTable, blocksToMarkdown } from "../table/builder.js"
+import { blocksToMarkdown } from "../table/builder.js"
 import { parseLenientCfb } from "../hwp5/cfb-lenient.js"
 import {
   readRecords,
@@ -30,6 +29,9 @@ import {
   OP_BOUNDSHEET8,
   OP_FILEPASS,
   OP_CODEPAGE,
+  OP_DATE1904,
+  OP_FORMAT,
+  OP_XF,
   DT_GLOBALS,
   DT_WORKSHEET,
   type BiffRecord,
@@ -37,12 +39,12 @@ import {
 import { decodeSST } from "./sst.js"
 import { extractSheetCells, type RawSheet, type CellValue } from "./cell.js"
 import { decodeUtf16Le } from "./encoding.js"
+import { dateKindOfFmt, dateSerialToIso, type DateKind } from "../xlsx/parser.js"
+import { sheetToBlocks } from "../xlsx/sheet-blocks.js"
 
 // ─── 상수 ─────────────────────────────────────────
 
 const MAX_SHEETS = 100
-const MAX_ROWS = 100_000
-const MAX_COLS = 1_000
 
 // ─── BoundSheet8 ─────────────────────────────────
 
@@ -91,14 +93,44 @@ interface GlobalsResult {
   sst: string[]
   codePage: number
   encrypted: boolean
+  /** XF 인덱스(ixfe) → 날짜 서식 종류 (날짜 아닌 xf는 미포함) */
+  dateXfs: Map<number, DateKind>
+  /** DATE1904 레코드 — 1904 날짜 체계 */
+  date1904: boolean
   /** Globals 서브스트림이 끝난 records 인덱스 */
   endIndex: number
+}
+
+/** Format 레코드(0x041E) 디코딩 — ifmt(2) + XLUnicodeString(cch(2) flags(1) rgb) */
+function decodeFormatRecord(data: Buffer): { ifmt: number; code: string } | null {
+  if (data.length < 5) return null
+  const ifmt = data.readUInt16LE(0)
+  const cch = data.readUInt16LE(2)
+  const flags = data.readUInt8(4)
+  const highByte = (flags & 0x01) !== 0
+  const start = 5
+
+  let code: string
+  if (highByte) {
+    const end = Math.min(start + cch * 2, data.length)
+    code = decodeUtf16Le(data.subarray(start, end))
+  } else {
+    const end = Math.min(start + cch, data.length)
+    const slice = data.subarray(start, end)
+    const padded = Buffer.alloc(slice.length * 2)
+    for (let i = 0; i < slice.length; i++) padded[i * 2] = slice[i]
+    code = decodeUtf16Le(padded)
+  }
+  return { ifmt, code }
 }
 
 function processGlobals(records: BiffRecord[]): GlobalsResult {
   const sheets: BoundSheet[] = []
   let codePage = 1200
   let encrypted = false
+  let date1904 = false
+  const customFormats = new Map<number, string>()
+  const xfFmtIds: number[] = [] // XF 레코드 순서 = ixfe 인덱스
 
   // 첫 BOF는 records[0]이어야 함
   const firstBof = records[0]
@@ -124,33 +156,54 @@ function processGlobals(records: BiffRecord[]): GlobalsResult {
       codePage = r.data.readUInt16LE(0)
     } else if (r.opcode === OP_FILEPASS) {
       encrypted = true
+    } else if (r.opcode === OP_DATE1904 && r.data.length >= 2) {
+      date1904 = r.data.readUInt16LE(0) === 1
+    } else if (r.opcode === OP_FORMAT) {
+      const f = decodeFormatRecord(r.data)
+      if (f) customFormats.set(f.ifmt, f.code)
+    } else if (r.opcode === OP_XF && r.data.length >= 4) {
+      // XF 구조: ifnt(2) ifmt(2) ... — ifmt만 필요
+      xfFmtIds.push(r.data.readUInt16LE(2))
     }
     i++
+  }
+
+  // XF 인덱스별 날짜 서식 판정 (내장 + 커스텀 Format)
+  const dateXfs = new Map<number, DateKind>()
+  for (let k = 0; k < xfFmtIds.length; k++) {
+    const kind = dateKindOfFmt(xfFmtIds[k], customFormats)
+    if (kind) dateXfs.set(k, kind)
   }
 
   // SST는 Globals 내부 어딘가 — 전체 records 검색하되 첫 EOF 이전만
   const globalsRecords = records.slice(0, i)
   const sst = decodeSST(globalsRecords)
 
-  return { sheets, sst, codePage, encrypted, endIndex: i }
+  return { sheets, sst, codePage, encrypted, dateXfs, date1904, endIndex: i }
 }
 
 // ─── 시트 BOF 인덱스 찾기 ─────────────────────────
 
-function findSheetBofIndex(records: BiffRecord[], lbPlyPos: number): number {
+export function findSheetBofIndex(records: BiffRecord[], lbPlyPos: number): number {
   // 정확한 매칭 우선
   const exact = records.findIndex(
     r => r.opcode === OP_BOF && r.offset === lbPlyPos,
   )
   if (exact >= 0) return exact
 
-  // 못 찾으면 가장 가까운 BOF (관용)
-  const bofIndices = records
-    .map((r, idx) => (r.opcode === OP_BOF ? idx : -1))
-    .filter(idx => idx >= 0)
-  if (bofIndices.length === 0) return -1
-  // 첫 BOF는 Globals → 두 번째부터 시트
-  return bofIndices.length > 1 ? bofIndices[1] : -1
+  // 못 찾으면 최근접(오프셋 ≥ lbPlyPos) BOF — 일괄 두 번째 BOF 폴백은
+  // 미매칭 시트가 전부 시트1 복제로 나오던 결함 (첫 BOF는 Globals라 제외)
+  let best = -1
+  let bestOffset = Infinity
+  for (let idx = 1; idx < records.length; idx++) {
+    const r = records[idx]
+    if (r.opcode !== OP_BOF) continue
+    if (r.offset >= lbPlyPos && r.offset < bestOffset) {
+      best = idx
+      bestOffset = r.offset
+    }
+  }
+  return best
 }
 
 // ─── RawSheet → IRBlock[] ────────────────────────
@@ -167,104 +220,33 @@ function cellValueToText(v: CellValue): string {
   return v
 }
 
-function sheetToBlocks(
+/** BIFF8 열 끝(IV) — 그 밖 좌표는 손상 레코드다. 시트 칸은 표 열 상한(200)이 아니라 칸 예산으로 막는다(xlsx/sheet-blocks) */
+const BIFF8_COLS = 256
+
+/** RawSheet → 행별 칸 글(희소) + 병합 → 공용 시트 표 (xlsx/sheet-blocks). 열은 BIFF8 열 끝 안만 */
+function rawSheetToBlocks(
   sheetName: string,
   sheet: RawSheet,
   sheetIndex: number,
+  warnings: ParseWarning[],
+  keepAnchoredEmptyCols?: boolean,
 ): IRBlock[] {
-  const blocks: IRBlock[] = []
-
-  if (sheetName) {
-    blocks.push({
-      type: "heading",
-      text: sheetName,
-      level: 2,
-      pageNumber: sheetIndex + 1,
-    })
-  }
-
-  if (sheet.cells.length === 0) return blocks
-
-  // 그리드 크기 계산
-  let maxRow = -1
+  const rows = new Map<number, string[]>()
   let maxCol = -1
   for (const c of sheet.cells) {
-    if (c.row > maxRow) maxRow = c.row
+    if (c.col >= BIFF8_COLS) continue
+    let row = rows.get(c.row)
+    if (!row) rows.set(c.row, (row = []))
+    while (row.length <= c.col) row.push("")
+    row[c.col] = cellValueToText(c.value)
     if (c.col > maxCol) maxCol = c.col
   }
-  for (const m of sheet.merges) {
-    if (m.r2 > maxRow) maxRow = m.r2
-    if (m.c2 > maxCol) maxCol = m.c2
-  }
-  if (maxRow < 0 || maxCol < 0) return blocks
-
-  // DOS 방어
-  if (maxRow >= MAX_ROWS || maxCol >= MAX_COLS) {
-    maxRow = Math.min(maxRow, MAX_ROWS - 1)
-    maxCol = Math.min(maxCol, MAX_COLS - 1)
-  }
-
-  // 그리드 채우기
-  const grid: string[][] = Array.from({ length: maxRow + 1 }, () =>
-    Array(maxCol + 1).fill(""),
-  )
-  for (const c of sheet.cells) {
-    if (c.row > maxRow || c.col > maxCol) continue
-    grid[c.row][c.col] = cellValueToText(c.value)
-  }
-
-  // 병합 맵
-  const mergeMap = new Map<string, { colSpan: number; rowSpan: number }>()
-  const mergeSkip = new Set<string>()
-  for (const m of sheet.merges) {
-    const r1 = Math.min(m.r1, maxRow)
-    const c1 = Math.min(m.c1, maxCol)
-    const r2 = Math.min(m.r2, maxRow)
-    const c2 = Math.min(m.c2, maxCol)
-    mergeMap.set(`${r1},${c1}`, { colSpan: c2 - c1 + 1, rowSpan: r2 - r1 + 1 })
-    for (let r = r1; r <= r2; r++) {
-      for (let c = c1; c <= c2; c++) {
-        if (r !== r1 || c !== c1) mergeSkip.add(`${r},${c}`)
-      }
-    }
-  }
-
-  // 유효 행 트리밍
-  let firstRow = -1
-  let lastRow = -1
-  for (let r = 0; r <= maxRow; r++) {
-    if (grid[r].some(v => v !== "")) {
-      if (firstRow === -1) firstRow = r
-      lastRow = r
-    }
-  }
-  if (firstRow === -1) return blocks
-
-  // CellContext[][] 빌드
-  const cellRows: CellContext[][] = []
-  for (let r = firstRow; r <= lastRow; r++) {
-    const row: CellContext[] = []
-    for (let c = 0; c <= maxCol; c++) {
-      const key = `${r},${c}`
-      if (mergeSkip.has(key)) continue
-      const merge = mergeMap.get(key)
-      row.push({
-        text: grid[r][c],
-        colSpan: merge?.colSpan ?? 1,
-        rowSpan: merge?.rowSpan ?? 1,
-      })
-    }
-    cellRows.push(row)
-  }
-
-  if (cellRows.length > 0) {
-    const table = buildTable(cellRows)
-    if (table.rows > 0) {
-      blocks.push({ type: "table", table, pageNumber: sheetIndex + 1 })
-    }
-  }
-
-  return blocks
+  const merges = sheet.merges
+    .filter(m => m.c1 < BIFF8_COLS)
+    .map(m => ({ r1: m.r1, c1: m.c1, r2: m.r2, c2: Math.min(m.c2, BIFF8_COLS - 1) }))
+  // 종전과 같이 병합 끝 열까지 표 폭에 넣는다 (셀 없는 병합 머리 행도 열이 산다)
+  for (const m of merges) if (m.c2 > maxCol) maxCol = m.c2
+  return sheetToBlocks(sheetName, rows, maxCol, merges, sheetIndex, warnings, keepAnchoredEmptyCols)
 }
 
 // ─── 메인 ─────────────────────────────────────────
@@ -308,19 +290,23 @@ export async function parseXlsDocument(
   const globals = processGlobals(records)
   const warnings: ParseWarning[] = []
 
+  // 다른 포맷(HWP5/HWP3/HWPX)과 동일하게 throw → success:false + ENCRYPTED.
+  // 종전엔 success:true + 빈 markdown 을 돌려줘 호출자가 실패를 감지 못했다.
   if (globals.encrypted) {
-    return {
-      markdown: "",
-      blocks: [],
-      metadata: { pageCount: globals.sheets.length },
-      warnings: [
-        {
-          message: "XLS 파일이 암호화되어 있어 파싱할 수 없습니다",
-          code: "PARTIAL_PARSE",
-        },
-      ],
-    }
+    throw new KordocError("XLS 파일이 암호화되어 있어 파싱할 수 없습니다")
   }
+
+  // 날짜 서식 셀 변환 훅 — 숫자 시리얼 → ISO 문자열
+  const convertNum = globals.dateXfs.size > 0
+    ? (n: number, ixfe: number): CellValue => {
+        const kind = globals.dateXfs.get(ixfe)
+        if (kind) {
+          const iso = dateSerialToIso(n, globals.date1904, kind)
+          if (iso) return iso
+        }
+        return n
+      }
+    : undefined
 
   // 5. 페이지/시트 필터
   const totalSheets = Math.min(globals.sheets.length, MAX_SHEETS)
@@ -358,8 +344,8 @@ export async function parseXlsDocument(
     }
 
     try {
-      const { sheet } = extractSheetCells(records, bofIdx, globals.sst)
-      const blocks = sheetToBlocks(meta.name, sheet, i)
+      const { sheet } = extractSheetCells(records, bofIdx, globals.sst, convertNum)
+      const blocks = rawSheetToBlocks(meta.name, sheet, i, warnings, options?.keepTrailingEmptyCols)
       allBlocks.push(...blocks)
     } catch (e) {
       warnings.push({
@@ -376,7 +362,7 @@ export async function parseXlsDocument(
   }
 
   return {
-    markdown: blocksToMarkdown(allBlocks),
+    markdown: blocksToMarkdown(allBlocks, { tableFormat: options?.tableFormat }),
     blocks: allBlocks,
     metadata,
     warnings: warnings.length > 0 ? warnings : undefined,

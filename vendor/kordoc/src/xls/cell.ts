@@ -7,6 +7,8 @@
  * 참조: docs/biff8-spec.md §3.4, §3.5
  */
 
+import { escapeLiteralTags } from "../script-tags.js"
+import { escapeLiteralDollar } from "../table/builder.js"
 import {
   OP_NUMBER,
   OP_RK,
@@ -19,6 +21,8 @@ import {
   OP_BLANK,
   OP_MULBLANK,
   OP_MERGECELLS,
+  OP_SHRFMLA,
+  OP_ARRAY,
   OP_BOF,
   OP_EOF,
   decodeMulRk,
@@ -156,12 +160,14 @@ function decodeFormulaStringRecord(data: Buffer): string {
  * @param records 전체 레코드 배열
  * @param bofIndex 본 시트 BOF의 records 인덱스
  * @param sst 디코딩된 SST
+ * @param convertNum 숫자 셀 변환 훅 (날짜 서식 xf → ISO 문자열) — 미지정 시 숫자 그대로
  * @returns RawSheet — 다음 시트로 넘어갈 수 있는 endIndex 포함
  */
 export function extractSheetCells(
   records: BiffRecord[],
   bofIndex: number,
   sst: string[],
+  convertNum?: (n: number, ixfe: number) => CellValue,
 ): { sheet: RawSheet; endIndex: number } {
   const cells: RawCell[] = []
   const merges: MergeRange[] = []
@@ -183,14 +189,16 @@ export function extractSheetCells(
       case OP_NUMBER: {
         const h = readCellHeader(rec.data)
         if (h && rec.data.length >= 14) {
-          cells.push({ row: h.row, col: h.col, value: rec.data.readDoubleLE(6) })
+          const n = rec.data.readDoubleLE(6)
+          cells.push({ row: h.row, col: h.col, value: convertNum ? convertNum(n, h.ixfe) : n })
         }
         break
       }
       case OP_RK: {
         const h = readCellHeader(rec.data)
         if (h && rec.data.length >= 10) {
-          cells.push({ row: h.row, col: h.col, value: decodeRk(rec.data.readInt32LE(6)) })
+          const n = decodeRk(rec.data.readInt32LE(6))
+          cells.push({ row: h.row, col: h.col, value: convertNum ? convertNum(n, h.ixfe) : n })
         }
         break
       }
@@ -198,7 +206,7 @@ export function extractSheetCells(
         const m = decodeMulRk(rec.data)
         if (m) {
           for (const c of m.cells) {
-            cells.push({ row: m.row, col: c.col, value: c.value })
+            cells.push({ row: m.row, col: c.col, value: convertNum ? convertNum(c.value, c.ixfe) : c.value })
           }
         }
         break
@@ -207,14 +215,14 @@ export function extractSheetCells(
         const h = readCellHeader(rec.data)
         if (h && rec.data.length >= 10) {
           const isst = rec.data.readUInt32LE(6)
-          cells.push({ row: h.row, col: h.col, value: sst[isst] ?? "" })
+          cells.push({ row: h.row, col: h.col, value: escapeLiteralTags(escapeLiteralDollar(sst[isst] ?? "")) }) // 태그 모양 글자 "<sub>" 는 \<sub> (#122)
         }
         break
       }
       case OP_LABEL: {
         const h = readCellHeader(rec.data)
         if (h) {
-          cells.push({ row: h.row, col: h.col, value: decodeLabelString(rec.data) })
+          cells.push({ row: h.row, col: h.col, value: escapeLiteralTags(escapeLiteralDollar(decodeLabelString(rec.data))) })
         }
         break
       }
@@ -223,20 +231,27 @@ export function extractSheetCells(
         if (h && rec.data.length >= 14) {
           const result = decodeFormulaResult(rec.data.subarray(6, 14))
           if (result.kind === "stringRef") {
-            // 직후 String 레코드 찾기
-            const next = records[i + 1]
+            // 직후 String 레코드 찾기 — 공유수식 첫 셀은 ShrFmla/Array가 개재하므로 skip 탐색
+            let j = i + 1
+            while (j < records.length && (records[j].opcode === OP_SHRFMLA || records[j].opcode === OP_ARRAY)) j++
+            const next = records[j]
             if (next && next.opcode === OP_STRING) {
               cells.push({
                 row: h.row,
                 col: h.col,
-                value: decodeFormulaStringRecord(next.data),
+                value: escapeLiteralTags(escapeLiteralDollar(decodeFormulaStringRecord(next.data))),
               })
-              i++ // String 레코드 건너뛰기
+              i = j // String 레코드까지 건너뛰기
             } else {
               cells.push({ row: h.row, col: h.col, value: "" })
             }
           } else {
-            cells.push({ row: h.row, col: h.col, value: result.value })
+            const v = result.value
+            cells.push({
+              row: h.row,
+              col: h.col,
+              value: convertNum && typeof v === "number" ? convertNum(v, h.ixfe) : v,
+            })
           }
         }
         break

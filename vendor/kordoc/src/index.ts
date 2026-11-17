@@ -4,26 +4,42 @@
  * HWP, HWPX, PDF → Markdown 변환 통합 라이브러리
  */
 
+import { stripScriptTags } from "./script-tags.js"
+import { toPlainMarkdown } from "./plain-markdown.js"
+import { parsePageRange } from "./page-range.js"
+import { toHtmlTables } from "./html-tables.js"
+import { htmlCellLinks } from "./html-cell-links.js"
+import { memosMarkdown } from "./memo-notes.js"
 import { readFile } from "fs/promises"
-import { detectFormat, detectOle2Format, detectZipFormat, isHwpxFile, isOldHwpFile, isPdfFile, isZipFile } from "./detect.js"
+import { detectFormat, detectOle2Format, detectZipFormat, isHwpxFile, isOldHwpFile, isPdfFile, isZipFile, unsupportedImageName } from "./detect.js"
 import { parseHwpxDocument } from "./hwpx/parser.js"
 import { parseHwp5Document } from "./hwp5/parser.js"
 import { parseHwp3Document } from "./hwp3/parser.js"
 import { isComFallbackAvailable, extractTextViaCom, comResultToParseResult } from "./hwpx/com-fallback.js"
 import { isDistributionSentinel } from "./hwp5/sentinel.js"
-// pdfjs-dist는 optional peer dep (37MB) — PDF 안 쓰는 사용자를 위해 dynamic import
+// PDF 파서(hayro wasm 엔진)는 PDF 를 열 때만 불러온다 — dynamic import
 // import { parsePdfDocument } from "./pdf/parser.js"
 import { parseXlsxDocument } from "./xlsx/parser.js"
 import { parseXlsDocument } from "./xls/parser.js"
 import { parseDocxDocument } from "./docx/parser.js"
+import { parsePptxDocument } from "./pptx/parser.js"
 import { parseHwpmlDocument } from "./hwpml/parser.js"
-import type { ParseResult, ParseOptions } from "./types.js"
-import { classifyError, toArrayBuffer } from "./utils.js"
+import type { ParseResult, ParseSuccess, ParseOptions, IRBlock, OcrPageLines, ParseWarning, ExtractedImage } from "./types.js"
+import { classifyError, sanitizeError, toArrayBuffer } from "./utils.js"
 import { fillFormFields } from "./form/filler.js"
 import type { FillResult } from "./form/filler.js"
+import type { FillValue, FillInput } from "./form/match.js"
 import { fillHwpx } from "./form/filler-hwpx.js"
 import type { HwpxFillResult } from "./form/filler-hwpx.js"
 import { blocksToMarkdown } from "./table/builder.js"
+import { readImageQrCodes } from "./qr.js"
+import { ocrEmbeddedImages } from "./ocr/embedded-image-ocr.js"
+import { validateOcrOptions } from "./ocr/options.js"
+import { inlineImagesIntoMarkdown, MAX_PIXELS } from "./image/transcode.js"
+import { convertImages } from "./image/format.js"
+import { dropBlankImages } from "./image/blank.js"
+import { classifyTableTree } from "./table/analyze.js"
+import { blocksToPages } from "./page-markdown.js"
 import { markdownToHwpx } from "./hwpx/generator.js"
 
 // ─── 메인 API ────────────────────────────────────────
@@ -46,6 +62,12 @@ export async function parse(input: string | ArrayBuffer | Buffer, options?: Pars
   const opts = typeof input === "string" && !options?.filePath
     ? { ...options, filePath: input }
     : options
+  // htmlTables 는 GFM 표까지 HTML 로 옮기는 후처리라 tableFormat "gfm" 과 정반대 — 한쪽을 조용히 무시하지 않는다
+  if (opts?.htmlTables && opts.tableFormat) {
+    return { success: false, fileType: "unknown", error: "htmlTables 와 tableFormat 은 함께 쓸 수 없습니다" }
+  }
+  const ocrOptionError = validateOcrOptions(opts)
+  if (ocrOptionError) return { success: false, fileType: "unknown", error: ocrOptionError }
   if (typeof input === "string") {
     try {
       const buf = await readFile(input)
@@ -54,7 +76,7 @@ export async function parse(input: string | ArrayBuffer | Buffer, options?: Pars
       const msg = err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT"
         ? `파일을 찾을 수 없습니다: ${input}`
         : `파일 읽기 실패: ${input}`
-      return { success: false, fileType: "unknown", error: msg, code: "PARSE_ERROR" }
+      return { success: false, fileType: "unknown", error: msg, code: classifyError(err) }
     }
   } else if (Buffer.isBuffer(input)) {
     buffer = toArrayBuffer(input)
@@ -67,12 +89,67 @@ export async function parse(input: string | ArrayBuffer | Buffer, options?: Pars
   }
   const format = detectFormat(buffer)
 
+  const result = await dispatch(format, buffer, opts)
+  // images:false: 포맷별 파서가 풀어 둔 이미지 바이트를 결과에서 뗀다 (PDF 는 파서가 PNG 인코딩부터 건너뜀)
+  if (result.success && opts?.images === false) {
+    delete result.images
+    dropImageBytes(result.blocks)
+  }
+  // opt-in 표 분류(#76) — 구조 파싱 뒤 메타만 붙인다. 기본(미지정/false)은 산출 불변
+  if (result.success && opts?.classifyTables) classifyTableTree(result.blocks)
+  // 페이지별 마크다운(#68)은 파서가 채운 pageNumber 의 사영이라 여기서 한 번에
+  // 붙인다. 포맷별 파서를 직접 부르는 호출자는 `blocksToPages(result.blocks)` 로
+  // 같은 값을 얻는다.
+  let out = result
+  // 문서 쪽과 겹치지 않는 쪽 범위("abc"·"99") — 빈 결과를 조용히 성공으로 내던 것을 경고로 알린다
+  if (result.success && opts?.pages && result.pageCount && parsePageRange(opts.pages, result.pageCount).size === 0) {
+    out = { ...result, warnings: [...(result.warnings ?? []), { code: "PARTIAL_PARSE", message: `요청한 쪽 범위(${opts.pages})가 문서 쪽(1~${result.pageCount})과 겹치지 않습니다` }] }
+  }
+  if (out.success && !out.pages) {
+    const pages = blocksToPages(out.blocks, bs => blocksToMarkdown(bs, { tableFormat: opts?.tableFormat }))
+    if (pages) out = { ...out, pages }
+  }
+  // plain: 그림 자리 표시·링크 URL·밑줄/굵게 표기를 걷은 글 위주 Markdown (블록 IR 은 그대로)
+  if (out.success && opts?.plain) {
+    out = { ...out, markdown: toPlainMarkdown(out.markdown), ...(out.pages ? { pages: out.pages.map(p => ({ ...p, markdown: toPlainMarkdown(p.markdown) })) } : {}) }
+  }
+  // htmlTables: 모든 표를 태그마다 한 줄씩 들여쓴 HTML 로 (파이프 표 포함)
+  if (out.success && opts?.htmlTables) {
+    out = { ...out, markdown: toHtmlTables(out.markdown), ...(out.pages ? { pages: out.pages.map(p => ({ ...p, markdown: toHtmlTables(p.markdown) })) } : {}) }
+  }
+  // htmlCellLinks: HTML 표 셀의 링크를 <a href> 로 (htmlTables 로 HTML 이 된 표 포함)
+  if (out.success && opts?.htmlCellLinks) {
+    out = { ...out, markdown: htmlCellLinks(out.markdown), ...(out.pages ? { pages: out.pages.map(p => ({ ...p, markdown: htmlCellLinks(p.markdown) })) } : {}) }
+  }
+  return out
+}
+
+/** 블록 트리(자식·표 셀·캡션)에서 이미지 바이트(imageData)를 뗀다. 그림 자리 표시 블록은 남긴다 */
+function dropImageBytes(blocks: IRBlock[] | undefined, depth = 0): void {
+  if (!blocks || depth > 64) return
+  for (const b of blocks) {
+    if (b.imageData) delete b.imageData
+    dropImageBytes(b.children, depth + 1)
+    if (b.table) {
+      for (const row of b.table.cells) for (const cell of row) dropImageBytes(cell.blocks, depth + 1)
+      dropImageBytes(b.table.captionBlocks, depth + 1)
+    }
+  }
+}
+
+async function dispatch(
+  format: ReturnType<typeof detectFormat>,
+  buffer: ArrayBuffer,
+  opts: ParseOptions | undefined,
+): Promise<ParseResult> {
   switch (format) {
     case "hwpx": {
-      // ZIP 기반 포맷 세분화: HWPX, XLSX, DOCX 구분
+      // ZIP 기반 포맷 세분화: HWPX, XLSX, DOCX, PPTX 구분
       const zipFormat = await detectZipFormat(buffer)
       if (zipFormat === "xlsx") return parseXlsx(buffer, opts)
       if (zipFormat === "docx") return parseDocx(buffer, opts)
+      if (zipFormat === "pptx") return parsePptx(buffer, opts)
+      // unknown은 손상 ZIP·비표준 섹션 경로의 HWPX 복구를 위해 기존 파서로 전달
       return parseHwpx(buffer, opts)
     }
     case "hwp": {
@@ -87,18 +164,136 @@ export async function parse(input: string | ArrayBuffer | Buffer, options?: Pars
       return parseHwpml(buffer, opts)
     case "pdf":
       return parsePdf(buffer, opts)
-    default:
-      return { success: false, fileType: "unknown", error: "지원하지 않는 파일 형식입니다.", code: "UNSUPPORTED_FORMAT" }
+    case "image":
+      return parseImage(buffer, opts)
+    default: {
+      // 판별되는 이미지 형식이면 오류에 형식 이름을 넣는다
+      const image = unsupportedImageName(buffer)
+      const error = image ? `지원하지 않는 이미지 형식입니다: ${image}. PNG·JPEG·TIFF 로 변환한 뒤 다시 시도하세요.` : "지원하지 않는 파일 형식입니다."
+      return { success: false, fileType: "unknown", error, code: "UNSUPPORTED_FORMAT" }
+    }
+  }
+}
+
+/** HWP·HWPX 삽입 그림 속 글 OCR(#143, `ocr: true`·`"force"`·함수일 때만) — 그림 블록 뒤에 글을 넣었으면 마크다운을 블록에서 다시 만든다.
+ *  `images` 는 그림 인라인(inlineImages, HWP 만)을 다시 걸 때만 넘긴다 */
+async function withEmbeddedImageOcr(
+  blocks: IRBlock[], markdown: string, warnings: ParseSuccess["warnings"], images: ParseSuccess["images"], options: ParseOptions | undefined,
+): Promise<{ markdown: string; warnings: ParseSuccess["warnings"] }> {
+  const list = [...(warnings ?? [])]
+  if (!(await ocrEmbeddedImages(blocks, options, list))) return { markdown, warnings: list.length ? list : undefined }
+  return { markdown: blocksMarkdown(blocks, options, images), warnings: list.length ? list : undefined }
+}
+
+/** 그림 속 QR 값(#187, `qrCodes: true`) — 값을 붙였으면 마크다운을 블록에서 다시 만든다. PDF 는 그림 추출에서 픽셀로 읽는다.
+ *  `inline` 은 그림 인라인(inlineImages)을 쓰는 형식(HWP·HWP3)만 넘긴다 */
+async function withImageQr(
+  blocks: IRBlock[], markdown: string, warnings: ParseSuccess["warnings"], images: ParseSuccess["images"], options: ParseOptions | undefined, inline?: ParseSuccess["images"],
+): Promise<{ markdown: string; warnings: ParseSuccess["warnings"] }> {
+  if (!options?.qrCodes) return { markdown, warnings }
+  const list = [...(warnings ?? [])]
+  const found = await readImageQrCodes(blocks, images, list)
+  return { markdown: found ? blocksMarkdown(blocks, options, inline) : markdown, warnings: list.length ? list : undefined }
+}
+
+/** 빈 그림 빼기(`dropBlankImages`) — 원본 그림 파일 형식. 뺐으면 마크다운을 블록에서 다시 만든다.
+ *  `inline` 은 그림 인라인(inlineImages)을 쓰는 형식(HWP·HWP3)만 넘긴다 */
+async function withoutBlankImages(
+  blocks: IRBlock[], markdown: string, warnings: ParseSuccess["warnings"], images: ParseSuccess["images"], options: ParseOptions | undefined, inline?: ParseSuccess["images"],
+): Promise<{ markdown: string; warnings: ParseSuccess["warnings"] }> {
+  if (!options?.dropBlankImages || options.images === false || !images?.length) return { markdown, warnings }
+  const list = [...(warnings ?? [])]
+  const dropped = await dropBlankImages(blocks, images, list)
+  return { markdown: dropped ? blocksMarkdown(blocks, options, inline) : markdown, warnings: list.length ? list : undefined }
+}
+
+/** 원본 그림 파일을 LLM 이 읽는 형식으로(#188) — `imageFormat` 을 명시하면 그 형식, 없으면 PNG·JPEG·WebP 가 아닌 그림만 PNG.
+ *  이름을 바꿨으면 마크다운을 블록에서 다시 만든다. `inline` 은 그림 인라인(inlineImages)을 쓰는 형식(HWP·HWP3)만 넘긴다 */
+async function withImageFormat(
+  blocks: IRBlock[], markdown: string, warnings: ParseSuccess["warnings"], images: ParseSuccess["images"], options: ParseOptions | undefined, inline?: ParseSuccess["images"],
+): Promise<{ markdown: string; warnings: ParseSuccess["warnings"] }> {
+  if (options?.images === false || !images?.length) return { markdown, warnings }
+  const list = [...(warnings ?? [])]
+  const renamed = await convertImages(blocks, images, options?.imageFormat, list)
+  return { markdown: renamed ? blocksMarkdown(blocks, options, inline) : markdown, warnings: list.length ? list : undefined }
+}
+
+/** 블록에서 마크다운을 다시 만든다 — 그림 인라인은 `images` 를 넘길 때만 다시 건다 */
+function blocksMarkdown(blocks: IRBlock[], options: ParseOptions | undefined, images: ParseSuccess["images"]): string {
+  const md = blocksToMarkdown(blocks, { tableFormat: options?.tableFormat })
+  if (!(options?.inlineImages && options.images !== false && images?.length)) return md
+  try { return inlineImagesIntoMarkdown(md, images, { compress: true }) } catch { return md /* 파서 경로와 같이 원본 참조로 둔다 */ }
+}
+
+/** 첨자 표기 끔 — 태그만 걷는다(ParseOptions.scriptTags) */
+function scriptsOff(r: ParseSuccess, off: boolean): ParseSuccess {
+  return off ? stripScriptTags(r) : r
+}
+
+/** 이미지 파일 입력의 페이지 이미지 누적 바이트 상한 — PDF 이미지 추출(MAX_TOTAL_IMAGE_BYTES)과 같은 128MB */
+const MAX_PAGE_IMAGE_BYTES = 128 * 1024 * 1024
+/** 멀티페이지 이미지(TIFF·DCX) 디코딩 픽셀 합계 상한 — 10억(A4 200dpi 팩스 약 260페이지). 페이지마다 최소 100만 픽셀로 세서 페이지 수도 1,000 이하 */
+const MAX_MULTIPAGE_PIXELS = 1_000_000_000
+const MIN_PAGE_PIXELS = 1_000_000
+
+/** 이미지 파일(PNG·JPEG·WebP·TIFF·GIF·AVIF·HEIC·BMP·PCX·DCX) — 페이지마다 이미지 블록과 정규화한 페이지 이미지(`images`), 그리고 OCR 글(`ocr: false` 면 생략). 멀티페이지 TIFF·DCX 는 페이지마다 */
+export async function parseImage(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
+  try {
+    const { parseImageDocument, imagePageCount, imagePage, imagePagePixels } = await import("./ocr/image-ocr.js")
+    const pageCount = await imagePageCount(buffer)
+    // pages 는 멀티페이지 이미지에만 적용 — 단일 페이지 이미지는 기존처럼 항상 읽는다
+    const wanted = pageCount > 1 && options?.pages ? parsePageRange(options.pages, pageCount) : null
+    const blocks: IRBlock[] = [], warnings: ParseWarning[] = [], lines: OcrPageLines[] = [], images: ExtractedImage[] = []
+    let imageBytes = 0, skippedPages = 0, pixels = 0
+    for (let page = 1; page <= pageCount; page++) {
+      if (wanted && !wanted.has(page)) continue
+      // 작게 압축된 페이지가 수천 개거나 아주 큰 TIFF·DCX — 디코딩하기 전에 헤더 크기로 상한 확인
+      if (pageCount > 1 && (pixels += Math.max(MIN_PAGE_PIXELS, await imagePagePixels(buffer, page))) > MAX_MULTIPAGE_PIXELS) {
+        warnings.push({ page, message: `멀티페이지 이미지 픽셀 합계 상한(10억) 도달 — ${page}페이지부터 생략했습니다. pages 로 나눠서 읽으세요`, code: "PARTIAL_PARSE" })
+        break
+      }
+      // 페이지 이미지도 문서 내 이미지처럼 블록·images 로 출력 — 아래 withImageFormat 이 LLM API 가 받는 포맷으로 변환
+      const img = await imagePage(buffer, page, pageCount)
+      if (img) blocks.push({ type: "image", text: img.filename, pageNumber: page })
+      // 페이지 이미지 누적 바이트는 PDF 와 같은 상한 — 넘으면 자리 표시만 남긴다
+      if (img && options?.images !== false && (imageBytes += img.data.length) <= MAX_PAGE_IMAGE_BYTES) images.push(img)
+      else if (options?.images !== false) skippedPages++
+      if (options?.ocr === false) continue
+      const r = await parseImageDocument(buffer, options, page)
+      blocks.push(...r.blocks)
+      warnings.push(...r.warnings)
+      if (r.lines) lines.push(r.lines)
+    }
+    if (skippedPages) warnings.push({ message: `페이지 ${skippedPages}개는 이미지를 생략했습니다 — 페이지 이미지 누적 상한(128MB) 도달, ${MAX_PIXELS / 10_000}만 픽셀 초과 또는 손상`, code: "SKIPPED_IMAGE" })
+    // OCR 글은 첨자를 가르지 않는다(검출 박스로는 기준선을 믿을 수 없다) — scriptTags 와 무관하게 평문
+    stripScriptTags({ blocks })
+    const normalized = await withImageFormat(blocks, blocksToMarkdown(blocks, { tableFormat: options?.tableFormat }), warnings.length ? warnings : undefined, images, options)
+    return {
+      success: true,
+      fileType: "image",
+      markdown: normalized.markdown,
+      blocks,
+      warnings: normalized.warnings,
+      pageCount,
+      images: images.length ? images : undefined,
+      ...(options?.ocrLines ? { ocrLines: lines } : {}),
+    }
+  } catch (err) {
+    return { success: false, fileType: "image", error: sanitizeError(err), code: classifyError(err) }
   }
 }
 
 /** HWP 3.x (구버전 한컴 워드프로세서) 파일을 Markdown 으로 변환. */
 export async function parseHwp3(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
   try {
-    const { markdown, blocks, metadata, outline, warnings } = parseHwp3Document(buffer, options)
-    return { success: true, fileType: "hwp3", markdown, blocks, metadata, outline, warnings }
+    const { markdown, blocks, metadata, outline, warnings, images } = parseHwp3Document(buffer, options)
+    const qr = await withImageQr(blocks, markdown, warnings, images, options, images)
+    const blank = await withoutBlankImages(blocks, qr.markdown, qr.warnings, images, options, images)
+    const webp = await withImageFormat(blocks, blank.markdown, blank.warnings, images, options, images)
+    return { success: true, fileType: "hwp3", markdown: webp.markdown, blocks, metadata, outline, warnings: webp.warnings, images, pageCount: metadata?.pageCount }
   } catch (err) {
-    return { success: false, fileType: "hwp3", error: err instanceof Error ? err.message : "HWP3 파싱 실패", code: classifyError(err) }
+    // 에러 메시지 정제 — KordocError만 그대로, 내부 에러는 일반화 (MCP 노출 일관성)
+    return { success: false, fileType: "hwp3", error: sanitizeError(err), code: classifyError(err) }
   }
 }
 
@@ -107,17 +302,23 @@ export async function parseHwp3(buffer: ArrayBuffer, options?: ParseOptions): Pr
 /** HWPX 파일을 Markdown으로 변환 */
 export async function parseHwpx(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
   try {
-    const { markdown, blocks, metadata, outline, warnings, images } = await parseHwpxDocument(buffer, options)
-    return { success: true, fileType: "hwpx", markdown, blocks, metadata, outline, warnings, images: images?.length ? images : undefined }
+    const doc = await parseHwpxDocument(buffer, options)
+    const { blocks, metadata, outline, images, memos } = doc
+    const ocr = await withEmbeddedImageOcr(blocks, doc.markdown, doc.warnings, undefined, options)
+    const qr = await withImageQr(blocks, ocr.markdown, ocr.warnings, images, options)
+    const blank = await withoutBlankImages(blocks, qr.markdown, qr.warnings, images, options)
+    const webp = await withImageFormat(blocks, blank.markdown, blank.warnings, images, options)
+    const markdown = options?.memos && memos?.length ? webp.markdown + memosMarkdown(memos) : webp.markdown
+    return scriptsOff({ success: true, fileType: "hwpx", markdown, blocks, metadata, outline, warnings: webp.warnings, images: images?.length ? images : undefined, pageCount: metadata?.pageCount, ...(memos?.length ? { memos } : {}) }, options?.scriptTags === false)
   } catch (err) {
-    return { success: false, fileType: "hwpx", error: err instanceof Error ? err.message : "HWPX 파싱 실패", code: classifyError(err) }
+    return { success: false, fileType: "hwpx", error: sanitizeError(err), code: classifyError(err) }
   }
 }
 
 /** HWP 5.x 바이너리 파일을 Markdown으로 변환 */
 export async function parseHwp(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
   try {
-    const { markdown, blocks, metadata, outline, warnings, images } = parseHwp5Document(Buffer.from(buffer), options)
+    const { markdown, blocks, metadata, outline, warnings, images, memos } = parseHwp5Document(Buffer.from(buffer), options)
 
     // 배포용 HWP 5.x 감지 — 본문이 "상위 버전의 배포용 문서입니다..." 플레이스홀더뿐이면
     // COM fallback으로 재시도 (Windows + 한컴오피스 환경에서만). 이슈 #25 대응.
@@ -133,6 +334,7 @@ export async function parseHwp(buffer: ArrayBuffer, options?: ParseOptions): Pro
             blocks: com.blocks,
             metadata: com.metadata,
             warnings: com.warnings,
+            pageCount,
           }
         }
       } catch {
@@ -140,9 +342,14 @@ export async function parseHwp(buffer: ArrayBuffer, options?: ParseOptions): Pro
       }
     }
 
-    return { success: true, fileType: "hwp", markdown, blocks, metadata, outline, warnings, images: images?.length ? images : undefined }
+    const ocred = await withEmbeddedImageOcr(blocks, markdown, warnings, images, options)
+    const qr = await withImageQr(blocks, ocred.markdown, ocred.warnings, images, options, images)
+    const blank = await withoutBlankImages(blocks, qr.markdown, qr.warnings, images, options, images)
+    const webp = await withImageFormat(blocks, blank.markdown, blank.warnings, images, options, images)
+    const md = options?.memos && memos?.length ? webp.markdown + memosMarkdown(memos) : webp.markdown
+    return scriptsOff({ success: true, fileType: "hwp", markdown: md, blocks, metadata, outline, warnings: webp.warnings, images: images?.length ? images : undefined, pageCount: metadata?.pageCount, ...(memos?.length ? { memos } : {}) }, options?.scriptTags === false)
   } catch (err) {
-    return { success: false, fileType: "hwp", error: err instanceof Error ? err.message : "HWP 파싱 실패", code: classifyError(err) }
+    return { success: false, fileType: "hwp", error: sanitizeError(err), code: classifyError(err) }
   }
 }
 
@@ -152,19 +359,16 @@ export async function parsePdf(buffer: ArrayBuffer, options?: ParseOptions): Pro
   try {
     const mod = await import("./pdf/parser.js")
     parsePdfDocument = mod.parsePdfDocument
-  } catch {
-    return {
-      success: false, fileType: "pdf",
-      error: "PDF 파싱에 pdfjs-dist가 필요합니다. 설치: npm install pdfjs-dist",
-      code: "MISSING_DEPENDENCY",
-    }
+  } catch (err) {
+    return { success: false, fileType: "pdf", error: sanitizeError(err), code: classifyError(err) }
   }
   try {
-    const { markdown, blocks, metadata, outline, warnings, isImageBased, pageQuality, qualitySummary } = await parsePdfDocument(buffer, options)
-    return { success: true, fileType: "pdf", markdown, blocks, metadata, outline, warnings, isImageBased, pageQuality, qualitySummary }
+    const { markdown, blocks, metadata, outline, warnings, isImageBased, pageQuality, qualitySummary, images, pages, ocrLines } = await parsePdfDocument(buffer, options)
+    // 첨자 표기 — PDF 는 기하 추정이라 기본 끔(scriptTags: true 로 켠다)
+    return scriptsOff({ success: true, fileType: "pdf", markdown, blocks, metadata, outline, warnings, isImageBased, pageQuality, qualitySummary, images, pages, pageCount: metadata?.pageCount, ...(ocrLines ? { ocrLines } : {}) }, options?.scriptTags !== true)
   } catch (err) {
     const isImageBased = err instanceof Error && "isImageBased" in err ? true : undefined
-    return { success: false, fileType: "pdf", error: err instanceof Error ? err.message : "PDF 파싱 실패", code: classifyError(err), isImageBased }
+    return { success: false, fileType: "pdf", error: sanitizeError(err), code: classifyError(err), isImageBased }
   }
 }
 
@@ -172,9 +376,9 @@ export async function parsePdf(buffer: ArrayBuffer, options?: ParseOptions): Pro
 export async function parseXlsx(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
   try {
     const { markdown, blocks, metadata, warnings } = await parseXlsxDocument(buffer, options)
-    return { success: true, fileType: "xlsx", markdown, blocks, metadata, warnings }
+    return { success: true, fileType: "xlsx", markdown, blocks, metadata, warnings, pageCount: metadata?.pageCount }
   } catch (err) {
-    return { success: false, fileType: "xlsx", error: err instanceof Error ? err.message : "XLSX 파싱 실패", code: classifyError(err) }
+    return { success: false, fileType: "xlsx", error: sanitizeError(err), code: classifyError(err) }
   }
 }
 
@@ -182,9 +386,9 @@ export async function parseXlsx(buffer: ArrayBuffer, options?: ParseOptions): Pr
 export async function parseXls(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
   try {
     const { markdown, blocks, metadata, warnings } = await parseXlsDocument(buffer, options)
-    return { success: true, fileType: "xls", markdown, blocks, metadata, warnings }
+    return { success: true, fileType: "xls", markdown, blocks, metadata, warnings, pageCount: metadata?.pageCount }
   } catch (err) {
-    return { success: false, fileType: "xls", error: err instanceof Error ? err.message : "XLS 파싱 실패", code: classifyError(err) }
+    return { success: false, fileType: "xls", error: sanitizeError(err), code: classifyError(err) }
   }
 }
 
@@ -192,9 +396,25 @@ export async function parseXls(buffer: ArrayBuffer, options?: ParseOptions): Pro
 export async function parseDocx(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
   try {
     const { markdown, blocks, metadata, outline, warnings, images } = await parseDocxDocument(buffer, options)
-    return { success: true, fileType: "docx", markdown, blocks, metadata, outline, warnings, images: images?.length ? images : undefined }
+    const qr = await withImageQr(blocks, markdown, warnings, images, options)
+    const blank = await withoutBlankImages(blocks, qr.markdown, qr.warnings, images, options)
+    const webp = await withImageFormat(blocks, blank.markdown, blank.warnings, images, options)
+    return scriptsOff({ success: true, fileType: "docx", markdown: webp.markdown, blocks, metadata, outline, warnings: webp.warnings, images: images?.length ? images : undefined, pageCount: metadata?.pageCount }, options?.scriptTags === false)
   } catch (err) {
-    return { success: false, fileType: "docx", error: err instanceof Error ? err.message : "DOCX 파싱 실패", code: classifyError(err) }
+    return { success: false, fileType: "docx", error: sanitizeError(err), code: classifyError(err) }
+  }
+}
+
+/** PPTX (PowerPoint) 파일을 Markdown으로 변환 — 슬라이드 1장 = 1쪽 */
+export async function parsePptx(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
+  try {
+    const { markdown, blocks, metadata, outline, warnings, images } = await parsePptxDocument(buffer, options)
+    const qr = await withImageQr(blocks, markdown, warnings, images, options)
+    const blank = await withoutBlankImages(blocks, qr.markdown, qr.warnings, images, options)
+    const webp = await withImageFormat(blocks, blank.markdown, blank.warnings, images, options)
+    return scriptsOff({ success: true, fileType: "pptx", markdown: webp.markdown, blocks, metadata, outline, warnings: webp.warnings, images: images?.length ? images : undefined, pageCount: metadata?.pageCount }, options?.scriptTags === false)
+  } catch (err) {
+    return { success: false, fileType: "pptx", error: sanitizeError(err), code: classifyError(err) }
   }
 }
 
@@ -202,9 +422,9 @@ export async function parseDocx(buffer: ArrayBuffer, options?: ParseOptions): Pr
 export async function parseHwpml(buffer: ArrayBuffer, options?: ParseOptions): Promise<ParseResult> {
   try {
     const { markdown, blocks, metadata, outline, warnings } = parseHwpmlDocument(buffer, options)
-    return { success: true, fileType: "hwpml", markdown, blocks, metadata, outline, warnings }
+    return { success: true, fileType: "hwpml", markdown, blocks, metadata, outline, warnings, pageCount: metadata?.pageCount }
   } catch (err) {
-    return { success: false, fileType: "hwpml", error: err instanceof Error ? err.message : "HWPML 파싱 실패", code: classifyError(err) }
+    return { success: false, fileType: "hwpml", error: sanitizeError(err), code: classifyError(err) }
   }
 }
 
@@ -248,7 +468,7 @@ export interface FillFormOutput {
  */
 export async function fillForm(
   input: string | ArrayBuffer | Buffer,
-  values: Record<string, string>,
+  values: Record<string, FillInput>,
   outputFormat: FillOutputFormat = "markdown",
 ): Promise<FillFormOutput> {
   // 입력 버퍼 준비
@@ -269,10 +489,15 @@ export async function fillForm(
     if (format === "hwpx") {
       const zipFormat = await detectZipFormat(buffer)
       if (zipFormat !== "hwpx") {
-        throw new Error(`hwpx-preserve 포맷은 HWPX 입력만 지원합니다 (감지된 포맷: ${zipFormat})`)
+        throw new Error(`hwpx-preserve 포맷은 HWPX·HWP 5.x 입력만 지원합니다 (감지된 포맷: ${zipFormat})`)
       }
+    } else if (format === "hwp" && detectOle2Format(buffer) === "hwp") {
+      // HWP 5.x 서식은 서식 그대로 HWPX 로 바꿔 채운다 (결과는 HWPX)
+      const { hwpToHwpx } = await import("./hwp5/to-hwpx/index.js")
+      const hwpx = await hwpToHwpx(new Uint8Array(buffer))
+      buffer = hwpx.buffer.slice(hwpx.byteOffset, hwpx.byteOffset + hwpx.byteLength) as ArrayBuffer
     } else {
-      throw new Error(`hwpx-preserve 포맷은 HWPX 입력만 지원합니다 (감지된 포맷: ${format})`)
+      throw new Error(`hwpx-preserve 포맷은 HWPX·HWP 5.x 입력만 지원합니다 (감지된 포맷: ${format})`)
     }
     const hwpxResult = await fillHwpx(buffer, values)
     return {
@@ -283,7 +508,9 @@ export async function fillForm(
   }
 
   // 일반 경로: parse → IRBlock → fill → output
-  const parsed = await parse(buffer)
+  // 양식 칸은 원본 표 구조 그대로 — 보이지 않는 틀 표를 풀면 라벨·값 칸 짝이 흩어진다. 끝 빈 열(입력란)도 CLI fill 처럼 남긴다:
+  // 자르면 "대표자 | (빈칸)" 의 값 칸이 없어져 못 채우고, 하위 라벨("성 명") 옆 빈 칸이 안 보여 라벨 칸을 덮어썼다 (#47·#145)
+  const parsed = await parse(buffer, { layoutTables: "keep", keepTrailingEmptyCols: true })
   if (!parsed.success) {
     throw new Error(`서식 파싱 실패: ${parsed.error}`)
   }
@@ -305,20 +532,72 @@ export { compare, diffBlocks } from "./diff/compare.js"
 export { extractFormFields, isLabelCell, extractFormSchema, inferFieldType } from "./form/recognize.js"
 export type { FormFieldType, FormFieldSchema, FormSchemaResult } from "./form/recognize.js"
 export { fillFormFields } from "./form/filler.js"
+export { ValueCursor, formatFillValue, fillWithUniqueGuard } from "./form/match.js"
+export type { FillValue, FillInput } from "./form/match.js"
 export type { FillResult } from "./form/filler.js"
 export { fillHwpx } from "./form/filler-hwpx.js"
 export type { HwpxFillResult } from "./form/filler-hwpx.js"
+export { extractClickHereFields } from "./form/click-here.js"
+export type { ClickHereField } from "./form/click-here.js"
+export { BUILTIN_TEMPLATES, resolveBuiltinTemplate, readBuiltinTemplate, readBuiltinTemplateSample } from "./form/templates.js"
+export type { BuiltinTemplate } from "./form/templates.js"
+export { placeSealHwpx } from "./form/seal.js"
+export type { SealOp, SealPlacement, PlaceSealResult } from "./form/seal.js"
+export { addMemoHwpx } from "./form/memo.js"
+export type { MemoOp, MemoPlacement, AddMemoResult } from "./form/memo.js"
 export { markdownToHwpx } from "./hwpx/generator.js"
+// HWP 5.x → HWPX 서식 그대로 변환
+export { hwpToHwpx, convertToHwpx, type HwpToHwpxOptions, type ConvertToHwpxResult } from "./hwp5/to-hwpx/index.js"
+// HWPX → HWP 5.0 — optional peer dep @rhwp/core 로 저장
+export { hwpxToHwp, type HwpxToHwpOptions } from "./hwpx/to-hwp.js"
+// 기관팩 — 기관 문서(HWPX) 몇 건으로 만든 서식 묶음(.kpack). markdownToHwpx(md, { template: packTemplate(pack, "report") })
+export { buildAgencyPack, loadAgencyPack, packTemplate, resolvePackKind, packRoleWarnings, packSummary } from "./hwpx/agency-pack.js"
+export type { AgencyPack, PackManifest, PackKindInfo, PackSample } from "./hwpx/agency-pack.js"
 export type { HwpxTheme, MarkdownToHwpxOptions } from "./hwpx/generator.js"
+export type { PageOptions } from "./hwpx/gen-page.js"
+export type {
+  FormatProfile, TableProfile, CellProfile, BorderFillDef, BorderDef, CharPrDef,
+} from "./hwpx/generator.js"
+export { hwpxToProfile } from "./hwpx/extract-profile.js"
+export { measurePdfLayout, type PdfLayoutSpec, type PdfLayoutLevel } from "./pdf/layout-measure.js"
+export { applyMeasuredLayout, type MeasuredLayoutResult } from "./hwpx/layout-options.js"
+export { normalizeGongmunPreset, PRESET_ALIAS, incompatibleGongmunWarnings } from "./hwpx/gongmun.js"
+export { agencyNames, agencyStyle, AGENCY_COMMON_NAME } from "./hwpx/agency.js"
+export type { AgencyStyle, AgencyReportStyle, AgencyPressStyle, AgencyFont } from "./hwpx/agency-styles.js"
+export { isKnownFont, unknownFontWarnings } from "./hwpx/font-catalog.js"
+export { lintGongmunText, gongmunLintWarnings } from "./hwpx/gongmun-lint.js"
+export type { GongmunLintFinding } from "./hwpx/gongmun-lint.js"
+export { lintMuncheText, muncheLintWarnings, usesGaejosikMunche } from "./hwpx/munche-lint.js"
+export type { MuncheLintFinding, MuncheLineKind } from "./hwpx/munche-lint.js"
+export { lintSlopText, slopLintWarnings } from "./hwpx/slop-lint.js"
+export { lintLogicText, logicLintWarnings, usesLogicStructure } from "./hwpx/logic-lint.js"
+export { gongmunGate, formatGateFinding } from "./hwpx/gongmun-gate.js"
+export { lintBudgetText } from "./hwpx/budget-lint.js"
+export { runLintSuite, type LintSuiteOptions, type LintSuiteResult } from "./hwpx/lint-suite.js"
+export { lintBlocks, type LintBlock, type BlockFinding, type LintBlocksResult } from "./hwpx/lint-blocks.js"
+export { placeTotalRow, type TotalRowPosition } from "./hwpx/gen-table.js"
+export type { GongmunGateResult, GongmunGateFinding, GongmunGateAxis } from "./hwpx/gongmun-gate.js"
+export {
+  charWidthEm1000, measureTextWidth, simulateWrap, simulateWrapKeepWord, fitRatioForFewerLines,
+  SPACE_EM_FIXED, SPACE_EM_FONT,
+} from "./hwpx/text-metrics.js"
+export type { MeasureOptions, WrapResult, WrapMode } from "./hwpx/text-metrics.js"
 export type {
   GongmunOptions,
   GongmunPreset,
+  GongmunPresetInput,
   GongmunNumbering,
   GongmunFont,
 } from "./hwpx/gongmun.js"
 export { patchHwpx } from "./roundtrip/patcher.js"
 export { patchHwp } from "./roundtrip/hwp5-patch.js"
 export type { PatchResult, PatchSkip, PatchOptions } from "./types.js"
+export { validateHwpx } from "./validate.js"
+export type { ValidateResult, ValidateIssue } from "./validate.js"
+export { redactText, redactMarkdown, DEFAULT_REDACT_RULES } from "./redact.js"
+export type { RedactRule, RedactHit, RedactTextResult, RedactOptions } from "./redact.js"
+export { blocksToChunks } from "./chunks.js"
+export type { DocChunk, ChunkOptions } from "./chunks.js"
 
 // ─── 에디터 통합 API (v3.1) ─────────────────────────
 
@@ -333,20 +612,36 @@ export type {
 } from "./roundtrip/source-map.js"
 export { renderHtml, markdownToPdf, blocksToPdf } from "./print/renderer.js"
 export type { PrintPreset, PrintOptions, PageMargin } from "./print/renderer.js"
+export { renderHwpxToSvg, renderDocument, renderDocumentToScene, extractRenderedRegions, renderSceneToHtml, renderHwp5Pages } from "./render/index.js"
+// 표 분류·시각 추출 (#76)
+export { classifyTable, collectTableBlocks } from "./table/classifier.js"
+export type { ClassifyContext } from "./table/classifier.js"
+export { classifyTableTree, chooseTableRepresentation } from "./table/analyze.js"
+export type { TableRepresentation } from "./table/analyze.js"
+export { hasStructuredCellContent, flattenLayoutTables } from "./table/builder.js"
+export { extractTables } from "./table/visual.js"
+export type { ExtractTableVisualOptions, ExtractedTable, ExtractedTableCrop, TableVisualPolicy } from "./table/visual.js"
+export type {
+  RenderSvgOptions, RenderSvgResult, RenderScene, ScenePage, RenderRegion, PageBBox, RenderObjectType, RenderSourceFormat,
+  RenderFormat, RenderDocumentOptions, RenderDocumentResult, RenderAsset, SceneRenderOptions, SceneRenderResult,
+  ExtractRegionOptions, RegionAsset,
+} from "./render/index.js"
 
 // ─── Re-exports ──────────────────────────────────────
 
 export { detectFormat, detectOle2Format, detectZipFormat, isHwpxFile, isOldHwpFile, isPdfFile, isZipFile } from "./detect.js"
 export type {
   ParseResult, ParseSuccess, ParseFailure, FileType,
-  PageQuality, DocumentQualitySummary,
+  PageMarkdown, PageQuality, DocumentQualitySummary,
   IRBlock, IRBlockType, IRTable, IRCell, CellContext,
   BoundingBox, InlineStyle, ImageData, ExtractedImage,
-  DocumentMetadata, ParseOptions, ErrorCode,
+  DocumentMetadata, ParseOptions, ErrorCode, MemoNote,
   ParseWarning, WarningCode, OutlineItem,
   DiffResult, BlockDiff, CellDiff, DiffChangeType,
   FormField, FormResult,
-  OcrProvider, WatchOptions,
+  OcrProvider, OcrModelFile, OcrPageLines, OcrLine, WatchOptions,
 } from "./types.js"
 export { blocksToMarkdown } from "./table/builder.js"
+export type { MarkdownOptions } from "./table/builder.js"
+export { blocksToPages } from "./page-markdown.js"
 export { VERSION } from "./utils.js"

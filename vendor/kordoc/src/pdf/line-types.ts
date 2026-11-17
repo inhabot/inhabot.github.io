@@ -1,0 +1,69 @@
+/**
+ * 선 기반 테이블 감지 공유 타입/상수.
+ * line-detector.ts에서 분리 — 알고리즘 출처는 line-detector.ts 헤더 참조.
+ */
+
+// ─── 타입 ─────────────────────────────────────────────
+
+export interface LineSegment {
+  x1: number; y1: number
+  x2: number; y2: number
+  lineWidth: number
+  /** fill 연산(그라디언트 밴드 스택)에서 나온 선분 — PDF w 연산자는 stroke 전용이라
+   *  fill 선분의 lineWidth 는 마지막 stroke 상태를 상속한 스테일 값이다. 음영 스택 폭
+   *  판별(dropShadingStacks)이 스테일 폭에 속지 않게 표기한다 (pline-3). */
+  fromFill?: boolean
+}
+
+export interface TableGrid {
+  /** 행 Y 좌표 경계 (위→아래 내림차순) */
+  rowYs: number[]
+  /** 열 X 좌표 경계 (좌→우 오름차순) */
+  colXs: number[]
+  /** 테이블 바운딩 박스 */
+  bbox: { x1: number; y1: number; x2: number; y2: number }
+  /** 그리드 내 교차점 반경 (동적 tolerance용) */
+  vertexRadius: number
+  /** 미리 확정된 셀 — 클립 사각형 그리드(clip-cells)가 채움. 있으면 extractCells 를 건너뛴다 */
+  cells?: ExtractedCell[]
+  /** 이 그리드를 품는 바깥 셀(틀)의 클립 사각형 — 중첩표. 소비측(page-blocks)이 그 셀의
+   *  `IRCell.blocks` 에 표로 넣는다 (v4.12.2, HWP 파서의 중첩표 IR 과 같은 모양) */
+  clipParent?: { x1: number; y1: number; x2: number; y2: number }
+  /** 칸 안에 떠 있는 닫힌 선 격자(중첩표, table-grid splitNestedBoxes) — 소비측이 그 bbox 를 품는 칸의 blocks 에 넣는다 */
+  /** 네 변이 모두 괘선으로 닫힌 상자 — 같은 열 구조여도 떨어진 닫힌 상자 둘은 잇지 않는다(mergeAdjacentGrids) */
+  closedBox?: true
+  lineNested?: true
+  /** 앞 쪽 칸의 이어짐인 1칸 조각이면 그 앞 쪽 칸의 클립 사각형 (clip-cells) — 문서 단계가 앞 쪽 표의 그 칸에 붙인다 */
+  continues?: { x1: number; y1: number; x2: number; y2: number }
+}
+
+export interface ExtractedCell {
+  row: number; col: number
+  rowSpan: number; colSpan: number
+  /** 셀 바운딩 박스 */
+  bbox: { x1: number; y1: number; x2: number; y2: number }
+  /** 클립이 없어 격자를 메우려고 만든 1×1 칸 (clip-cells) — 원본의 칸이 아니다 */
+  filler?: boolean
+}
+
+export interface TextItem {
+  text: string
+  x: number; y: number; w: number; h: number
+  fontSize: number; fontName: string
+  /** pdfjs 공백 아이템이 이 아이템 직전에 있었음 — 단어 경계 힌트 (parser.ts NormItem에서 전파) */
+  hasSpaceBefore?: boolean
+  /** 직전 공백이 pdfjs 가 글자 틈으로 만든 것뿐(글리프 흐름에 공백 글리프 없음, tracked-text markSyntheticSpaces) — 균등배분 run 을 끊지 않는다 */
+  syntheticSpace?: boolean
+  /** 직전 낱말 폭(0.2em 이상) 공백 글리프의 시작 x (NormItem.wideSpace 전파) */
+  wideSpace?: number
+  /** 줄 끝 공백 글리프 (NormItem.spaceAfter 전파 — 칸 줄 꺾임이 어절 경계) */
+  spaceAfter?: boolean
+  /** 콘텐츠 스트림 순번 (NormItem.seq 전파 — 겹친 글자 순서 복원) */
+  seq?: number
+  /** 반올림 전 x·폭 (NormItem.fx·fw 전파 — 자간 보정 공백 trackedSpaces) */
+  fx?: number
+  fw?: number
+}
+
+/** Vertex 기반 좌표 병합 시 radius 배수 — ODL: VERTEX_TABLE_FACTOR */
+export const VERTEX_MERGE_FACTOR = 4

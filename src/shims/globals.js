@@ -5,7 +5,13 @@ if (!globalThis.Buffer) {
 }
 
 if (!globalThis.process) {
-  globalThis.process = { env: {} };
+  globalThis.process = {
+    browser: true,
+    env: {},
+    version: "",
+    versions: {},
+    nextTick: queueMicrotask,
+  };
 }
 
 export { Buffer };

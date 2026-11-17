@@ -8,7 +8,7 @@
 
 import { decompressStream } from "./record.js"
 import type { LenientCfbContainer } from "./cfb-lenient.js"
-import type { ExtractedImage, IRBlock, IRCell, ParseWarning } from "../types.js"
+import type { ExtractedImage, IRBlock, ParseWarning } from "../types.js"
 
 /** CFB FileIndex 엔트리 (cfb 모듈 호환 최소 형태) */
 export interface BinCfbEntry { name?: string; content?: Buffer | Uint8Array }
@@ -21,8 +21,25 @@ export function detectImageMime(data: Buffer | Uint8Array): string | null {
   if (data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46) return "image/gif"
   if (data[0] === 0x42 && data[1] === 0x4d) return "image/bmp"
   if (data[0] === 0xd7 && data[1] === 0xcd && data[2] === 0xc6 && data[3] === 0x9a) return "image/wmf"
+  // 배치 헤더 없는 표준 WMF — mtType 1(메모리)·2(디스크) + mtHeaderSize 9워드. 한컴 BinData 의 .wmf 는 대개 이 꼴
+  // (법령 서식 BIN0001.wmf 실측 01 00 09 00 00 03). 종전엔 "알 수 없는 형식"이라 셀에 [이미지: …] 글이 박혔다
+  if ((data[0] === 0x01 || data[0] === 0x02) && data[1] === 0x00 && data[2] === 0x09 && data[3] === 0x00) return "image/wmf"
   if (data[0] === 0x01 && data[1] === 0x00 && data[2] === 0x00 && data[3] === 0x00) return "image/emf"
+  // TIFF — 리틀(II*\0)·빅(MM\0*) 엔디언 (행정업무편람 BIN016C.TIF 실측)
+  if ((data[0] === 0x49 && data[1] === 0x49 && data[2] === 0x2a && data[3] === 0x00) || (data[0] === 0x4d && data[1] === 0x4d && data[2] === 0x00 && data[3] === 0x2a)) return "image/tiff"
   return null
+}
+
+/** MIME → 추출 파일 확장자 (HWPX images.ts mimeToExt 와 같은 표) */
+function mimeExt(mime: string): string {
+  if (mime.includes("jpeg")) return "jpg"
+  if (mime.includes("png")) return "png"
+  if (mime.includes("gif")) return "gif"
+  if (mime.includes("bmp")) return "bmp"
+  if (mime.includes("tiff")) return "tif"
+  if (mime.includes("wmf")) return "wmf"
+  if (mime.includes("emf")) return "emf"
+  return "bin"
 }
 
 /**
@@ -41,60 +58,73 @@ function normalizeBinPayload(data: Buffer): Buffer {
 /** BinData 스토리지 엔트리명 — "BIN%04X.ext" (storage_id는 16진!) */
 const BIN_ENTRY_RE = /(?:^|\/)BIN([0-9A-Fa-f]{4,8})(?:\.[^./\\]*)?$/
 
-/** 블록 트리(셀 내부 blocks 포함)에서 image 블록 수집 */
-function collectImageBlocks(blocks: IRBlock[], out: IRBlock[]): void {
+/** 블록 트리 재귀 깊이 상한 — hwpx collectImageBlocks(MAX_XML_DEPTH)와 동일 값.
+ *  손상/악성 문서의 자기참조·초심층 트리 스택 오버플로 방지 */
+const MAX_BLOCK_DEPTH = 200
+
+/** 블록 트리(셀 내부 blocks 포함)에서 image 블록 수집.
+ *  hwpx 쪽과 안전장치 합집합: depth 가드 + children 순회 (둘 다 수행) */
+function collectImageBlocks(blocks: IRBlock[], out: IRBlock[], depth = 0): void {
+  if (depth > MAX_BLOCK_DEPTH) return
   for (const b of blocks) {
     if (b.type === "image") out.push(b)
     if (b.table) {
       for (const row of b.table.cells) {
         for (const cell of row) {
-          if (cell.blocks) collectImageBlocks(cell.blocks, out)
+          if (cell.blocks) collectImageBlocks(cell.blocks, out, depth + 1)
         }
       }
     }
-    if (b.children) collectImageBlocks(b.children, out)
+    if (b.children) collectImageBlocks(b.children, out, depth + 1)
   }
 }
 
-/** 블록 트리의 모든 표 셀 순회 (중첩표 포함) */
-function forEachTableCell(blocks: IRBlock[], fn: (cell: IRCell) => void): void {
-  for (const b of blocks) {
-    if (b.table) {
-      for (const row of b.table.cells) {
-        for (const cell of row) {
-          fn(cell)
-          if (cell.blocks) forEachTableCell(cell.blocks, fn)
-        }
-      }
-    }
-    if (b.children) forEachTableCell(b.children, fn)
-  }
-}
-
-/** 셀 텍스트의 이미지 sentinel("![image](hwp5bin:ID)")을 추출된 파일명으로 치환 */
-const CELL_IMAGE_SENTINEL_RE = /!\[image\]\(hwp5bin:(\d+)\)/g
-function resolveCellImageSentinels(blocks: IRBlock[], renamed: Map<number, string>): void {
-  forEachTableCell(blocks, cell => {
-    if (!cell.text.includes("hwp5bin:")) return
-    cell.text = cell.text.replace(CELL_IMAGE_SENTINEL_RE, (_m, idStr: string) => {
+/**
+ * 이미지 sentinel("![image](hwp5bin:ID)")을 추출된 파일명으로 치환 — 표 셀 텍스트, 그리고 머리말·각주·캡션처럼
+ * 표를 평문으로 편 글(ir-assemble tableFlatText)에도 남으므로 블록 트리 전체(문단 글·각주·캡션·셀)를 훑는다.
+ * 파일명이 없으면(BinData 없음·페이지 필터로 스윕 안 함) "[이미지]"
+ */
+const IMAGE_SENTINEL_RE = /!\[image\]\(hwp5bin:(\d+)\)/g
+function resolveImageSentinels(blocks: IRBlock[], renamed: Map<number, string>, depth = 0): void {
+  if (depth > MAX_BLOCK_DEPTH) return
+  const fix = (s: string): string => s.includes("hwp5bin:")
+    ? s.replace(IMAGE_SENTINEL_RE, (_m, idStr: string) => {
       const filename = renamed.get(Number(idStr))
       return filename ? `![image](${filename})` : "[이미지]"
     })
-  })
+    : s
+  for (const b of blocks) {
+    if (b.text) b.text = fix(b.text)
+    if (b.footnoteText) b.footnoteText = fix(b.footnoteText)
+    if (b.table) {
+      if (b.table.caption) b.table.caption = fix(b.table.caption)
+      for (const row of b.table.cells) {
+        for (const cell of row) {
+          cell.text = fix(cell.text)
+          if (cell.blocks) resolveImageSentinels(cell.blocks, renamed, depth + 1)
+        }
+      }
+    }
+    if (b.children) resolveImageSentinels(b.children, renamed, depth + 1)
+    if (b.footnoteBlocks) resolveImageSentinels(b.footnoteBlocks, renamed, depth + 1)
+  }
 }
 
-/** binDataMap 기반 이미지 블록 해결 — strict/lenient 공용 */
-function resolveImageBlocks(
+/** binDataMap 기반 이미지 블록 해결 — strict/lenient·HWP3 공용 */
+export function resolveImageBlocks(
   binDataMap: Map<number, { data: Buffer; name: string }>,
   blocks: IRBlock[],
   warnings: ParseWarning[],
+  sweepUnreferenced?: boolean,
 ): ExtractedImage[] {
   const imageBlocks: IRBlock[] = []
   collectImageBlocks(blocks, imageBlocks)
-  if (imageBlocks.length === 0) return []
 
   const images: ExtractedImage[] = []
   const renamed = new Map<number, string>()
+  // 같은 BinData를 참조하는 개체가 수천 개일 수 있다(도형 반복 등) — storageId당
+  // 1회만 변환·추출하고 데이터 버퍼를 공유한다 (블록마다 복사하면 메모리 폭발)
+  const resolved = new Map<number, { filename: string; data: Uint8Array; mime: string } | null>()
   let imageIndex = 0
 
   for (const block of imageBlocks) {
@@ -102,43 +132,64 @@ function resolveImageBlocks(
     const storageId = parseInt(block.text, 10)
     if (isNaN(storageId)) continue
 
-    const bin = binDataMap.get(storageId)
-    if (!bin) {
-      warnings.push({ page: block.pageNumber, message: `BinData ${storageId} 없음`, code: "SKIPPED_IMAGE" })
-      block.type = "paragraph"
-      block.text = `[이미지: BinData ${storageId}]`
-      continue
+    let img = resolved.get(storageId)
+    if (img === undefined) {
+      const bin = binDataMap.get(storageId)
+      if (!bin) {
+        warnings.push({ page: block.pageNumber, message: `BinData ${storageId} 없음`, code: "SKIPPED_IMAGE" })
+        resolved.set(storageId, null)
+      } else {
+        const mime = detectImageMime(bin.data)
+        if (!mime) {
+          warnings.push({ page: block.pageNumber, message: `BinData ${storageId}: 알 수 없는 이미지 형식`, code: "SKIPPED_IMAGE" })
+          resolved.set(storageId, null)
+        } else {
+          imageIndex++
+          const ext = mimeExt(mime)
+          img = { filename: `image_${String(imageIndex).padStart(3, "0")}.${ext}`, data: new Uint8Array(bin.data), mime }
+          resolved.set(storageId, img)
+          images.push({ filename: img.filename, data: img.data, mimeType: img.mime, source: bin.name })
+          renamed.set(storageId, img.filename)
+        }
+      }
+      img = resolved.get(storageId)
     }
 
-    const mime = detectImageMime(bin.data)
-    if (!mime) {
-      warnings.push({ page: block.pageNumber, message: `BinData ${storageId}: 알 수 없는 이미지 형식`, code: "SKIPPED_IMAGE" })
+    if (!img) {
+      const bin = binDataMap.get(storageId)
       block.type = "paragraph"
-      block.text = `[이미지: ${bin.name}]`
+      block.text = bin ? `[이미지: ${bin.name}]` : `[이미지: BinData ${storageId}]`
       continue
     }
-
-    imageIndex++
-    const ext = mime.includes("jpeg") ? "jpg" : mime.includes("png") ? "png" : mime.includes("gif") ? "gif" : mime.includes("bmp") ? "bmp" : "bin"
-    const filename = `image_${String(imageIndex).padStart(3, "0")}.${ext}`
-
-    images.push({ filename, data: new Uint8Array(bin.data), mimeType: mime })
-    renamed.set(storageId, filename)
-    block.text = filename
-    block.imageData = { data: new Uint8Array(bin.data), mimeType: mime, filename: bin.name }
+    block.text = img.filename
+    block.imageData = { data: img.data, mimeType: img.mime, filename: binDataMap.get(storageId)!.name }
   }
 
-  resolveCellImageSentinels(blocks, renamed)
+  // 본문 미참조 BinData 이미지 스윕 — pic 컨트롤이 닿지 않는 이미지(셀 배경 등)를
+  // 문서 끝에 image 블록으로 보강한다. 이미지가 아닌 스트림(OLE 등)은 건너뛴다.
+  if (sweepUnreferenced) {
+    for (const [storageId, bin] of [...binDataMap.entries()].sort((a, b) => a[0] - b[0])) {
+      if (resolved.has(storageId)) continue
+      const mime = detectImageMime(bin.data)
+      if (!mime) continue
+      imageIndex++
+      const ext = mimeExt(mime)
+      const filename = `image_${String(imageIndex).padStart(3, "0")}.${ext}`
+      const data = new Uint8Array(bin.data)
+      images.push({ filename, data, mimeType: mime, source: bin.name })
+      blocks.push({ type: "image", text: filename, imageData: { data, mimeType: mime, filename: bin.name } })
+      // 머리말·각주 안 표를 편 글의 sentinel 도 이 파일을 가리킨다 (본문 image 블록이 없던 그림)
+      renamed.set(storageId, filename)
+    }
+  }
+
+  resolveImageSentinels(blocks, renamed)
   return images
 }
 
-/** OLE2 BinData 스토리지(FileIndex)에서 이미지 추출, blocks의 image 블록과 매핑 */
-export function extractHwp5Images(
-  fileIndex: BinCfbEntry[] | undefined,
-  blocks: IRBlock[],
-  warnings: ParseWarning[],
-): ExtractedImage[] {
-  // BinData 스토리지의 모든 파일을 FileIndex 순회로 수집 — 엔트리명은 "BIN%04X.ext" 16진
+/** BinData 스토리지의 모든 파일을 FileIndex 순회로 수집 — 엔트리명은 "BIN%04X.ext" 16진.
+ *  파서(이미지 추출)와 렌더 어댑터(#75 HWP5)가 공유한다 */
+export function collectHwp5BinData(fileIndex: BinCfbEntry[] | undefined, readStream?: (path: string) => Buffer | null): Map<number, { data: Buffer; name: string }> {
   const binDataMap = new Map<number, { data: Buffer; name: string }>()
   if (fileIndex) {
     for (const entry of fileIndex) {
@@ -146,17 +197,47 @@ export function extractHwp5Images(
       const match = entry.name.match(BIN_ENTRY_RE)
       if (!match) continue
       const idx = parseInt(match[1], 16)
-      const data = normalizeBinPayload(Buffer.from(entry.content))
+      const raw = readStream ? readStream(`/BinData/${entry.name}`) : Buffer.from(entry.content)
+      if (!raw) continue
+      const data = normalizeBinPayload(raw)
       binDataMap.set(idx, { data, name: entry.name })
     }
   }
+  return binDataMap
+}
+
+/** Lenient CFB: BinData 엔트리 수집 — 엔트리명 "BIN%04X.ext" 16진 */
+export function collectHwp5BinDataLenient(lcfb: LenientCfbContainer, readStream = lcfb.findStream): Map<number, { data: Buffer; name: string }> {
+  const binDataMap = new Map<number, { data: Buffer; name: string }>()
+  const binRe = /^BIN([0-9A-Fa-f]{4,8})(?:\.|$)/
+  for (const e of lcfb.entries()) {
+    const match = e.name.match(binRe)
+    if (!match) continue
+    const idx = parseInt(match[1], 16)
+    // 경로로 찾는다 — 맨 이름은 같은 이름이 둘이면 고르지 않는다 (cfb-lenient findEntryByPath)
+    const raw = readStream(`/BinData/${e.name}`) ?? readStream(e.name)
+    if (!raw) continue
+    binDataMap.set(idx, { data: normalizeBinPayload(raw), name: e.name })
+  }
+  return binDataMap
+}
+
+/** OLE2 BinData 스토리지(FileIndex)에서 이미지 추출, blocks의 image 블록과 매핑 */
+export function extractHwp5Images(
+  fileIndex: BinCfbEntry[] | undefined,
+  blocks: IRBlock[],
+  warnings: ParseWarning[],
+  sweepUnreferenced?: boolean,
+  readStream?: (path: string) => Buffer | null,
+): ExtractedImage[] {
+  const binDataMap = collectHwp5BinData(fileIndex, readStream)
 
   if (binDataMap.size === 0) {
     // 이미지 블록이 있는데 BinData가 없으면 sentinel 정리만 수행
-    resolveCellImageSentinels(blocks, new Map())
+    resolveImageSentinels(blocks, new Map())
     return []
   }
-  return resolveImageBlocks(binDataMap, blocks, warnings)
+  return resolveImageBlocks(binDataMap, blocks, warnings, sweepUnreferenced)
 }
 
 /** Lenient CFB: BinData 이미지 추출 */
@@ -164,21 +245,13 @@ export function extractHwp5ImagesLenient(
   lcfb: LenientCfbContainer,
   blocks: IRBlock[],
   warnings: ParseWarning[],
+  sweepUnreferenced?: boolean,
+  readStream?: (path: string) => Buffer | null,
 ): ExtractedImage[] {
-  // BinData 엔트리 수집 — 엔트리명 "BIN%04X.ext" 16진
-  const binDataMap = new Map<number, { data: Buffer; name: string }>()
-  const binRe = /^BIN([0-9A-Fa-f]{4,8})(?:\.|$)/
-  for (const e of lcfb.entries()) {
-    const match = e.name.match(binRe)
-    if (!match) continue
-    const idx = parseInt(match[1], 16)
-    const raw = lcfb.findStream(e.name)
-    if (!raw) continue
-    binDataMap.set(idx, { data: normalizeBinPayload(raw), name: e.name })
-  }
+  const binDataMap = collectHwp5BinDataLenient(lcfb, readStream)
   if (binDataMap.size === 0) {
-    resolveCellImageSentinels(blocks, new Map())
+    resolveImageSentinels(blocks, new Map())
     return []
   }
-  return resolveImageBlocks(binDataMap, blocks, warnings)
+  return resolveImageBlocks(binDataMap, blocks, warnings, sweepUnreferenced)
 }

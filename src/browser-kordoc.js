@@ -6,6 +6,7 @@ import { markdownToHwpx } from "../vendor/kordoc/src/hwpx/generator.ts";
 import { parseHwpxDocument } from "../vendor/kordoc/src/hwpx/parser.ts";
 import { parsePdfDocument } from "../vendor/kordoc/src/pdf/parser.ts";
 import { VERSION as KORDOC_VERSION, classifyError } from "../vendor/kordoc/src/utils.ts";
+import { normalizeMarkdownTables } from "./markdown-table.js";
 
 export { KORDOC_VERSION };
 
@@ -91,7 +92,7 @@ export async function generateHwpxFromMarkdown(markdown, options) {
   }
 
   try {
-    const buffer = await markdownToHwpx(markdown, options);
+    const buffer = await markdownToHwpx(normalizeMarkdownTables(markdown), options);
     return {
       success: true,
       fileType: "hwpx",
@@ -119,7 +120,13 @@ export async function parsePdfToMarkdown(buffer, options) {
   }
 
   try {
-    const result = await parsePdfDocument(buffer, options);
+    const result = await parsePdfDocument(buffer, {
+      ...options,
+      ocr: false,
+      formulaOcr: false,
+      qrCodes: false,
+      images: false,
+    });
     return {
       ...toSuccess("pdf", result),
       isImageBased: result.isImageBased,

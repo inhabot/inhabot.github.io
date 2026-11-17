@@ -1,0 +1,122 @@
+/**
+ * 인식 입력 준비 — 밴드 서브 박스 좌표, 라인 crop 리사이즈(회전 포함).
+ * (engine.ts 에서 분리 — 엔진은 세션·배치·후처리 흐름만)
+ */
+
+export interface Box { x: number; y: number; w: number; h: number }
+
+/** rec 입력 높이 (공식 RecResizeImg image_shape [3, 48, 320]) */
+export const REC_HEIGHT = 48
+const REC_MAX_WIDTH = 3200
+const MIN_SIZE = 3
+
+/**
+ * 밴드 → 페이지 좌표 서브 박스. 위아래는 밴드 높이 20% 여유(이웃 밴드와의 간격 절반 이내),
+ * 좌우는 괘선을 뺀 잉크 폭 + 밴드 높이 20% 여유(원 박스 안) — 칸 경계 세로선이 crop 에
+ * 들어가 "|국" 으로 읽히지 않게
+ */
+export function bandBoxes(b: Box, bands: Array<{ y0: number; y1: number; x0: number; x1: number }>, pageH: number): Box[] {
+  const out: Box[] = []
+  for (let i = 0; i < bands.length; i++) {
+    const { y0, y1, x0, x1 } = bands[i]
+    const bh = y1 - y0
+    const upGap = i > 0 ? (y0 - bands[i - 1].y1) / 2 : y0
+    const downGap = i < bands.length - 1 ? (bands[i + 1].y0 - y1) / 2 : b.h - y1
+    const top = Math.max(0, Math.round(b.y + y0 - Math.min(bh * 0.2, upGap)))
+    const bot = Math.min(pageH, Math.round(b.y + y1 + Math.min(bh * 0.2, downGap)))
+    const left = Math.max(b.x, Math.round(b.x + x0 - bh * 0.2))
+    const right = Math.min(b.x + b.w, Math.round(b.x + x1 + bh * 0.2))
+    if (bot - top >= MIN_SIZE && right - left >= MIN_SIZE) out.push({ x: left, y: top, w: right - left, h: bot - top })
+  }
+  return out
+}
+
+/**
+ * 라인 crop → rec 입력 크기(높이 48, 비율 유지 폭) RGB. 회전은 crop 좌표계에서
+ * (90 = 반시계 np.rot90, 270 = 시계). 리사이즈는 bilinear(반픽셀 중심, cv2 INTER_LINEAR 등가)
+ * — 공식 전처리(cv2.resize 기본)와 같은 보간.
+ */
+/** keep: 박스 로컬 [x0, x1)×[y0, y1) 밖은 배경 휘도 bg 로 칠한다 (rot 0 만 — 박스 끝에 걸린 이웃 줄 조각·상자 테두리 지우기) */
+export function lineCrop(rgba: Uint8Array, pageW: number, box: Box, rot: 0 | 90 | 270, keep?: { x0: number; x1: number; y0: number; y1: number; bg: number }, stretch = 1): { rgb: Uint8Array; w: number } {
+  const srcW = rot === 0 ? box.w : box.h
+  const srcH = rot === 0 ? box.h : box.w
+  // stretch: 가로로 늘려 읽기 — 자간 좁은 글꼴의 같은 숫자 연속("000")을 CTC 가 한 자로 합치지 않게 (engine 숫자 자릿수 재인식)
+  const rw = Math.min(REC_MAX_WIDTH, Math.max(16, Math.round((srcW * REC_HEIGHT * stretch) / srcH)))
+  const rgb = new Uint8Array(rw * REC_HEIGHT * 3)
+  // 회전 좌표 → 페이지 픽셀
+  const at = (u: number, v: number): number => {
+    let px: number, py: number
+    if (rot === 0) { px = u; py = v }
+    else if (rot === 90) { px = box.w - 1 - v; py = u }
+    else { px = v; py = box.h - 1 - u }
+    return ((box.y + py) * pageW + (box.x + px)) * 4
+  }
+  const fx = srcW / rw
+  const fy = srcH / REC_HEIGHT
+  for (let dy = 0; dy < REC_HEIGHT; dy++) {
+    let sy = (dy + 0.5) * fy - 0.5
+    if (sy < 0) sy = 0
+    const y0 = Math.min(srcH - 1, Math.floor(sy))
+    const y1 = Math.min(srcH - 1, y0 + 1)
+    const wy = sy - y0
+    for (let dx = 0; dx < rw; dx++) {
+      let sx = (dx + 0.5) * fx - 0.5
+      if (sx < 0) sx = 0
+      const x0 = Math.min(srcW - 1, Math.floor(sx))
+      const x1 = Math.min(srcW - 1, x0 + 1)
+      const wx = sx - x0
+      const i00 = at(x0, y0), i01 = at(x1, y0), i10 = at(x0, y1), i11 = at(x1, y1)
+      const o = (dy * rw + dx) * 3
+      if (keep && rot === 0 && (sx < keep.x0 || sx >= keep.x1 || sy < keep.y0 || sy >= keep.y1)) {
+        rgb[o] = rgb[o + 1] = rgb[o + 2] = keep.bg
+        continue
+      }
+      for (let c = 0; c < 3; c++) {
+        const top = rgba[i00 + c] * (1 - wx) + rgba[i01 + c] * wx
+        const bottom = rgba[i10 + c] * (1 - wx) + rgba[i11 + c] * wx
+        rgb[o + c] = Math.round(top * (1 - wy) + bottom * wy)
+      }
+    }
+  }
+  return { rgb, w: rw }
+}
+
+
+/** 칸 경계 세로선이 상자 끝에서 이만큼(상자 높이 배수) 안쪽이어야 가른다 — 이웃 칸 글자 하나("6,796몽")는 높이보다 좁다 */
+const CELL_RULE_MARGIN = 0.7
+
+/** Split a detected line at ruled cell boundaries before recognizing its text. */
+export function splitBoxAtCellRules(b: Box, rules: Array<{ x1: number; y1: number; y2: number; thicknessPx: number }>): Box[] {
+  const m = b.h * CELL_RULE_MARGIN
+  const cuts = rules.filter(r => r.x1 > b.x + m && r.x1 < b.x + b.w - m
+    && r.y1 <= b.y + b.h * 0.25 && r.y2 >= b.y + b.h * 0.75).sort((a, c) => a.x1 - c.x1)
+  if (!cuts.length) return [b]
+  const out: Box[] = []
+  let left = b.x
+  for (const r of cuts) {
+    const edge = Math.floor(r.x1 - r.thicknessPx / 2 - 1)
+    if (edge - left < m) continue
+    out.push({ ...b, x: left, w: edge - left })
+    left = Math.ceil(r.x1 + r.thicknessPx / 2 + 1)
+  }
+  if (left < b.x + b.w) out.push({ ...b, x: left, w: b.x + b.w - left })
+  return out
+}
+
+/** Split a detected box stacked over two table rows at the ruled row boundary between them. */
+export function splitBoxAtRowRules(b: Box, rules: Array<{ x1: number; x2: number; y1: number; thicknessPx: number }>): Box[] {
+  const min = Math.max(8, b.h * 0.3)
+  const cuts = rules.filter(r => r.y1 > b.y + min && r.y1 < b.y + b.h - min
+    && r.x1 <= b.x + b.w * 0.25 && r.x2 >= b.x + b.w * 0.75).sort((a, c) => a.y1 - c.y1)
+  if (!cuts.length) return [b]
+  const out: Box[] = []
+  let top = b.y
+  for (const r of cuts) {
+    const edge = Math.floor(r.y1 - r.thicknessPx / 2 - 1)
+    if (edge - top < min) continue
+    out.push({ ...b, y: top, h: edge - top })
+    top = Math.ceil(r.y1 + r.thicknessPx / 2 + 1)
+  }
+  if (b.y + b.h - top >= min) out.push({ ...b, y: top, h: b.y + b.h - top })
+  return out.length ? out : [b]
+}

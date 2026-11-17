@@ -1,0 +1,355 @@
+/**
+ * HWPX 생성 공유 상수·테마·XML 원자 (generator.ts에서 분리).
+ * 네임스페이스, charPr/paraPr id 상수, 테마 해석, escapeXml, charPr/paraPr 조각.
+ */
+
+export const NS_SECTION = "http://www.hancom.co.kr/hwpml/2011/section"
+export const NS_PARA = "http://www.hancom.co.kr/hwpml/2011/paragraph"
+export const NS_HEAD = "http://www.hancom.co.kr/hwpml/2011/head"
+export const NS_CORE = "http://www.hancom.co.kr/hwpml/2011/core"
+export const NS_OPF = "http://www.idpf.org/2007/opf/"
+export const NS_HPF = "http://www.hancom.co.kr/schema/2011/hpf"
+export const NS_OCF = "urn:oasis:names:tc:opendocument:xmlns:container"
+
+// ─── 스타일 ID 매핑 ─────────────────────────────────
+// charPr: 0=본문, 1=볼드, 2=이탤릭, 3=볼드이탤릭, 4=인라인코드, 5=h1, 6=h2, 7=h3, 8=h4~h6, 9=표 헤더 셀, 10=인용문
+// paraPr: 0=본문, 1=h1, 2=h2, 3=h3, 4=h4~h6, 5=코드블록, 6=인용문, 7=리스트
+
+export const CHAR_NORMAL = 0
+export const CHAR_BOLD = 1
+export const CHAR_ITALIC = 2
+export const CHAR_BOLD_ITALIC = 3
+export const CHAR_CODE = 4
+export const CHAR_H1 = 5
+export const CHAR_H2 = 6
+export const CHAR_H3 = 7
+export const CHAR_H4 = 8
+export const CHAR_TABLE_HEADER = 9
+export const CHAR_QUOTE = 10
+
+export const PARA_NORMAL = 0
+export const PARA_H1 = 1
+export const PARA_H2 = 2
+export const PARA_H3 = 3
+export const PARA_H4 = 4
+export const PARA_CODE = 5
+export const PARA_QUOTE = 6
+export const PARA_LIST = 7
+
+/** HWPX 생성 시 적용할 시각 테마 (모두 선택) */
+export interface HwpxTheme {
+  /**
+   * 헤딩 레벨별 텍스트 색상. 미지정 시 검정.
+   * 현재 charPr 매핑은 h1/h2/h3/h4 4단계 (h5, h6은 h4와 같은 charPr 공유)이므로
+   * 키는 1~4만 받는다.
+   */
+  headingColors?: Partial<Record<1 | 2 | 3 | 4, string>>
+  /** 본문 단락 텍스트 색상. 미지정 시 검정 */
+  bodyColor?: string
+  /**
+   * 인용문 텍스트 색상. 미지정 시 검정.
+   *
+   * 주의: 이 옵션을 지정하면 인용문이 별도 charPr(이탤릭)로 렌더링된다.
+   * 미지정 시 기존 동작 그대로 본문 charPr로 렌더링 (이탤릭 아님).
+   */
+  quoteColor?: string
+  /** 표 첫 행 텍스트 색상. 미지정 시 본문과 동일 */
+  tableHeaderColor?: string
+  /** 표 첫 행 텍스트를 굵게 표시 (기본 false) */
+  tableHeaderBold?: boolean
+}
+
+const DEFAULT_TEXT_COLOR = "#000000"
+
+export function resolveTheme(theme?: HwpxTheme) {
+  return {
+    h1: theme?.headingColors?.[1] ?? DEFAULT_TEXT_COLOR,
+    h2: theme?.headingColors?.[2] ?? DEFAULT_TEXT_COLOR,
+    h3: theme?.headingColors?.[3] ?? DEFAULT_TEXT_COLOR,
+    h4: theme?.headingColors?.[4] ?? theme?.headingColors?.[3] ?? DEFAULT_TEXT_COLOR,
+    body: theme?.bodyColor ?? DEFAULT_TEXT_COLOR,
+    quote: theme?.quoteColor ?? DEFAULT_TEXT_COLOR,
+    /** quoteColor가 명시되었는지 — blockquote charPr 분기에 사용 (baseline 호환) */
+    hasQuoteOption: theme?.quoteColor !== undefined,
+    tableHeader: theme?.tableHeaderColor ?? theme?.bodyColor ?? DEFAULT_TEXT_COLOR,
+    tableHeaderBold: !!theme?.tableHeaderBold,
+  }
+}
+
+export type ResolvedTheme = ReturnType<typeof resolveTheme>
+
+// ─── XML 생성 헬퍼 ───────────────────────────────────
+
+export function escapeXml(text: string): string {
+  return text
+    // XML 1.0 금지 C0 제어문자 제거(탭 0x09·개행 0x0A·CR 0x0D는 유지) — 옵션 필드(두문·
+    // 결문·결재란 등)에 섞이면 well-formed가 깨져 한컴이 파일을 못 연다
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+/**
+ * `<hp:t>` 본문용 이스케이프 — U+00A0(묶음 빈칸)은 한글 묶음 빈칸 요소 `<hp:nbSpace/>` 로 방출한다
+ * (줄 끝에서 갈라지지 않는 공백. 실결재 법제처 서식의 "1.<hp:nbSpace/>허가신청" 꼴). 속성값에는 escapeXml 을 쓸 것.
+ */
+export function escapeTextXml(text: string): string {
+  return escapeXml(text).replace(/\u00a0/g, "<hp:nbSpace/>")
+}
+
+export function headingParaPrId(level: number): number {
+  if (level === 1) return PARA_H1
+  if (level === 2) return PARA_H2
+  if (level === 3) return PARA_H3
+  return PARA_H4
+}
+
+export function headingCharPrId(level: number): number {
+  if (level === 1) return CHAR_H1
+  if (level === 2) return CHAR_H2
+  if (level === 3) return CHAR_H3
+  return CHAR_H4
+}
+
+
+export function charPr(
+  id: number,
+  height: number,
+  bold: boolean,
+  italic: boolean,
+  fontId: number = 0,
+  textColor: string = DEFAULT_TEXT_COLOR,
+  ratioPct: number = 100,
+  restFont: number = fontId,
+  spacingPct: number = 0,
+): string {
+  const boldAttr = bold ? ` bold="1"` : ""
+  const italicAttr = italic ? ` italic="1"` : ""
+  // 볼드여도 폰트는 치환하지 않는다 — 종전의 bold variant(HY견고딕/Arial Black) 자동
+  // 참조는 v4.0.1 QA에서 "정체모를 폰트"로 확정된 결함 (실측 양식들도 원 폰트에
+  // bold 요소만 얹는다). 굵기는 아래 <hh:bold/> 정본 요소가 담당.
+  const effFont = fontId
+  // 볼드 정본은 <hh:bold/> 자식 요소 — 실측 한컴 파일은 속성 없이 요소만 쓴다.
+  // 속성(bold="1")은 하위 호환으로 병기 (Windows 한컴 구버전이 속성을 읽던 경로 유지).
+  const boldEl = bold ? `<hh:bold/>` : ""
+  // 장평(ratio): 공문서 본문은 95%로 가로 압축 — 한두 글자만 다음 줄로 넘어가는
+  // orphan을 줄여 한 줄에 담는다(실제 공문서 관행). 한글·라틴만, 나머지는 100.
+  return `      <hh:charPr id="${id}" height="${height}" textColor="${escapeXml(textColor)}" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1"${boldAttr}${italicAttr}>
+        <hh:fontRef hangul="${effFont}" latin="${effFont}" hanja="${restFont}" japanese="${restFont}" other="${restFont}" symbol="${restFont}" user="${restFont}"/>
+        <hh:ratio hangul="${ratioPct}" latin="${ratioPct}" hanja="${ratioPct}" japanese="100" other="100" symbol="100" user="100"/>
+        <hh:spacing hangul="${spacingPct}" latin="${spacingPct}" hanja="${spacingPct}" japanese="0" other="0" symbol="0" user="0"/>
+        <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+        <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>${boldEl}
+      </hh:charPr>`
+}
+
+// ─── paraPr 생성 헬퍼 ───────────────────────────────
+
+export function paraPr(id: number, opts: { align?: string; spaceBefore?: number; spaceAfter?: number; lineSpacing?: number; indent?: number; left?: number; right?: number; keepWord?: boolean; keepWithNext?: boolean; outlineLevel?: number; autoTab?: boolean; widowOrphan?: boolean } = {}): string {
+  const { align = "JUSTIFY", spaceBefore = 0, spaceAfter = 0, lineSpacing = 160, indent = 0, left = 0, right = 0, keepWord = false, keepWithNext = false, outlineLevel, autoTab = false, widowOrphan = false } = opts
+  // keepWord=true면 한글도 어절(단어) 단위로만 줄바꿈 — 단어 중간에서 끊기지 않음.
+  // 주의: breakNonLatinWord의 한컴 실구현 의미는 이름과 반대다 —
+  //   "BREAK_WORD"=어절 유지, "KEEP_WORD"=글자 단위 (2026-07 한글 COM 실렌더 A/B 실측.
+  //   한글 기본값 '글자'가 KEEP_WORD로 저장되는 정본 양식과도 일치).
+  //   breakLatinWord는 이름대로 KEEP_WORD=단어 유지.
+  //   snapToGrid는 줄나눔과 무관함이 같은 실측에서 확인됨(섹션 격자 자체가 꺼져 있음).
+  const breakNonLatin = keepWord ? "BREAK_WORD" : "KEEP_WORD"
+  const snapGrid = keepWord ? "0" : "1"
+  // outlineLevel(0-based) 지정 시 개요 문단 — 재파싱 헤딩 감지·한컴 문서 찾아가기의
+  // 권위 정보. 번호 서식은 numbering id=1(빈 서식)이라 화면에 번호가 붙지 않는다.
+  const heading = outlineLevel !== undefined
+    ? `<hh:heading type="OUTLINE" idRef="0" level="${outlineLevel}"/>`
+    : `<hh:heading type="NONE" idRef="0" level="0"/>`
+  // autoTab: 내어쓰기용 자동 탭(tabPr 1, autoTabLeft) — 부호 뒤 탭이 내어쓰기 위치에 서서 첫 줄 내용이
+  // 둘째 줄과 같은 x 에서 시작한다(양쪽 정렬이 부호 뒤 공백을 늘려 어긋나던 것 방지, v5 전용 — 헤더가 tabPr 을 방출할 때만)
+  return `      <hh:paraPr id="${id}" tabPrIDRef="${autoTab ? 1 : 0}" condense="0" fontLineHeight="0" snapToGrid="${snapGrid}" suppressLineNumbers="0" checked="0" textDir="AUTO">
+        <hh:align horizontal="${align}" vertical="BASELINE"/>
+        ${heading}
+        <hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="${breakNonLatin}" widowOrphan="${widowOrphan ? 1 : 0}" keepWithNext="${keepWithNext ? 1 : 0}" keepLines="0" pageBreakBefore="0" lineWrap="BREAK"/>
+        <hh:autoSpacing eAsianEng="0" eAsianNum="0"/>
+        <hh:margin><hc:intent value="${indent}" unit="HWPUNIT"/><hc:left value="${left}" unit="HWPUNIT"/><hc:right value="${right}" unit="HWPUNIT"/><hc:prev value="${spaceBefore}" unit="HWPUNIT"/><hc:next value="${spaceAfter}" unit="HWPUNIT"/></hh:margin>
+        <hh:lineSpacing type="PERCENT" value="${lineSpacing}"/>
+        <hh:border borderFillIDRef="1" offsetLeft="0" offsetRight="0" offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/>
+      </hh:paraPr>`
+}
+
+// ─── 공문서 모드 paraPr ID 매핑 ──────────────────────
+// 공문서 모드에서는 기존 0~7 paraPr 뒤에 항목 단계별(8단계) paraPr를 추가한다.
+// 단계 d(0~7) → paraPrIDRef = GONGMUN_LIST_BASE + d
+export const GONGMUN_LIST_BASE = 8
+export const GONGMUN_LIST_LEVELS = 8
+// 본문 크기 가운데정렬 단락(발신명의 등) — 항목단계 paraPr 다음 id
+export const GONGMUN_CENTER = GONGMUN_LIST_BASE + GONGMUN_LIST_LEVELS
+// 오른쪽정렬 단락(데이터 표 호스트·출처행 — 실측: GT6/GT7/GT11 표 우측 배치 관행) — CENTER 다음 id
+export const GONGMUN_RIGHT = GONGMUN_CENTER + 1
+// 표 셀 전용 문단 — 실측(GT1 표⑪): 헤더 CENTER 130%·데이터 CENTER 120% 셀 압축 줄간격,
+// 장문 열은 LEFT(JUSTIFY 아님). 표 셀 CENTER 문단은 정답지 전반이 어절유지(BREAK_WORD)
+export const GONGMUN_TBL_CENTER = GONGMUN_RIGHT + 1
+export const GONGMUN_TBL_LEFT = GONGMUN_TBL_CENTER + 1
+
+// ─── 실측 폰트 프리셋(개조식·보고서·계획서) 전용 charPr id — 기본 11종(0~10) 뒤 11~25 ──
+// 부호·요소별 폰트/크기 분리 (실측: docs/gongmunseo-engine-spec.md, gaejosik.ts).
+// 보고서·계획서는 이 중 ※(13·14)·표 셀(22·23)·제목박스(25)를 사용 (id 공간은 통일 등록)
+export const GJ_CHAR_DAE = 11          // □ 대항목 — HY헤드라인M 16pt
+export const GJ_CHAR_DAE_BOLD = 12     // □ 안 강조 — HY헤드라인M 16pt bold
+export const GJ_CHAR_CHAM = 13         // ※ 참고 — 한양중고딕 13pt
+export const GJ_CHAR_CHAM_BOLD = 14    // ※ 안 강조 — 한양중고딕 13pt bold
+export const GJ_CHAR_CHAPTER_NUM = 15  // 장 헤더 로마숫자 — 휴먼명조 17pt bold 흰색
+export const GJ_CHAR_CHAPTER_TITLE = 16 // 장 헤더 제목 — HY헤드라인M 17pt
+export const GJ_CHAR_COVER_TITLE = 17  // 표지 제목 — HY헤드라인M 30pt
+export const GJ_CHAR_COVER_SUB = 18    // 표지 날짜·기관명 — HY헤드라인M 25pt
+export const GJ_CHAR_TOC_LABEL = 19    // "목  차" — HY헤드라인M 28pt bold
+export const GJ_CHAR_TOC_ROMAN = 20    // 목차 로마숫자 — 한양신명조 21pt bold
+export const GJ_CHAR_TOC_ITEM = 21     // 목차 항목 — HY헤드라인M 18pt
+export const GJ_CHAR_TABLE = 22        // 표 셀 본문 — 맑은 고딕 12pt (실측: 정부 양식 표)
+export const GJ_CHAR_TABLE_BOLD = 23   // 표 셀 강조 — 맑은 고딕 12pt bold
+export const GJ_CHAR_BAR = 24          // 표지 장식 바 셀 빈 문단 — 6pt (실측: 셀 높이 818 수납용)
+export const GJ_CHAR_BODY_TITLE = 25   // 본문 첫 페이지 제목 박스 — HY헤드라인M 22pt (실측: GT3 표④)
+export const GJ_CHAR_TITLE_BAR = 26    // 1페이지형 제목박스 382HU 바 스페이서 — 1pt
+export const GJ_CHAR_APPROVAL = 27     // 결재란 직위 라벨 — 굴림 계열 10pt
+export const GJ_CHAR_SRC = 28          // 출처행 캡션 — 한양중고딕 본문-3pt (srcCaptionPt)
+export const GJ_CHAR_SRC_BOLD = 29     // 출처행 캡션 bold
+// 블록 크기는 첫·끝 명명 id에서 파생 — 수기 카운트 드리프트 방지 (v4.0.5 P0-1).
+// 새 GJ_CHAR_*를 끝에 추가하면 자동 반영되지만, buildCharProperties 방출 행과의
+// 일치는 charVariantBase 런타임 불변식(gen-header)이 검증한다.
+const GJ_CHAR_COUNT = GJ_CHAR_SRC_BOLD - GJ_CHAR_DAE + 1
+
+// ─── 개조식 전용 paraPr id — 공통(0~7)+단계(8~15)+CENTER(16)+RIGHT(17)+표셀(18·19) 뒤 20~24 ──
+// v4.0.2부터 id 연속성을 위해 전 공문서 프리셋이 이 블록을 방출한다 (비개조식은 20만 사용)
+export const GJ_PARA_CHAM = 20     // ※ 참고 문단 (들여쓰기 + 문단 위 3pt)
+export const GJ_PARA_COVER = 21    // 표지 제목·날짜·기관명 (CENTER, 줄간격 130)
+export const GJ_PARA_TOC_ITEM = 22 // 목차 항목
+export const GJ_PARA_CHAPTER = 23  // 장 헤더 표 호스트 문단 (문단 위 간격)
+export const GJ_PARA_BAR = 24      // 표지 장식 바 셀 빈 문단 (줄간격 70% — 실측 71%)
+export const GJ_PARA_COUNT = 5
+
+// ─── 부호 생략 항목 전용 paraPr — 25~32 (v4.0.2) ──
+// 단일 형제 규정으로 부호가 생략된 항목이 depth 공용 paraPr(음수 내어쓰기)를 쓰면
+// 있지도 않은 부호 폭만큼 둘째 줄이 더 들어간다(유령 내어쓰기 — 실렌더 QA 확인).
+// left는 단계 동일, 내어쓰기 0인 전용 세트.
+export const GONGMUN_LIST_PLAIN_BASE = 25
+
+// ─── 결재란 라벨 셀 paraPr — 33 (부호생략 25~32 뒤) ──
+// 실측 결재선(approval-main): 라벨 lineSp 100%. 1pt 바 스페이서용 GJ_PARA_BAR(70%)를
+// 재사용하면 긴 라벨 줄바꿈 시 줄이 겹친다 — 보이는 텍스트는 전용 100% paraPr로.
+export const GONGMUN_PARA_APPROVAL = GONGMUN_LIST_PLAIN_BASE + GONGMUN_LIST_LEVELS
+
+// ─── 장문 <right> 폴백 왼쪽정렬 paraPr — 34 ──
+// 출처행 등 <right> 문단이 본문폭을 넘겨 줄바꿈되면 RIGHT 정렬은 왼쪽 끝이
+// 들쭉날쭉해져 들여쓰기가 깨진 듯 보인다(한글 실렌더 QA — 제주 보고서 출처 3줄).
+// 우측 배치 관행(GT6/GT7/GT11)은 한 줄 출처행 실측이므로, 넘치는 문단만 LEFT로.
+export const GONGMUN_SRC_LEFT = GONGMUN_PARA_APPROVAL + 1
+
+// ─── (depth, 부호폭) 내어쓰기 변형 paraPr — 35~ (v4.0.5 P1-1) ──
+// 법정 번호 두 자리 이상('10.'·'10)'·'(10)') 항목 전용 — depth 공용 paraPr의 대표
+// 부호('1.') 내어쓰기로는 둘째 줄이 내용 첫 글자보다 ~0.55타 왼쪽으로 어긋난다.
+// 문서에 해당 항목이 있을 때만 발급(gongmunList.indentVariants — 기본 산출물 불변)
+export const GONGMUN_LIST_VARIANT_BASE = GONGMUN_SRC_LEFT + 1
+
+// ─── 개조식 전용 borderFill id — 기본 2종(1·2) 뒤 3~9 ──
+export const GJ_BF_CHAPTER_NUM = 3   // 장헤더 로마숫자 셀 — #193AAA 음영 + #006699 테두리
+export const GJ_BF_CHAPTER_GAP = 4   // 장헤더 간격 셀 — #006699 좌선만
+export const GJ_BF_CHAPTER_TITLE = 5 // 장헤더 제목 셀 — #F2F2F2 음영 + 회색 상하선
+export const GJ_BF_BAR_DARK = 6      // 표지 진한 바 — #193AAA
+export const GJ_BF_BAR_LIGHT = 7     // 표지 연한 바 — #A0B4E6
+export const GJ_BF_TOC_BOX = 8       // 목차 박스 — 0.4mm #514BAC
+export const GJ_BF_TOC_STRIPE = 9    // 목차 배너 라벤더 스트라이프 — #E0E5FA (실측: GT3 표②)
+
+// ─── 공문서 표 헤더행 음영 borderFill (실측: 정부 양식 표 헤더 #E6E6E6) ──
+// 개조식 자산(표지·목차 포함)을 쓰면 전용 3~9 뒤 10, 그 외는 기본 1·2 뒤 3
+export function gongmunTableHeaderBf(richAssets: boolean): number {
+  return richAssets ? 10 : 3
+}
+
+// ─── borderFill XML 원자 ─────────────────────────────
+
+/** 테두리 변 스펙 — [굵기, 색] 또는 [굵기, 색, 선종류(SOLID·DOUBLE_SLIM·DASH)] */
+export type BorderSide = [string, string] | [string, string, string]
+
+/**
+ * borderFill 한 항목 — 네 변 지정 + 선택적 채움(단색 또는 gradient).
+ * gradient는 실측 정부 문서 제목박스 하단 바(RADIAL #0080C0→#3CBFFF, GT6 원문) 스펙.
+ */
+export function borderFillEntry(
+  id: number,
+  b: { l?: BorderSide; r?: BorderSide; t?: BorderSide; b?: BorderSide },
+  fill?: string | { gradient: string[]; type?: "LINEAR" | "RADIAL"; angle?: number },
+): string {
+  const side = (name: string, v?: BorderSide) =>
+    v
+      ? `        <hh:${name} type="${v[2] ?? "SOLID"}" width="${v[0]}" color="${v[1]}"/>`
+      : `        <hh:${name} type="NONE" width="0.1 mm" color="#000000"/>`
+  let brush = ""
+  if (typeof fill === "string") {
+    brush = `\n        <hc:fillBrush><hc:winBrush faceColor="${fill}" hatchColor="#000000" alpha="0"/></hc:fillBrush>`
+  } else if (fill) {
+    // LINEAR angle 90 = 위→아래(업무보고 장 띠 #D6EAFE→#FFFFFF). 2색만 — colorNum 3 은 한글 2024 COM 실렌더에서
+    // 셀이 검게 칠해진다(2026-09-15 A/B: 3색·step 255 ✗, 2색·step 50 ✓)
+    const type = fill.type ?? "RADIAL"
+    const colors = fill.gradient.slice(0, 2).map((c) => `<hc:color value="${c}"/>`).join("")
+    brush = `\n        <hc:fillBrush><hc:gradation type="${type}" angle="${fill.angle ?? 0}" centerX="0" centerY="0" step="50" colorNum="2" stepCenter="50" alpha="0">${colors}</hc:gradation></hc:fillBrush>`
+  }
+  return `      <hh:borderFill id="${id}" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+        <hh:slash type="NONE" Crooked="0" isCounter="0"/>
+        <hh:backSlash type="NONE" Crooked="0" isCounter="0"/>
+${side("leftBorder", b.l)}
+${side("rightBorder", b.r)}
+${side("topBorder", b.t)}
+${side("bottomBorder", b.b)}${brush}
+      </hh:borderFill>`
+}
+
+// ─── 쪽번호·쪽번호 리셋 ctrl (실측: GT3 「2_보고서 양식」 원문) ──
+
+/** 쪽번호 매기기 ctrl — 하단 중앙 "- 1 -" 형식. run 안 secPr 뒤에 배치 */
+export function pageNumCtrl(): string {
+  return `<hp:ctrl><hp:pageNum pos="BOTTOM_CENTER" formatType="DIGIT" sideChar="-"/></hp:ctrl>`
+}
+
+/** 새 쪽번호 시작 ctrl — 표지·목차를 카운트에서 제외하고 본문을 1쪽으로 */
+export function newPageNumCtrl(num: number = 1): string {
+  return `<hp:ctrl><hp:newNum num="${num}" numType="PAGE"/></hp:ctrl>`
+}
+
+/** 쪽번호 숨김 ctrl — 표지·목차 페이지 전용 (실측: GT3 pageHiding ×2) */
+export function pageHidingCtrl(hideHeader: boolean = false): string {
+  return `<hp:ctrl><hp:pageHiding hideHeader="${hideHeader ? 1 : 0}" hideFooter="0" hideMasterPage="0" hideBorder="0" hideFill="0" hidePageNum="1"/></hp:ctrl>`
+}
+
+// ─── 비실측 공문서 표 셀 charPr — 11·12 (v4.0.2) ──
+// 실결재 기안문 실측: 표 셀은 11~12pt가 지배(굴림체12·맑은고딕11).
+// 본문 크기 셀은 열폭이 부족해 서술 열이 세로로 길어진다 (실렌더 QA).
+// 실측 프리셋은 GJ_CHAR_TABLE(22·23, 맑은 고딕 12pt)을 그대로 쓴다.
+export const GONGMUN_TBL_CHAR = 11
+export const GONGMUN_TBL_CHAR_BOLD = 12
+/** 비실측 공문서 표 셀 크기 — 12pt (실결재 실측 지배값) */
+export const GONGMUN_TBL_PT = 1200
+export const GONGMUN_TITLE_BAR_CHAR = 13
+export const GONGMUN_APPROVAL_CHAR = 14
+// 출처행(<right> '출처:'·'자료:') 전용 — 본문보다 3pt 작은 캡션체 (실무 보고서 관행:
+// 표 아래 출처는 본문과 구분되는 작은 글씨. 실측 프리셋은 한양중고딕, 비실측은 본문 폰트)
+export const GONGMUN_SRC_CHAR = 15
+export const GONGMUN_SRC_CHAR_BOLD = 16
+
+/** 출처행 캡션 크기 — 본문 -3pt, 하한 10pt (gen-header 방출·gen-section 폭 판정 공용) */
+export function srcCaptionPt(bodyHeight: number): number {
+  return Math.max(bodyHeight - 300, 1000)
+}
+
+// ─── 공문서 자동 장평(orphan 축소) ───────────────────
+// 기본 charPr 11종(0~10) 뒤에, 자동 장평이 필요한 문단용 변형 charPr를 붙인다.
+// 비공문서는 11부터(종전과 동일). 비실측 공문서는 표 셀 2종(11·12)이 먼저 와 13부터.
+// 실측 폰트 프리셋(개조식·보고서·계획서)은 전용 charPr 15종(11~25)이 먼저 오므로 26부터.
+// 변형 vi번째 장평 r → charPr id = charVariantBase + vi×4 + (0 본문|1 볼드|2 이탤릭|3 볼드이탤릭)
+export const CHAR_VARIANT_BASE = CHAR_QUOTE + 1
+export function charVariantBase(richAssets: boolean, isGongmun: boolean = true): number {
+  if (!isGongmun) return CHAR_VARIANT_BASE
+  // 비실측 공문서 전용 블록(표 셀 2 + 제목바 + 결재란 + 출처행 2) 크기도 명명 상수에서 파생
+  return richAssets
+    ? CHAR_VARIANT_BASE + GJ_CHAR_COUNT
+    : CHAR_VARIANT_BASE + (GONGMUN_SRC_CHAR_BOLD - GONGMUN_TBL_CHAR + 1)
+}
+/** 공문서 본문 기본 장평(%) — 실제 공문서 관행 (v3.5.3) */
+export const GONGMUN_BODY_RATIO = 95

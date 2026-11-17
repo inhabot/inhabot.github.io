@@ -6,6 +6,7 @@
  */
 
 import type { HwpNumbering } from "./record.js"
+import { hangulOrdinal, circledNumber, circledHangul, romanNumeral } from "../shared/numbering.js"
 
 // ─── 7수준 카운터 상태기계 ───────────────────────────
 
@@ -48,16 +49,18 @@ export class NumberingState {
 
 export type NumFmt =
   | "digit" | "circled" | "romanUpper" | "romanLower" | "latinUpper" | "latinLower"
-  | "ganada" | "circledGanada" | "jamo" | "circledJamo" | "hangulNum" | "hanjaNum"
+  | "ganada" | "circledGanada" | "jamo" | "circledJamo" | "hangulNum" | "hanjaNum" | "circledLatinUpper" | "circledLatinLower"
 
 /** HWP 표 43 (문단 머리 번호 형식 코드) → NumFmt */
-export function headFormatToNumFmt(code: number): NumFmt {
+function headFormatToNumFmt(code: number): NumFmt {
   switch (code) {
     case 1: return "circled"
     case 2: return "romanUpper"
     case 3: return "romanLower"
     case 4: return "latinUpper"
     case 5: return "latinLower"
+    case 6: return "circledLatinUpper"
+    case 7: return "circledLatinLower"
     case 8: return "ganada"
     case 9: return "circledGanada"
     case 10: return "jamo"
@@ -68,43 +71,17 @@ export function headFormatToNumFmt(code: number): NumFmt {
   }
 }
 
-/** HWP 표 134 (자동번호/쪽번호 모양 코드) → NumFmt */
+/** HWP 표 134 (자동번호/쪽번호/주석 번호 모양 코드) → NumFmt — 표 43 과 같은 코드표다(6·7 원 라틴, 8 가나다 … 13 한자 숫자).
+ *  종전 6=가나다·7=한글 숫자·8=한자 숫자는 두 칸씩 밀린 표였다(변환기가 한/글 저장 HWPX 와 맞춘 NUM_FORMATS 와 같은 차례) */
 export function shapeFormatToNumFmt(code: number): NumFmt {
-  switch (code) {
-    case 1: return "circled"
-    case 2: return "romanUpper"
-    case 3: return "romanLower"
-    case 4: return "latinUpper"
-    case 5: return "latinLower"
-    case 6: return "ganada"
-    case 7: return "hangulNum"
-    case 8: return "hanjaNum"
-    default: return "digit"
-  }
+  return headFormatToNumFmt(code)
 }
 
-const CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
-const GANADA = "가나다라마바사아자차카타파하"
-const CIRCLED_GANADA = "㉮㉯㉰㉱㉲㉳㉴㉵㉶㉷㉸㉹㉺㉻"
 const JAMO = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ"
 const CIRCLED_JAMO = "㉠㉡㉢㉣㉤㉥㉦㉧㉨㉩㉪㉫㉬㉭"
 
 function fromTable(n: number, table: string): string {
   return n >= 1 && n <= table.length ? table[n - 1] : String(n)
-}
-
-function formatRoman(n: number, upper: boolean): string {
-  if (n <= 0 || n > 3999) return String(n)
-  const values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
-  const symbols = upper
-    ? ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
-    : ["m", "cm", "d", "cd", "c", "xc", "l", "xl", "x", "ix", "v", "iv", "i"]
-  let result = ""
-  let num = n
-  for (let i = 0; i < values.length; i++) {
-    while (num >= values[i]) { result += symbols[i]; num -= values[i] }
-  }
-  return result
 }
 
 function formatLatin(n: number, upper: boolean): string {
@@ -143,18 +120,20 @@ const HANGUL_UNITS = ["", "십", "백", "천", "만"]
 const HANJA_DIGITS = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
 const HANJA_UNITS = ["", "十", "百", "千", "萬"]
 
-/** 번호 → 문자열 (rhwp format_number 포팅) */
+/** 번호 → 문자열 (rhwp format_number 포팅 — 시퀀스 폴백은 shared/numbering 정본 규칙) */
 export function formatNumber(n: number, fmt: NumFmt): string {
   switch (fmt) {
-    case "circled": return fromTable(n, CIRCLED_DIGITS)
-    case "romanUpper": return formatRoman(n, true)
-    case "romanLower": return formatRoman(n, false)
+    case "circled": return n >= 1 ? circledNumber(n - 1) : String(n)
+    case "romanUpper": return romanNumeral(n, true)
+    case "romanLower": return romanNumeral(n, false)
     case "latinUpper": return formatLatin(n, true) || String(n)
     case "latinLower": return formatLatin(n, false) || String(n)
-    case "ganada": return fromTable(n, GANADA)
-    case "circledGanada": return fromTable(n, CIRCLED_GANADA)
+    case "ganada": return n >= 1 ? hangulOrdinal(n - 1) : String(n)
+    case "circledGanada": return n >= 1 ? circledHangul(n - 1) : String(n)
     case "jamo": return fromTable(n, JAMO)
     case "circledJamo": return fromTable(n, CIRCLED_JAMO)
+    case "circledLatinUpper": return n >= 1 && n <= 26 ? String.fromCodePoint(0x24b6 + n - 1) : formatLatin(n, true) || String(n)
+    case "circledLatinLower": return n >= 1 && n <= 26 ? String.fromCodePoint(0x24d0 + n - 1) : formatLatin(n, false) || String(n)
     case "hangulNum": return formatEastAsianNumber(n, HANGUL_DIGITS, HANGUL_UNITS, "영")
     case "hanjaNum": return formatEastAsianNumber(n, HANJA_DIGITS, HANJA_UNITS, "零")
     default: return String(n)
@@ -180,6 +159,12 @@ export function expandNumberingFormat(formatStr: string, counters: number[], num
       const num = counterVal > 0 ? start - 1 + counterVal : start
       result += formatNumber(num, headFormatToNumFmt(numbering.numberFormats[idx] ?? 0))
       i += 2
+      continue
+    }
+    // 레벨 숫자가 아닌 글자(공백·기호) 앞의 ^ 는 한컴이 그리지 않는다 — HWPX para-heading 과 같은 규칙
+    // ("^  □" → "□", 정책브리핑 156775690 한컴 PDF). 문자·숫자 앞은 근거가 없어 그대로 둔다
+    if (ch === "^" && !/[\p{L}\p{N}]/u.test(formatStr[i + 1] ?? "")) {
+      i++
       continue
     }
     result += ch

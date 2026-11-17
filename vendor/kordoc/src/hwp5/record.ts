@@ -1,7 +1,10 @@
 /** HWP 5.x 레코드 리더, UTF-16LE 텍스트 추출, 스트림 압축해제 */
 
+import type { ScriptKind } from "../script-tags.js"
 import { inflateRawSync, inflateSync } from "zlib"
 import { KordocError } from "../utils.js"
+import { TOC_LEADER } from "../toc-entry.js"
+import type { Edges } from "../table/layout-frames.js"
 
 // ─── 레코드 태그 상수 ────────────────────────────────
 
@@ -9,8 +12,13 @@ export const TAG_PARA_HEADER = 0x0042
 export const TAG_PARA_TEXT = 0x0043
 export const TAG_CHAR_SHAPE = 0x0044
 export const TAG_PARA_SHAPE = 0x0045
+/** 0x45의 스펙상 정체 — 본문 문단의 줄 조판 정보(HWPTAG_BEGIN+53). TAG_PARA_SHAPE는 역사적 오명 */
+export const TAG_PARA_LINE_SEG = 0x0045
 export const TAG_CTRL_HEADER = 0x0047
 export const TAG_LIST_HEADER = 0x0048
+/** 구역 끝 메모 목록 — 메모 번호 DWORD, 뒤 LIST_HEADER·문단이 메모 글 (#180) */
+export const TAG_MEMO_LIST = 0x005d
+export const TAG_FOOTNOTE_SHAPE = 0x004a           // HWPTAG_BEGIN + 58 — 구역 정의의 각주·미주 모양
 export const TAG_TABLE = 0x004d
 export const TAG_SHAPE_COMPONENT = 0x004c           // HWPTAG_BEGIN + 60
 export const TAG_SHAPE_COMPONENT_PICTURE = 0x0055   // HWPTAG_BEGIN + 69
@@ -20,6 +28,7 @@ export const TAG_EQEDIT = 0x0058
 
 // DocInfo 태그 (스타일 정보 해석용) — HWPTAG_BEGIN(0x0010) 기준
 export const TAG_ID_MAPPINGS = 0x0011      // HWPTAG_BEGIN + 1
+export const TAG_BORDER_FILL = 0x0014      // HWPTAG_BEGIN + 4
 export const TAG_BIN_DATA = 0x0012         // HWPTAG_BEGIN + 2
 export const TAG_FACE_NAME = 0x0013        // HWPTAG_BEGIN + 3
 export const TAG_DOC_CHAR_SHAPE = 0x0015   // HWPTAG_BEGIN + 5
@@ -34,19 +43,20 @@ export const TAG_DOC_STYLE = 0x001a        // HWPTAG_BEGIN + 10
 // inline:   4-9, 19-20             — 제어문자(2) + 확장(14) = 16바이트
 // extended: 1-3, 10-12, 14-18, 21-23 — 제어문자(2) + 확장(14) = 16바이트
 const CHAR_LINE = 0x0000        // char: 줄바꿈
-const CHAR_SECTION_BREAK = 0x000a  // extended: 구역/단 정의 (14바이트 확장 데이터)
+const CHAR_SECTION_BREAK = 0x000a  // char: 강제 줄 나눔(line break, 2바이트). 구역/단 정의는 코드2(extended)라 혼동 주의
 const CHAR_PARA = 0x000d        // char: 문단 끝
 const CHAR_TAB = 0x0009         // inline: 탭
-const CHAR_HYPHEN = 0x001e      // char: 하이픈
-const CHAR_NBSP = 0x001f        // char: 비분리 공백
-const CHAR_FIXED_NBSP = 0x0018  // char: 고정 비분리 공백
-const CHAR_FIXED_WIDTH = 0x0019 // char: 고정폭 공백
+const CHAR_HYPHEN = 0x0018      // char: 하이픈 (스펙 코드 24 — pyhwp HYPHEN, hwp3 SIMPLE_CTRL 24/25와 동일)
+const CHAR_NBSP = 0x001e        // char: 묶음 빈칸(비분리 공백, 스펙 코드 30 — pyhwp NONBREAK_SPACE)
+const CHAR_FIXED_WIDTH = 0x001f // char: 고정폭 빈칸 (스펙 코드 31 — pyhwp FIXWIDTH_SPACE). 25~29(0x19~0x1d)는 예약
 
 // FileHeader 플래그
 export const FLAG_COMPRESSED = 1 << 0
 export const FLAG_ENCRYPTED = 1 << 1
 export const FLAG_DISTRIBUTION = 1 << 2
 export const FLAG_DRM = 1 << 4
+/** 변경 내용 추적 문서 — 한컴은 이 비트가 서 있으면 BodyText(지금 내용)가 아니라 ViewText(지운 글까지 표시한 사본)를 그린다 */
+export const FLAG_TRACK_CHANGES = 1 << 14
 
 // ─── 레코드 구조 ─────────────────────────────────────
 
@@ -194,6 +204,8 @@ export interface HwpDocInfo {
   numberings: HwpNumbering[]
   /** BULLET 정의 (1-based bulletId → bullets[id-1]) */
   bullets: HwpBullet[]
+  /** BORDER_FILL 의 보이는 변 (1-based borderFillId → borderEdges[id-1]) — 보이지 않는 틀 표 풀기 (v4.17.0) */
+  borderEdges: Edges[]
 }
 
 /** length-prefixed UTF-16LE 문자열 읽기 (HWP WCHAR 배열) */
@@ -206,6 +218,13 @@ function readHwpString(data: Buffer, offset: number): { value: string; next: num
   return { value: data.subarray(start, end).toString("utf16le"), next: end }
 }
 
+/** FILETIME(1601년부터 100ns) → 한글처럼 지역 시각에 Z 를 붙인 꼴 (메모 만든 시각 — HWPX CreateDateTime 과 같은 꼴) */
+export function fileTimeText(low: number, high: number): string {
+  const d = new Date(Number((BigInt(high) * 2n ** 32n + BigInt(low)) / 10000n) - 11644473600000)
+  const p2 = (n: number): string => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}Z`
+}
+
 /** DocInfo 레코드들에서 스타일 정보 추출 */
 export function parseDocInfo(records: HwpRecord[]): HwpDocInfo {
   const charShapes: HwpCharShape[] = []
@@ -214,8 +233,19 @@ export function parseDocInfo(records: HwpRecord[]): HwpDocInfo {
   const binData: HwpBinDataItem[] = []
   const numberings: HwpNumbering[] = []
   const bullets: HwpBullet[] = []
+  const borderEdges: Edges[] = []
 
   for (const rec of records) {
+    // BORDER_FILL — 속성 u16@0 · 변 4개(왼/오/위/아래) @2+6k = 종류 u8(0 없음) · 굵기 u8 · COLORREF u32 (render/hwp5-scene 과 같은 해독).
+    // 흰 선(0xFFFFFF)은 흰 바탕에 안 보인다
+    if (rec.tagId === TAG_BORDER_FILL) {
+      const seen = (k: number): boolean => {
+        const o = 2 + 6 * k
+        return rec.data.length >= o + 6 && rec.data[o] !== 0 && (rec.data.readUInt32LE(o + 2) & 0xffffff) !== 0xffffff
+      }
+      borderEdges.push({ l: seen(0), r: seen(1), t: seen(2), b: seen(3) })
+    }
+
     // PARA_SHAPE — 문단 모양 (rhwp doc_info.rs parse_para_shape)
     // attr1(u32@0) 비트 팩: bits 23-24 = 머리 종류, bits 25-27 = 문단 수준
     // numberingId: u16@30 (attr1 4 + 여백/간격 i32*6 = 24 + tabDefId 2 → offset 30)
@@ -343,7 +373,7 @@ export function parseDocInfo(records: HwpRecord[]): HwpDocInfo {
     }
   }
 
-  return { charShapes, paraShapes, styles, binData, numberings, bullets }
+  return { charShapes, paraShapes, styles, binData, numberings, bullets, borderEdges }
 }
 
 // ─── UTF-16LE 텍스트 추출 (21가지 제어문자 처리) ─────
@@ -374,6 +404,36 @@ export interface ParaTextState {
   ctrlIdx: number
   fieldStack: Array<{ start: number; ctrlIdx: number }>
   fieldRanges: HwpFieldRange[]
+  /** 레코드 끝 상위 서로게이트 반쪽과 □ 로 낸 자리 — 다음 레코드 첫 하위 반쪽과 한 글자로 되돌린다 */
+  loneHigh?: number
+  loneHighAt?: number
+  /** 리터럴 "$"·"<" 를 LITERAL_DOLLAR_MARK·LITERAL_LT_MARK 한 글자로 — 본문 파서만 켠다. 필드 범위가 글자 위치라
+   *  두 글자 "\$" 를 바로 넣지 않고, 필드 처리 뒤 본문 파서가 "\$" 로 바꾼다(escapeLiteralDollar 규약) */
+  dollarMark?: boolean
+  /** 채움 탭을 TOC_LEADER 표지로 — 본문 파서만 켜고 문단 글을 다 모은 뒤 takeTocLeaders 로 보통 탭이 된다 */
+  tocLeaders?: boolean
+  /** 글자 위치(문단 WCHAR 순번)의 첨자 종류 — 문단 글자 모양(PARA_CHAR_SHAPE) 위치표로 본문 파서가 채운다.
+   *  있으면 첨자 글자를 <sup>·<sub> 로 감싼다(제어 문자·개체 자리에서는 닫는다) */
+  scriptAt?: (pos: number) => ScriptKind | null
+  /** 지금 열린 첨자 태그 */
+  script?: ScriptKind | null
+  /** 글자 위치(문단 WCHAR 순번)의 강조 키(굵게·기울임·취소선·밑줄 비트) — 있으면 보이는 글자마다 키가 바뀌는 자리를
+   *  emphRuns 에 [state.text 위치, 키] 로 적는다(본문 파서가 인라인 강조 span 을 만든다) */
+  emphAt?: (pos: number) => number
+  emphRuns?: Array<[number, number]>
+  /** 앞 PARA_TEXT 레코드까지의 WCHAR 수 — 글자 모양 위치는 문단 전체 기준 */
+  wpos?: number
+}
+
+/** 리터럴 "$" 표지 (dollarMark) — 유니코드 비문자라 문서 글에 나오지 않는다 */
+export const LITERAL_DOLLAR_MARK = "\uFDD0"
+/** 리터럴 "<" 표지 (dollarMark 와 함께) — 첨자 태그(scriptAt)와 원문 글자 "<sub>" 를 가른다 (#122, escapeLiteralTags) */
+export const LITERAL_LT_MARK = "\uFDD1"
+const LITERAL_LT_TAG = /\uFDD1(?=\/?(?:u|sup|sub)>)/g
+
+/** 필드 처리 뒤 리터럴 "<" 표지를 글로 — 태그 모양("<sub>"·"</sup>"·"<u>")이면 \<, 아니면 < (escapeLiteralTags 규약) */
+export function resolveLiteralLt(text: string): string {
+  return text.includes(LITERAL_LT_MARK) ? text.replace(LITERAL_LT_TAG, "\\<").replaceAll(LITERAL_LT_MARK, "<") : text
 }
 
 export function createParaTextState(): ParaTextState {
@@ -398,6 +458,11 @@ function ctrlIdToDiskAscii(id: number): string {
   return String.fromCharCode(id & 0xff, (id >>> 8) & 0xff, (id >>> 16) & 0xff, (id >>> 24) & 0xff)
 }
 
+/** 한컴 PUA-A 접힘 영역 — HWP5 WCHAR 의 U+A000~U+A48C(이 글자 음절) ↔ U+F0000~U+F048C. 관찰 범위만 (v4.12.2) */
+const HANCOM_FOLDED_PUA_START = 0xa000
+const HANCOM_FOLDED_PUA_END = 0xa48c
+const HANCOM_FOLDED_PUA_SHIFT = 0xf0000 - 0xa000
+
 /** 확장 전용 컨트롤 문자 (CTRL_HEADER 자식 레코드 1개와 대응) — rhwp is_extended_only_ctrl_char */
 export function isExtendedOnlyCtrlChar(ch: number): boolean {
   return (ch >= 1 && ch <= 3) || (ch >= 11 && ch <= 12) || (ch >= 14 && ch <= 18) || (ch >= 21 && ch <= 23)
@@ -410,6 +475,24 @@ export function isExtendedOnlyCtrlChar(ch: number): boolean {
 export function appendParaText(state: ParaTextState, data: Buffer, resolveControl?: IndexedControlResolver): void {
   let result = ""
   let i = 0
+  const wbase = state.wpos ?? 0
+  // 첨자 태그 전환 — 보이는 글자 앞에서 그 자리 글자 모양대로 열고, 제어 문자 앞에서는 닫는다
+  const setScript = (want: ScriptKind | null): void => {
+    const cur = state.script ?? null
+    if (cur === want) return
+    if (cur) result += `</${cur}>`
+    if (want) result += `<${want}>`
+    state.script = want
+  }
+  // 앞 레코드 끝의 상위 반쪽(□ 로 냈다)과 이 레코드 첫 하위 반쪽은 한 글자 — 문단 글이 여러 레코드로 나뉜 자리
+  if (state.loneHighAt !== undefined) {
+    const lo = data.length >= 2 ? data.readUInt16LE(0) : 0
+    if (lo >= 0xdc00 && lo <= 0xdfff && state.loneHighAt === state.text.length - 1) {
+      state.text = state.text.slice(0, -1) + String.fromCharCode(state.loneHigh!, lo)
+      i = 2
+    }
+    state.loneHighAt = undefined
+  }
   // 필드 범위는 state.text 기준 인덱스로 기록
   const base = state.text.length
 
@@ -423,31 +506,44 @@ export function appendParaText(state: ParaTextState, data: Buffer, resolveContro
 
   while (i + 1 < data.length) {
     const ch = data.readUInt16LE(i)
+    // 첨자 태그는 강조 경계를 사이에 두고 닫고 연다 — 닫는 태그는 앞 강조 span, 여는 태그는 새 span 에 들어야 span 마다 태그 짝이
+    // 맞는다(종전엔 닫는 태그가 경계 뒤로 가 "확충<sup>*</sup> 및" 의 강조가 문단째 버려졌다)
+    const script = state.scriptAt ? (ch >= 0x0020 ? state.scriptAt(wbase + i / 2) : null) : undefined
+    if (script !== undefined && state.script && state.script !== script) setScript(null)
+    if (state.emphAt && ch >= 0x0020) {
+      const key = state.emphAt(wbase + i / 2), runs = (state.emphRuns ??= [])
+      if (runs.length === 0 || runs[runs.length - 1][1] !== key) runs.push([base + result.length, key])
+    }
+    if (script !== undefined) setScript(script)
     i += 2
 
     switch (ch) {
       // ── char 타입 (2바이트만, 확장 데이터 없음) ──
       case CHAR_LINE: result += "\n"; break
-      case CHAR_SECTION_BREAK: { // 구역/단 정의 또는 일부 inline control 래퍼
+      case CHAR_SECTION_BREAK: { // 강제 줄 나눔(char 2바이트). 단, 뒤에 0x000b 수식 래퍼가 오는 경우만 확장 처리
         // 일부 HWP5 문서는 수식 placeholder를 0x000a + 0x000b + ctrlId + payload + 0x000b로 저장한다.
         if (i + 16 <= data.length && data.readUInt16LE(i) === 0x000b) {
           resolveAt(i + 2, true)
           i += 16
           break
         }
+        // bare 0x000a = char 타입 줄바꿈(2바이트, 확장 데이터 없음) — 뒤 14바이트 소비 금지(줄마다 7글자 증발 버그).
         result += "\n"
-        if (i + 14 <= data.length) i += 14
         break
       }
       case CHAR_PARA: break  // 문단 끝
-      case CHAR_HYPHEN: result += "-"; break
-      case CHAR_NBSP: result += " "; break
-      case CHAR_FIXED_NBSP: result += "\u00a0"; break  // 진짜 NBSP
+      // 하이픈(24)은 한컴이 그리지 않는다 — 한컴 PDF·rhwp export-hwpx 모두 "60g/㎡"(licbyl2 17855137,
+      // 전 코퍼스 유일 출현). 실렌더가 진실이므로 방출하지 않는다 (v4.12.3, 종전 "-")
+      case CHAR_HYPHEN: break
+      case CHAR_NBSP: result += "\u00a0"; break  // 진짜 NBSP
       case CHAR_FIXED_WIDTH: result += " "; break  // 고정폭 공백
 
       // ── inline 타입 (2바이트 + 14바이트 확장) ──
+      // 확장 u16[7] 중 [2] 의 하위 바이트 = 채움 모양(0 없음·3 점선 …), 상위 = 탭 종류+1 (rhwp tab_extended 실측).
+      // 채움 탭도 보통 탭 — 채움선은 글이 아니고 뒤 글(목차 쪽 번호 등)은 남긴다 (HWPX section-walker "tab" 과 같은 정책)
+      // 본문 파서(tocLeaders)는 목차 항목 판정까지 채움 탭을 TOC_LEADER 표지로 받는다 (#121)
       case CHAR_TAB:
-        result += "\t"
+        result += state.tocLeaders && i + 6 <= data.length && (data.readUInt16LE(i + 4) & 0xff) !== 0 ? TOC_LEADER : "\t"
         if (i + 14 <= data.length) i += 14
         break
 
@@ -455,7 +551,7 @@ export function appendParaText(state: ParaTextState, data: Buffer, resolveContro
         if (ch >= 0x0001 && ch <= 0x001f) {
           // rhwp 기준 3-카테고리 분류:
           // extended(1-3, 11-12, 14-18, 21-23) + inline(4-9, 19-20) → 14바이트 스킵
-          // char(24-31) → 스킵 없음 (이미 switch에서 24,25,30,31 처리됨)
+          // char(24-31) → 스킵 없음 (24,30,31은 switch에서 처리, 25-29는 예약 — 출력 없이 통과)
           const isExtended = isExtendedOnlyCtrlChar(ch)
           const isInline = (ch >= 4 && ch <= 9) || (ch >= 19 && ch <= 20)
           if ((isExtended || isInline) && i + 14 <= data.length) {
@@ -473,6 +569,15 @@ export function appendParaText(state: ParaTextState, data: Buffer, resolveContro
             i += 14
           }
         } else if (ch >= 0x0020) {
+          // HWP5 문자는 2바이트 WCHAR 라 한컴 Supplementary PUA-A(U+F0000대) 기호를 담을 수 없다 —
+          // 한컴은 U+A000 + (code − 0xF0000) 으로 접어 저장한다(이 글자 음절 블록, 한국어 문서에는
+          // 안 나온다). 결재란 "(인)"(F012B)이 A12B 로 들어 있는 법령 별지서식 실측 — rhwp export-hwpx
+          // 도 같은 자리를 F012B→"(인)" 으로 복원한다. 펴서 mapPuaText(pua.ts) 표에 넘기고, 매핑 없는
+          // 코드는 종전 PUA-A 정책(sanitizeText 제거)을 따른다 (v4.12.2)
+          if (ch >= HANCOM_FOLDED_PUA_START && ch <= HANCOM_FOLDED_PUA_END) {
+            result += String.fromCodePoint(ch + HANCOM_FOLDED_PUA_SHIFT)
+            break
+          }
           // UTF-16 surrogate pair 처리 (BMP 외 문자: 이모지, CJK 확장 등)
           if (ch >= 0xd800 && ch <= 0xdbff && i + 1 < data.length) {
             const lo = data.readUInt16LE(i)
@@ -483,12 +588,22 @@ export function appendParaText(state: ParaTextState, data: Buffer, resolveContro
               break
             }
           }
-          result += String.fromCharCode(ch)
+          // 짝 없는 서로게이트 반쪽 — 한글은 같은 자리를 □ 로 보여 주고 HWPX 로 저장할 때도 □ 를 쓴다. 반쪽을 그대로 내면
+          // JSON 에 \udfda 로 남고 UTF-8 로 쓰면 U+FFFD 가 된다 (rhwp cff474c8d #6873, 한글 HWPX 정본 대조). 레코드 끝의 상위 반쪽은
+          // 자리를 남겨 다음 PARA_TEXT 레코드가 하위 반쪽으로 시작하면 한 글자로 되돌린다
+          if (ch >= 0xd800 && ch <= 0xdfff) {
+            result += "\u25a1"
+            if (ch <= 0xdbff && i >= data.length) { state.loneHigh = ch; state.loneHighAt = base + result.length - 1 }
+            break
+          }
+          result += !state.dollarMark ? String.fromCharCode(ch) : ch === 0x24 ? LITERAL_DOLLAR_MARK : ch === 0x3c ? LITERAL_LT_MARK : String.fromCharCode(ch)
         }
         break
     }
   }
 
+  if (state.scriptAt) setScript(null)
+  state.wpos = wbase + Math.floor(data.length / 2)
   state.text += result
 }
 

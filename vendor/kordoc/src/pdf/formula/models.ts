@@ -16,6 +16,8 @@ import { homedir } from "os"
 import { join, dirname } from "path"
 import { pipeline } from "stream/promises"
 import { Readable } from "stream"
+import { assertNetworkAllowed } from "../../shared/offline.js"
+import { cleanupModelDownloadPartials, modelDownloadPartialPath } from "./model-partials.js"
 
 export interface ModelSpec {
   name: string
@@ -23,6 +25,8 @@ export interface ModelSpec {
   url: string
   sha256: string
   sizeMb: number
+  /** 폐쇄망 차단 안내 — 없으면 models --export/--import 안내 */
+  offlineHint?: string
 }
 
 /** 모델 스펙 (SHA-256 은 실제 다운로드로 검증됨 — 변경 금지) */
@@ -66,15 +70,20 @@ export const ALL_FORMULA_MODELS: ReadonlyArray<ModelSpec> = [
 ]
 
 /**
- * 환경 변수 `KORDOC_MODEL_CACHE` 가 설정되면 해당 경로를 우선 사용.
- * 없으면 `~/.cache/kordoc/models/pix2text/`.
+ * 모델 캐시 하위 디렉토리 경로. 환경 변수 `KORDOC_MODEL_CACHE` 가 설정되면
+ * 해당 경로를 우선 사용, 없으면 `~/.cache/kordoc/models/<subdir>/`.
+ * (수식 OCR 외 텍스트 OCR 등 다른 모델군도 공용 — subdir 로 격리)
  */
-export function getFormulaModelsDir(): string {
+export function getModelsDir(subdir: string): string {
   const override = process.env.KORDOC_MODEL_CACHE
   if (override && override.trim()) {
-    return join(override, "pix2text")
+    return join(override, subdir)
   }
-  return join(homedir(), ".cache", "kordoc", "models", "pix2text")
+  return join(homedir(), ".cache", "kordoc", "models", subdir)
+}
+
+export function getFormulaModelsDir(): string {
+  return getModelsDir("pix2text")
 }
 
 export interface ModelStatus {
@@ -87,11 +96,10 @@ export interface ModelStatus {
   invalidReason?: string
 }
 
-/** 모든 수식 모델의 존재/유효성 상태 반환 (다운로드 없이 확인만) */
-export async function getFormulaModelStatus(): Promise<ModelStatus[]> {
-  const dir = getFormulaModelsDir()
+/** 지정 모델군의 존재/유효성 상태 반환 (다운로드 없이 확인만) */
+export async function getModelStatusIn(dir: string, specs: ReadonlyArray<ModelSpec>): Promise<ModelStatus[]> {
   const result: ModelStatus[] = []
-  for (const spec of ALL_FORMULA_MODELS) {
+  for (const spec of specs) {
     const localPath = join(dir, spec.filename)
     let exists = false
     try {
@@ -130,6 +138,11 @@ export async function getFormulaModelStatus(): Promise<ModelStatus[]> {
   return result
 }
 
+/** 모든 수식 모델의 존재/유효성 상태 반환 (다운로드 없이 확인만) */
+export async function getFormulaModelStatus(): Promise<ModelStatus[]> {
+  return getModelStatusIn(getFormulaModelsDir(), ALL_FORMULA_MODELS)
+}
+
 export interface DownloadProgress {
   spec: ModelSpec
   /** 현재까지 다운로드한 바이트 */
@@ -144,16 +157,16 @@ export interface DownloadProgress {
 export type ProgressHandler = (p: DownloadProgress) => void
 
 /**
- * 필요한 모든 수식 모델을 다운로드/검증한다.
+ * 지정 모델군을 다운로드/검증한다.
  * - 이미 있고 SHA 일치 → skip
  * - 없음 → 다운로드 후 SHA 검증. 실패 시 파일 삭제.
  */
-export async function ensureFormulaModels(onProgress?: ProgressHandler): Promise<void> {
-  const dir = getFormulaModelsDir()
+export async function ensureModelsIn(dir: string, specs: ReadonlyArray<ModelSpec>, onProgress?: ProgressHandler): Promise<void> {
   await mkdir(dir, { recursive: true })
 
-  for (const spec of ALL_FORMULA_MODELS) {
+  for (const spec of specs) {
     const localPath = join(dir, spec.filename)
+    await cleanupModelDownloadPartials(localPath)
 
     if (await isExistingValid(localPath, spec.sha256)) {
       onProgress?.({
@@ -166,15 +179,15 @@ export async function ensureFormulaModels(onProgress?: ProgressHandler): Promise
       continue
     }
 
-    // 기존 파일 있지만 SHA 불일치 → 삭제
-    try {
-      await unlink(localPath)
-    } catch {
-      // 없을 수 있음
-    }
-
+    // Keep the destination until atomic replacement; another process may have
+    // finished a valid download since our initial check.
     await downloadToFile(spec, localPath, onProgress)
   }
+}
+
+/** 필요한 모든 수식 모델을 다운로드/검증한다. */
+export async function ensureFormulaModels(onProgress?: ProgressHandler): Promise<void> {
+  return ensureModelsIn(getFormulaModelsDir(), ALL_FORMULA_MODELS, onProgress)
 }
 
 /** 단일 모델만 확인/다운로드 (진단 UI 에서 개별 상태 새로고침용) */
@@ -182,13 +195,11 @@ export async function ensureSingleModel(spec: ModelSpec, onProgress?: ProgressHa
   const dir = getFormulaModelsDir()
   await mkdir(dir, { recursive: true })
   const localPath = join(dir, spec.filename)
+  await cleanupModelDownloadPartials(localPath)
   if (await isExistingValid(localPath, spec.sha256)) {
     onProgress?.({ spec, downloaded: 0, total: null, phase: "skip" })
     return
   }
-  try {
-    await unlink(localPath)
-  } catch {}
   await downloadToFile(spec, localPath, onProgress)
 }
 
@@ -212,80 +223,88 @@ async function downloadToFile(
   localPath: string,
   onProgress?: ProgressHandler,
 ): Promise<void> {
+  // 폐쇄망 모드에서는 요청 자체를 보내지 않는다 (사이드로드 안내로 대체)
+  assertNetworkAllowed(
+    `${spec.name} 모델 다운로드`,
+    spec.offlineHint ?? "온라인 PC에서 `kordoc models --export <디렉토리>` 로 내보낸 뒤 이 PC에서 `kordoc models --import <디렉토리>` 하거나, KORDOC_MODEL_CACHE 로 모델 캐시 경로를 지정하세요",
+  )
+
   // 먼저 .part 로 받고 검증 후 rename — 중단된 다운로드가 "정상 파일"로 오인되는 걸 방지
-  const partPath = `${localPath}.part`
+  // Batch workers may download the same missing model concurrently. Never share
+  // a partial file: only a fully verified download is atomically published.
+  const partPath = modelDownloadPartialPath(localPath)
   await mkdir(dirname(localPath), { recursive: true })
 
-  const resp = await fetch(spec.url, {
-    headers: {
-      // HF CDN 은 UA 없으면 가끔 403 을 뱉는다
-      "User-Agent": "kordoc-formula-ocr/1.0 (+https://github.com/chrisryugj/kordoc)",
-    },
-  })
-  if (!resp.ok || !resp.body) {
-    throw new Error(
-      `${spec.name} 다운로드 실패: HTTP ${resp.status} ${resp.statusText} (${spec.url})`,
-    )
-  }
-
-  const lenHeader = resp.headers.get("content-length")
-  const total = lenHeader ? Number.parseInt(lenHeader, 10) : null
-  let downloaded = 0
-
-  const ws = createWriteStream(partPath)
   try {
-    const reader = Readable.fromWeb(resp.body as unknown as import("stream/web").ReadableStream)
-    reader.on("data", (chunk: Buffer | Uint8Array) => {
-      downloaded += chunk.length
-      onProgress?.({
-        spec,
-        downloaded,
-        total,
-        phase: "download",
-      })
+    const resp = await fetch(spec.url, {
+      headers: {
+        // HF CDN 은 UA 없으면 가끔 403 을 뱉는다
+        "User-Agent": "kordoc-formula-ocr/1.0 (+https://github.com/chrisryugj/kordoc)",
+      },
     })
-    await pipeline(reader, ws)
-  } catch (e) {
+    if (!resp.ok || !resp.body) {
+      throw new Error(
+        `${spec.name} 다운로드 실패: HTTP ${resp.status} ${resp.statusText} (${spec.url})`,
+      )
+    }
+
+    const lenHeader = resp.headers.get("content-length")
+    const total = lenHeader ? Number.parseInt(lenHeader, 10) : null
+    let downloaded = 0
+
+    // 크기 상한 — SHA-256 은 다 받은 뒤 검증하므로, 받는 동안 응답이 끝없이 이어지면 디스크가 찬다
+    const maxBytes = Math.max(spec.sizeMb * 1.5, spec.sizeMb + 8) * 1024 * 1024
+    const ws = createWriteStream(partPath)
     try {
-      await unlink(partPath)
-    } catch {}
-    throw new Error(`${spec.name} 스트리밍 실패: ${(e as Error).message}`)
-  }
+      const reader = Readable.fromWeb(resp.body as unknown as import("stream/web").ReadableStream)
+      reader.on("data", (chunk: Buffer | Uint8Array) => {
+        downloaded += chunk.length
+        if (downloaded > maxBytes) reader.destroy(new Error(`응답이 예상 크기(${spec.sizeMb}MB)를 크게 넘습니다`))
+        onProgress?.({
+          spec,
+          downloaded,
+          total,
+          phase: "download",
+        })
+      })
+      await pipeline(reader, ws)
+    } catch (e) {
+      throw new Error(`${spec.name} 스트리밍 실패: ${(e as Error).message}`)
+    }
 
-  onProgress?.({
-    spec,
-    downloaded,
-    total,
-    phase: "verify",
-  })
+    onProgress?.({
+      spec,
+      downloaded,
+      total,
+      phase: "verify",
+    })
 
-  // SHA 검증
-  let actual: string
-  try {
-    actual = await sha256OfFile(partPath)
-  } catch (e) {
+    // SHA 검증
+    let actual: string
     try {
-      await unlink(partPath)
-    } catch {}
-    throw new Error(`${spec.name} SHA 계산 실패: ${(e as Error).message}`)
-  }
+      actual = await sha256OfFile(partPath)
+    } catch (e) {
+      throw new Error(`${spec.name} SHA 계산 실패: ${(e as Error).message}`)
+    }
 
-  if (actual !== spec.sha256) {
-    try {
-      await unlink(partPath)
-    } catch {}
-    throw new Error(
-      `${spec.name} SHA256 mismatch: expected ${spec.sha256}, got ${actual} — 모델 URL 이 오염되었거나 전송 중 손상되었습니다.`,
-    )
-  }
+    if (actual !== spec.sha256) {
+      throw new Error(
+        `${spec.name} SHA256 mismatch: expected ${spec.sha256}, got ${actual} — 모델 URL 이 오염되었거나 전송 중 손상되었습니다.`,
+      )
+    }
 
-  await rename(partPath, localPath)
-  onProgress?.({
-    spec,
-    downloaded,
-    total,
-    phase: "done",
-  })
+    await rename(partPath, localPath)
+    onProgress?.({
+      spec,
+      downloaded,
+      total,
+      phase: "done",
+    })
+  } finally {
+    // Successful rename already removed this path. Process termination bypasses
+    // finally; the next ensure call reclaims it only after proving the owner dead.
+    try { await unlink(partPath) } catch { /* Preserve the original outcome. */ }
+  }
 }
 
 async function sha256OfFile(p: string): Promise<string> {

@@ -1,7 +1,8 @@
 {
   "name": "kordoc",
-  "version": "3.4.1",
-  "description": "Parse Korean documents (HWP3, HWP, HWPX, HWPML, PDF, XLS, XLSX, DOCX) to Markdown + Print Renderer",
+  "mcpName": "io.github.chrisryugj/kordoc",
+  "version": "4.24.83",
+  "description": "Parse Korean documents (HWP3-5, HWPX, HWPML, PDF, XLS(X), DOCX) to Markdown — CLI + MCP server with lossless patch/roundtrip, form-filler, document diff, print & layout-preserving SVG renderer",
   "type": "module",
   "exports": {
     ".": {
@@ -18,13 +19,22 @@
     "kordoc-mcp": "./dist/mcp.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "templates",
+    "NOTICE",
+    "THIRD_PARTY"
   ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "node --import tsx --test tests/*.test.ts",
-    "prepublishOnly": "npm run test && npm run build"
+    "typecheck": "tsc --noEmit",
+    "bench:gate": "node bench/verify-pages.mjs --gate && node bench/score.mjs && node bench/roundtrip.mjs --gate && node bench/pdf-table-gt.mjs --gate --no-ocr && node bench/pdf-text-gt.mjs --gate && node bench/annex-gt.mjs --gate && node bench/formats-sweep.mjs --gate && node bench/fuzz-sweep.mjs --gate && node bench/verify-reflow.mjs --gate && node bench/redact-bench.mjs --gate && node bench/ocr-accuracy.mjs --gate && node bench/hwp2hwpx.mjs --gate",
+    "bench:visual": "node bench/visual/verify-visual.mjs --gate",
+    "sync-meta": "node scripts/sync-meta.mjs",
+    "license:check": "node scripts/check-licenses.mjs",
+    "sbom": "npm sbom --sbom-format cyclonedx --omit dev --sbom-type library > sbom.cdx.json",
+    "prepublishOnly": "node scripts/sync-meta.mjs --check && node scripts/check-notices.mjs && node scripts/check-licenses.mjs && npm audit --audit-level=low && npm run typecheck && npm run test && npm run build && node bench/gate-if-corpus.mjs"
   },
   "keywords": [
     "hwp",
@@ -41,10 +51,15 @@
     "docx",
     "markdown",
     "converter",
+    "ocr",
     "mcp",
     "model-context-protocol",
     "print",
-    "puppeteer"
+    "puppeteer",
+    "hwp-to-markdown",
+    "pdf-to-markdown",
+    "rag",
+    "mcp-server"
   ],
   "author": "chrisryugj",
   "license": "MIT",
@@ -53,23 +68,26 @@
     "url": "https://github.com/chrisryugj/kordoc.git"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.28.0",
-    "@xmldom/xmldom": "^0.9.8",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "cfb": "1.2.2",
     "commander": "^13.0.0",
     "jszip": "^3.10.1",
-    "markdown-it": "^14.1.1",
-    "zod": "^3.23.0"
+    "markdown-it": "^14.3.3",
+    "zod": "^4.6.7"
   },
   "peerDependencies": {
-    "pdfjs-dist": ">=4.0.0",
+    "@rhwp/core": ">=0.9.0",
+    "libheif-js": "^1.23.5",
     "puppeteer-core": ">=22.0.0"
   },
   "peerDependenciesMeta": {
-    "pdfjs-dist": {
+    "@rhwp/core": {
+      "optional": true
+    },
+    "libheif-js": {
       "optional": true
     },
     "puppeteer-core": {
@@ -77,20 +95,29 @@
     }
   },
   "optionalDependencies": {
-    "@huggingface/transformers": "^4.1.0",
+    "@huggingface/tokenizers": "^0.2.0",
     "@hyzyla/pdfium": "^2.1.0",
     "onnxruntime-node": "^1.24.0",
-    "sharp": "^0.34.0"
+    "sharp": "^0.35.5",
+    "zxing-wasm": "^3.1.6"
+  },
+  "overrides": {
+    "adm-zip": "^0.6.1",
+    "sharp": "^0.35.5",
+    "esbuild": "^0.28.1",
+    "global-agent": "^4.1.3"
   },
   "devDependencies": {
-    "@huggingface/transformers": "^4.1.0",
+    "@huggingface/tokenizers": "^0.2.0",
     "@hyzyla/pdfium": "^2.1.0",
+    "@rhwp/core": "^0.9.0",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^18.19.130",
+    "libheif-js": "^1.23.5",
     "onnxruntime-node": "^1.24.0",
     "pdfjs-dist": "^4.10.38",
-    "puppeteer-core": "^24.42.0",
-    "sharp": "^0.34.0",
+    "puppeteer-core": "^25.16.0",
+    "sharp": "^0.35.5",
     "tsup": "^8.4.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.0"

@@ -6,6 +6,10 @@
  * 3) 빈 그룹 반복 제거 (^{} _{} \hat{} \bar{} \vec{} 등)
  * 4) \cmd 뒤 영문자 공백 분리 (\cdotd → \cdot d, \timesd → \times d)
  * 5) isTrivialFormula — 다이어그램 단일 글자/반복/장식 오탐 제거
+ * 6) 짝 없는 \left·\right 제거 (Pix2Text fix_latex) — 남으면 KaTeX 등이 수식 전체를 못 그린다
+ * 7) 막대 둘 노름 ||x|| → \|x\|
+ * 8) 기울인 대문자 그리스 \varSigma → \Sigma
+ * 9) 수식 모드에서 무효인 본문 명령 — \mathrm{\boldmath~P~} → \mathbf{P}, 식 끝 마침표 \. → .
  */
 
 const TRAILING_WHITESPACE_CMDS = [
@@ -28,12 +32,85 @@ export function postProcessLatex(latex: string): string {
     if (next === s) break
     s = next
   }
+  s = stripUnpairedLeftRight(s)
   s = fixLatexSpacing(s)
   s = normalizeFormulaSpacing(s)
+  // 디코더 원문은 토큰 사이가 띄어져 있다("| | a | |") — 공백을 정리한 뒤에
+  s = doubleBarNorms(s)
   s = s.trim()
+  // 길이 한도에서 잘린 인식 결과는 홑 역슬래시로 끝나기도 한다(…\tau} 뒤에 \ 하나) — 감싼 "$$" 의 "$" 를 이스케이프해 수식 스팬이
+  // 닫히지 않고 식 전체가 마크다운 이스케이프됐다(U_{h} 가 U\_{h}). 짝 없는 끝 역슬래시는 LaTeX 로도 무효라 뗀다
+  if ((s.match(/\\+$/)?.[0].length ?? 0) % 2) s = s.slice(0, -1).trimEnd()
   // trivial 이면 빈 문자열 반환 — 상위(pipeline/parser) 에서 latex.trim() 비었을 때 skip.
   if (isTrivialFormula(s)) return ""
-  return s
+  // 표기 정규화는 쓰레기 판정 뒤에 — 판정 앞에서 `\varSigma`→`\Sigma` 로 맞추면 오독 줄 "\frac{2Kt^{2}\varSigma}{2Kt^{2}\Sigma}" 의
+  // 분자·분모가 같아져 반복 쓰레기로 걸려 여러 줄 식 전체가 사라졌다(2609.13201 (81)식)
+  return textModeCommands(uprightCapitalGreek(s))
+}
+
+/**
+ * 노름 이중 막대 — 인식기는 `\|x\|` 를 막대 둘 `||x||` 로도 낸다(수식 정답지 30번). 안에 막대가 없는 `||…||` 짝만 `\|…\|` 로 —
+ * 절댓값 곱 `|a||b|` 는 `||` 가 하나뿐이라 그대로
+ */
+export function doubleBarNorms(s: string): string {
+  return s.replace(/(?<![\\|])\|\|([^|]+?)(?<!\\)\|\|(?!\|)/g, "\\|$1\\|")
+    // 여는 노름을 막대 하나 + 가는 공백 `|\,` 로 읽고 닫는 쪽만 `\|` 로 읽기도 한다(`\sup_{n}|\,g_{n}\|_{\infty}`) — 사이에 다른 막대 없이
+    // `\|` 로 닫히는 `|\,` 만 노름으로(수식 정답지 5짝 상승·하락 0). `\left\|\,` 의 막대는 이미 노름이라 건드리지 않는다
+    .replace(/(?<!\\)\|\\,((?:(?!\\\||\|).)*?)\\\|/g, "\\|$1\\|")
+}
+
+/**
+ * 대문자 그리스 문자는 바로 선 꼴이 LaTeX 기본이다 — 인식기는 `\Sigma`·`\Gamma` 를 기울인 꼴 `\varSigma`·`\varGamma` 로 내곤 한다
+ * (수식 정답지 2,314식에 기울인 대문자 0, 예측 43). 소문자 `\varepsilon`·`\varphi` 는 다른 글자라 그대로
+ */
+export function uprightCapitalGreek(s: string): string {
+  return s.replace(/\\var(Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega)(?![A-Za-z])/g, "\\$1")
+}
+
+/**
+ * 수식 모드에서 무효인 본문 명령 — 인식기는 굵은 글자를 `\mathrm{\boldmath~P~}` 로(본문용 굵게 전환을 로만 상자에), 식 끝 마침표를
+ * `\.`(본문용 점 악센트)로 내기도 한다. KaTeX 는 둘 다 못 그린다. 굵은 글자는 `\mathbf{P}`, 점 악센트 명령은 마침표로
+ */
+export function textModeCommands(s: string): string {
+  let out = ""
+  for (let i = 0; i < s.length;) {
+    const at = s.indexOf("\\mathrm{\\boldmath", i)
+    if (at < 0) { out += s.slice(i); break }
+    let depth = 0, j = at + "\\mathrm".length
+    for (; j < s.length; j++) {
+      if (s[j] === "\\") { j++; continue }
+      if (s[j] === "{") depth++
+      else if (s[j] === "}" && --depth === 0) break
+    }
+    if (j >= s.length) { out += s.slice(i); break }
+    const inner = s.slice(at + "\\mathrm{\\boldmath".length, j).replace(/^~+|~+$/g, "")
+    out += s.slice(i, at) + `\\mathbf{${inner}}`
+    i = j + 1
+  }
+  return out.replace(/(?<!\\)\\\.(?![A-Za-z])/g, ".")
+}
+
+/**
+ * 짝 없는 `\left`·`\right` 를 떼고 구분자만 남긴다 — `\left( a + b` → `( a + b`. 짝은 중첩 순서(스택)로 찾는다.
+ * `\leftarrow`·`\rightarrow` 는 명령이 다르므로 건드리지 않는다
+ */
+export function stripUnpairedLeftRight(s: string): string {
+  const open: number[] = []
+  const drop = new Set<number>()
+  for (const m of s.matchAll(/\\(left|right)(?![A-Za-z])/g)) {
+    if (m[1] === "left") open.push(m.index)
+    else if (open.length) open.pop()
+    else drop.add(m.index)
+  }
+  for (const i of open) drop.add(i)
+  if (drop.size === 0) return s
+  let out = ""
+  let at = 0
+  for (const i of [...drop].sort((a, b) => a - b)) {
+    out += s.slice(at, i)
+    at = i + (s.startsWith("\\left", i) ? 5 : 6)
+  }
+  return out + s.slice(at)
 }
 
 export function stripTrailingWhitespace(s: string): string {
@@ -152,6 +229,8 @@ const KNOWN_LATEX_CMDS: ReadonlySet<string> = new Set([
   "top", "bot", "angle", "vdash", "dashv",
   // 기타
   "left", "right", "big", "Big", "bigg", "Bigg",
+  // 크기 붙은 괄호·나머지 — 아는 접두(\Big·\pm) 뒤 한두 글자라 아래 분리 규칙에 걸린다
+  "bigl", "bigr", "Bigl", "Bigr", "biggl", "biggr", "Biggl", "Biggr", "pmod", "bmod",
 ])
 
 /**
@@ -193,6 +272,9 @@ export function fixLatexSpacing(s: string): string {
         }
       }
 
+      // 붙은 꼬리가 두 글자 넘으면 목록에 없는 정식 명령이다(\lesssim → \le sssim, \leqslant → \leq slant 가 되던 것 — arXiv 수식 정답 대조).
+      // MFR 이 공백을 빠뜨리는 자리는 변수 한두 글자다(\cdotd·\timesdx)
+      if (full.length - splitAt > 2) splitAt = full.length
       out += "\\" + full.slice(0, splitAt)
       if (splitAt < full.length) {
         out += " " + full.slice(splitAt)
@@ -260,7 +342,9 @@ export function isTrivialFormula(s: string): boolean {
   // 6) substring 반복 패턴 — 동일 5~15자 substring 이 3회 이상 + 커버리지 60%+
   //    (e.g. "\\alpha_{1}=\\alpha_{2}=\\alpha_{3}=..." 의 `\\alpha_{` 반복,
   //           "c_{c}^{\\prime}\\phi_{c}^{\\prime}=c_{c}^{\\prime}..." 의 `c_{c}^{\\prime}` 반복)
-  if (hasHighRepetition(t)) return true
+  //    첨자를 지운 뒤에도 되풀이가 남아야 한다 — 같은 첨자를 단 정상 식(`S=\sum_{\ell,m}S_{\ell,m}Y_{\ell,m}`)이 `_{\ell,m}`
+  //    되풀이로 버려졌다. 고리 쓰레기(`\alpha_{4}=\alpha_{4}=…`)는 첨자 밖 글까지 되풀이한다
+  if (hasHighRepetition(t) && hasHighRepetition(t.replace(/([_^])\{[^{}]*\}/g, "$1"))) return true
 
   // 7) MFR placeholder 인 `\square` 포함 — 인식 실패 영역을 `\square` 로 대체하는 특성
   //    정당한 수식에 `\square` 가 나오는 경우는 거의 없음 (대부분 `\Box`, `\blacksquare` 등 사용)
@@ -325,9 +409,9 @@ export function isTrivialFormula(s: string): boolean {
   //     — 포함만으로 trivial (e.g. `\mathtt{Welgnt}`, `\mathsf{Tr}_{s}`, `\texttt{wg}`)
   if (/\\(?:mathsf|mathtt|texttt)\{/.test(t)) return true
 
-  // 16) `\begin{aligned}` 이지만 `=` 없음 — 정당한 aligned 는 항상 등호 포함 (여러 줄 equation)
-  //     등호 없으면 OCR garbage 조합
-  if (/\\begin\{aligned\}/.test(t) && !t.includes("=")) return true
+  // 16) `\begin{aligned}` 이지만 관계 기호 없음 — 정당한 aligned 는 줄마다 관계(=·≤·≲·≈ …)로 이어진다 (여러 줄 equation)
+  //     관계 기호가 없으면 OCR garbage 조합. 등호만 보면 부등식 유도(`\leq`·`\lesssim` 로만 잇는 여러 줄 평가식)를 통째로 버렸다
+  if (/\\begin\{aligned\}/.test(t) && !/[=<>]|\\(?:leq?|geq?|leqslant|geqslant|lesssim|gtrsim|ll|gg|approx|sim|simeq|cong|equiv|neq?|propto|triangleq|implies|iff|Longleftrightarrow)(?![A-Za-z])/.test(t)) return true
 
   // 17) `\begin{matrix}` + `\downarrow` 2회+ — 네트워크 architecture 다이어그램 오인식
   if (/\\begin\{matrix\}/.test(t) && (t.match(/\\downarrow/g) ?? []).length >= 2) return true
@@ -462,3 +546,64 @@ export function normalizeFormulaSpacing(s: string): string {
 
   return out.join("")
 }
+
+/**
+ * 여러 줄 display 상자 안에 든 낮은 display 상자 — 검출기가 정렬식 전체와 그 안의 한 줄을 따로 잡으면(IoU 가 작아 NMS 를 지난다) 같은 줄이
+ * 큰 식 안에 한 번, 짝 없는 조각으로 또 한 번 나왔다(arXiv 2609.15723 p31 "+\frac{4L_f^2…}" 줄). 면적 85% 이상이 다른 display 상자 안이고
+ * 그 상자가 1.5 배 이상 높으면(여러 줄) 뺀다. 인식이 비어 버려진 상자 안의 것은 남긴다
+ */
+export function dropNestedDisplays<T extends { bbox: { x1: number; y1: number; x2: number; y2: number }; kind: string; latex: string }>(regions: T[]): T[] {
+  const display = regions.filter(r => r.kind === "display" && r.latex.trim())
+  const nested = (r: T) => display.some(o => {
+    if (o === r || o.bbox.y2 - o.bbox.y1 < (r.bbox.y2 - r.bbox.y1) * 1.5) return false
+    const w = Math.min(r.bbox.x2, o.bbox.x2) - Math.max(r.bbox.x1, o.bbox.x1)
+    const h = Math.min(r.bbox.y2, o.bbox.y2) - Math.max(r.bbox.y1, o.bbox.y1)
+    return w > 0 && h > 0 && w * h >= (r.bbox.x2 - r.bbox.x1) * (r.bbox.y2 - r.bbox.y1) * 0.85
+  })
+  return regions.filter(r => !(r.kind === "display" && r.latex.trim() && nested(r)))
+}
+
+/**
+ * 여러 줄 display 식의 이어지는 줄 — 검출기가 정렬식("A = …" 다음 줄 "≤ …", "+ …")을 줄마다 상자로 잡으면 줄마다 따로 인식돼
+ * 한 식이 조각으로 흩어졌다(arXiv 2609.15723: 놓친 식 48 중 47 이 여러 줄 식, 짝 없는 조각 90). 바로 위 display 상자와 세로로
+ * 붙고(틈이 두 상자 중 낮은 높이 이하) 가로로 겹치며(좁은 쪽 폭의 절반 이상) 관계·연산 기호로 시작하는 조각은 위 식의 다음 줄로
+ * 잇는다(aligned 줄바꿈). 기호로 시작하지 않는 줄과 "−" 로 시작하는 줄("−Ct² ≤ …" 따로 선 식, 2609.14837)은 그대로 둔다
+ */
+/** 바깥 \begin{aligned}…\end{aligned} 한 겹을 벗긴 식 (여러 줄 상자를 읽은 조각을 다른 식의 줄로 이을 때) */
+function unwrapAligned(latex: string): string {
+  const t = latex.trim()
+  const m = /^\\begin\{aligned\}([\s\S]*)\\end\{aligned\}$/.exec(t)
+  return m ? m[1].trim() : t
+}
+
+export function mergeContinuationLines<T extends { bbox: { x1: number; y1: number; x2: number; y2: number }; kind: string; latex: string }>(regions: T[]): T[] {
+  const CONT = /^\s*(?:=|<|>|\+|\\(?:leq?|geq?|leqslant|geqslant|approx|sim|simeq|equiv|cdot|times|neq?|lesssim|gtrsim|propto|qquad|quad)(?![A-Za-z]))/
+  const display = regions.filter(r => r.kind === "display" && r.latex.trim()).sort((a, b) => a.bbox.y1 - b.bbox.y1)
+  const drop = new Set<T>()
+  const merged = new Map<T, { bbox: T["bbox"]; lines: string[] }>()
+  let head: T | null = null
+  for (const r of display) {
+    const h = head ? merged.get(head)! : null
+    if (head && h) {
+      const gap = r.bbox.y1 - h.bbox.y2
+      const minH = Math.min(r.bbox.y2 - r.bbox.y1, head.bbox.y2 - head.bbox.y1)
+      const overlap = Math.min(r.bbox.x2, h.bbox.x2) - Math.max(r.bbox.x1, h.bbox.x1)
+      const narrow = Math.min(r.bbox.x2 - r.bbox.x1, h.bbox.x2 - h.bbox.x1)
+      if (gap >= -minH * 0.3 && gap <= minH && overlap >= narrow * 0.5 && CONT.test(unwrapAligned(r.latex).replace(/^[\s{&]+/, ""))) {
+        h.lines.push(unwrapAligned(r.latex))
+        h.bbox = { x1: Math.min(h.bbox.x1, r.bbox.x1), y1: h.bbox.y1, x2: Math.max(h.bbox.x2, r.bbox.x2), y2: Math.max(h.bbox.y2, r.bbox.y2) }
+        drop.add(r)
+        continue
+      }
+    }
+    head = r
+    merged.set(r, { bbox: { ...r.bbox }, lines: [unwrapAligned(r.latex)] })
+  }
+  if (!drop.size) return regions
+  return regions.filter(r => !drop.has(r)).map(r => {
+    const m = merged.get(r)
+    if (!m || m.lines.length < 2) return r
+    return { ...r, bbox: m.bbox, latex: `\\begin{aligned}${m.lines.join(" \\\\ ")}\\end{aligned}` }
+  })
+}
+

@@ -15,8 +15,25 @@ export interface CellContext {
 /** 블록 타입 — v2.0에서 heading, list, image, separator 추가 */
 export type IRBlockType = "paragraph" | "table" | "heading" | "list" | "image" | "separator"
 
+/** 인라인 강조 run-span — 문단 텍스트를 서식 단위로 쪼갠 조각 (텍스트 연결 = block.text) */
+export interface IRSpan {
+  text: string
+  bold?: boolean
+  italic?: boolean
+  strike?: boolean
+  /** 밑줄 — 개정문 추가·변경 표시 등. GFM 문법이 없어 <u>…</u> 인라인 HTML 로 방출 */
+  underline?: boolean
+  code?: boolean
+  /**
+   * 미기입 누름틀의 안내문(HWPX CLICK_HERE, 수정 안 됨). 한컴은 화면에만 흐리게 보이고 인쇄하지 않는다.
+   * 블록 `text` 에는 남기고(양식 채우기·패치가 원문 자리와 맞대도록) 마크다운에서는 뺀다 (v4.14.3)
+   */
+  placeholder?: boolean
+}
+
 export interface IRBlock {
   type: IRBlockType
+  /** 블록 글. HWPX·HWP5·HWP3 은 원문의 리터럴 `$` 를 `\$` 로 담고 `$…$`·`$$…$$` 는 수식 스팬에만 쓴다 (v4.14.3) */
   text?: string
   table?: IRTable
   /** 헤딩 레벨 (1-6), type="heading"일 때 사용 */
@@ -35,8 +52,30 @@ export interface IRBlock {
   href?: string
   /** 각주/미주 텍스트 (인라인 삽입용) */
   footnoteText?: string
+  /** 각주/미주 본문의 구조 블록(문단·표, 원문 순서) — 주석 안에 표가 있을 때만 (#149, HWPX).
+   *  footnoteText 는 종전대로 평탄화 글("A / B\nC / D")이고, 표 격자는 이쪽에만 남는다 */
+  footnoteBlocks?: IRBlock[]
   /** 이미지 데이터 (type="image"일 때) */
   imageData?: ImageData
+  /** 그림 속 QR 코드 값 (type="image", `ParseOptions.qrCodes` 를 켰을 때 읽은 것만, #187) */
+  qr?: string[]
+  /** 인라인 강조 run-span (선택 — kordoc 생성 hwpx 왕복 채널 + 외래 실속성 볼드/이탤릭).
+   *  존재하면 마크다운 변환이 **·*·` 마커를 재방출한다 */
+  spans?: IRSpan[]
+  /** 인용문 문단 (선택 — kordoc 생성 hwpx 왕복 채널) — 마크다운 변환이 "> " 접두 재방출 */
+  quote?: boolean
+  /**
+   * 문단 들여쓰기(HWPUNIT, 선택) — HWPX paraPr `<hh:margin>` 자식요소형 hc:left
+   * (+양수 hc:intent 첫줄분). 마크다운 방출엔 쓰지 않는 관찰 슬롯 — gongmun 리스트
+   * depth 재유도·양식 분석 등 소비자 몫 (v4.0.4)
+   */
+  indent?: number
+  /**
+   * gongmun 리스트 단계(1~7, 선택) — indent를 levelIndent 단위로 역산한 소비 결과
+   * (v4.0.5). md 리스트 문법과 충돌하는 부호('- '·'1) ') 문단에만 채워지며,
+   * 마크다운 변환이 2칸/단계 선행 공백을 방출해 재생성 시 depth가 복원된다
+   */
+  listDepth?: number
 }
 
 /** 추출된 이미지 바이너리 데이터 */
@@ -62,18 +101,73 @@ export interface BoundingBox {
 export interface InlineStyle {
   bold?: boolean
   italic?: boolean
+  /** 취소선 — 법령 개정문 등의 삭제 표시. 판정은 취소선 모양 whitelist (비트만 믿으면 오탐) */
+  strike?: boolean
+  /** 밑줄 — 판정은 밑줄 종류 BOTTOM 한정 (NONE 이 기본 잡음, 코퍼스 실측) */
+  underline?: boolean
   fontSize?: number
   fontName?: string
+}
+
+// ─── 표 분류 계약 (#76) — 분류기 내부 점수 구조(TableSignals)는 노출하지 않는다 ───
+
+export type TableClassificationKind = "semantic-table" | "non-tabular-layout" | "uncertain"
+
+export type TableClassificationReason =
+  | "repeated-row-schema"
+  | "grid-regularity"
+  | "high-active-density"
+  | "column-type-consistency"
+  | "nested-structure-wrapper"
+  | "span-irregularity"
+  | "spacer-bands"
+  | "extreme-sparsity"
+  | "diagram-context-keyword"
+  | "low-evidence"
+  | "ambiguous-scores"
+
+/** 휴리스틱 분류 결과 — confidence 는 확률이 아니라 두 점수의 격차 */
+export interface TableClassificationSummary {
+  kind: TableClassificationKind
+  confidence: number
+  semanticScore: number
+  nonTabularScore: number
+  reasons: TableClassificationReason[]
 }
 
 export interface IRTable {
   rows: number
   cols: number
   cells: IRCell[][]
+  /** PDF의 1열 데이터 표나 테두리가 있는 빈 입력란을 HTML 표로 유지한다. 목록성 틀의 평탄화와 구분한다. */
+  renderAsTable?: boolean
   /** 첫 행을 헤더로 렌더링할지 여부 (현재: rows > 1이면 true — 의미적 감지가 아닌 레이아웃 힌트) */
   hasHeader: boolean
+  /** opt-in 분류(`ParseOptions.classifyTables`) 결과 — #76 */
+  classification?: TableClassificationSummary
+  /** 원본 표 식별자(HWPX `hp:tbl id`) — 렌더 region(`RenderRegion.sourceId`)과의 조인 키 */
+  sourceId?: string
+  /**
+   * XLSX·XLS 시트 표에서만: 표 행 i 가 원본 시트의 몇 번째 행인가(0부터, 길이 = rows). 글 없는 행·열은 표에서 빠지므로
+   * 표 서수와 시트 주소가 다르다 — 표 칸 (i, j) 의 원본 칸은 (sourceRows[i], sourceCols[j]) 다(시트 A1 = (0, 0))
+   */
+  sourceRows?: number[]
+  /** XLSX·XLS 시트 표에서만: 표 열 j 가 원본 시트의 몇 번째 열인가(0부터, 길이 = cols). `sourceRows` 참고 */
+  sourceCols?: number[]
+  /** `tableFormat: "gfm"` 관계 표지의 표 id(`t1`, `t2` …) — 문서 블록 트리 전위 순회 순번. 그 옵션으로 렌더할 때만 채워진다(원본 id 아님) */
+  markdownId?: string
+  /** 렌더 인프라가 준 페이지 로컬 pt 조각(다중 페이지 표는 여럿) — extractTables 가 채운다 */
+  regions?: BoundingBox[]
   /** 표 캡션 (예: "표 1. 부서별 예산") — v3.0 */
   caption?: string
+  /** 캡션이 원문 쪽에서 표 아래에 있다(PDF) — 마크다운은 읽는 순서대로 캡션을 표 뒤에 낸다 */
+  captionBelow?: boolean
+  /**
+   * 캡션 내부 블록 콘텐츠 — v4.2.8 (#55).
+   * 캡션 안 중첩표·문단을 구조 그대로, 원문 순서대로 보존한다 (IRCell.blocks와 같은 계약).
+   * 표가 있을 때만 채워지며, caption은 하위 호환용 평탄화 문자열로 계속 제공된다.
+   */
+  captionBlocks?: IRBlock[]
 }
 
 export interface IRCell {
@@ -82,7 +176,10 @@ export interface IRCell {
   rowSpan: number
   /**
    * 셀 내부 블록 콘텐츠 — v3.0.
-   * 중첩 표·이미지·다중 문단을 구조 그대로 보존한다.
+   * 중첩 표·이미지 등 구조 콘텐츠(또는 왕복 채널 span 문단)가 있는 셀에만 채워지며,
+   * 그 안의 문단·표·이미지를 문서(원문) 순서대로 보존한다. 다중 문단뿐인 평문 셀은
+   * blocks 없이 text 평탄화(문단을 `\n`으로 결합)로만 제공된다 (blocks 무게 억제, #57).
+   * 표와 텍스트가 한 줄에 번갈아 놓인 셀도 배치 순서를 따른다 (v4.2.3, #49).
    * blocks가 있으면 text는 blocks의 평탄화 텍스트(하위 호환용)다.
    */
   blocks?: IRBlock[]
@@ -104,8 +201,14 @@ export interface DocumentMetadata {
   createdAt?: string
   /** 수정일시 (ISO 8601) */
   modifiedAt?: string
-  /** 페이지/섹션 수 */
+  /** 페이지/섹션 수 — pageMode="layout"이면 실제 페이지 수, "section"이면 섹션 수 */
   pageCount?: number
+  /**
+   * 페이지 경계 신뢰도 (#66) — "layout": 조판 정보 기반 실제 페이지
+   * (한컴 저장본 HWP/HWPX·PDF·COM, PPTX 슬라이드, Word 조판 표지로 센 쪽 수가 app.xml Pages 와 같은 DOCX), "section": 섹션 단위 근사
+   * (조판 캐시 없는 생성 파일). HWP/HWPX/PDF·PPTX·DOCX에서만 설정된다.
+   */
+  pageMode?: "layout" | "section"
   /** 문서 포맷 버전 (예: HWP "5.1.0.1") */
   version?: string
   /** 설명 */
@@ -124,31 +227,176 @@ export interface ParseOptions {
    * - 문자열: "1-3", "1,3,5-7"
    *
    * PDF: 정확한 페이지 단위. HWP/HWPX: 섹션 단위 근사치.
+   * DOCX: Word 가 저장한 조판 쪽 — 쪽을 매기지 않은 문서(표지 없음·app.xml Pages 와 쪽 수 다름)는 거르지 않는다.
    */
   pages?: number[] | string
-  /** 이미지 기반 PDF용 OCR 프로바이더 (선택) */
-  ocr?: OcrProvider
+  /** 이미지 기반 PDF OCR (선택).
+   *  - 지정 안 함(기본): 내장 모델이 이미 캐시에 있으면(`kordoc models` 로 받았거나 앞서 `ocr: true` 로 받은 경우) 텍스트층이
+   *    없는 쪽(스캔·글자를 곡선으로 그린 쪽)과 글 없는 큰 그림(쪽 면적 5% 넘는) 속 글을 자동 인식한다. 모델이 없으면 다운로드하지
+   *    않고 NEEDS_OCR·SKIPPED_IMAGE 경고만.
+   *  - `false`: 끈다.
+   *  - `true`: 내장 엔진(PP-OCRv5 korean, ~18MB 자동 다운로드)으로 OCR 필요 판정
+   *    페이지만 인식 (스캔 페이지·글꼴 매핑 깨진 페이지). 정상 페이지는 파싱 결과 유지.
+   *  - `"force"`: 전 페이지를 내장 엔진으로 강제 OCR.
+   *  - 함수: 사용자 제공 OcrProvider (Claude Vision·Tesseract 등) — 판정은 `true`와 동일. */
+  ocr?: boolean | "force" | OcrProvider
+  /** 내장 OCR 이 인식한 줄을 결과 `ocrLines` 로 낸다 (PDF·이미지 입력, 기본 끔 — 끄면 산출 불변).
+   *  `true`: 블록을 만드는 데 쓴 줄. `"all"`: 거기에 저신뢰(conf < 0.5)로 버린 줄도 `dropped: true` 로 함께.
+   *  사용자 OcrProvider·HWP 삽입 그림 OCR 에는 줄 좌표가 없어 해당 없음 */
+  ocrLines?: boolean | "all"
+  /** 내장 OCR 글줄 검출 모델. 기본 `"mobile"`(PP-OCRv5 mobile det, ~5MB). `"server"`: PP-OCRv5 server det(~88MB, 첫 사용 시
+   *  다운로드 — 작은 글자에 강하지만 느리다). `"medium"`: PP-OCRv6 medium det(~62MB, 첫 사용 시 다운로드 — 기울임·흐림·스캔·잡음 같은
+   *  열화 입력에 강하고 깨끗한 PDF 는 기본이 낫다). 객체: 로컬 ONNX 파일(`path` 절대 경로 + `sha256` 필수, 다르면 로드 거부) */
+  ocrDet?: "mobile" | "server" | "medium" | OcrModelFile
+  /** 글줄 검출 입력 긴 변(px, 32~4096 정수). 기본 960 (PP-OCRv5 공식 resize_long) — 키우면 작은 글자를 더 잡고 느려진다 */
+  ocrDetLongSide?: number
+  /** 내장 OCR 글자 인식 모델. 기본은 PP-OCRv5 korean rec 로 읽고, 쪽 평균 확신도가 .85 아래인 쪽(손글씨 쪽)만 손글씨 rec 로 다시 읽어
+   *  확신도가 .10 넘게 오를 때 그 쪽을 바꾼다(손글씨 rec ~15MB 는 그런 쪽을 처음 만났을 때 받고, 받지 못하면 기본 rec 결과 그대로).
+   *  `"printed"`: 기본 rec 만(손글씨 rec 를 받지도 쓰지도 않는다). `"handwriting"`: 손글씨·공문서 데이터로 추가 학습한 한국어 rec
+   *  (수기 서류용, 내장 사전 그대로). `"auto"`: 기본보다 너그러운 문턱(.90 아래·.06 상승)으로 손글씨 쪽을 바꾸고 모델을 미리 받는다.
+   *  객체: 로컬 ONNX 파일(미세조정 rec 등) — `path` 절대 경로 + `sha256` 필수. 출력 클래스 수가 사전 + 2 여야 한다 */
+  ocrRec?: "handwriting" | "auto" | "printed" | OcrModelFile
+  /** 글자 인식 사전(PaddleOCR inference.yml 의 `PostProcess.character_dict`)을 로컬 파일로 — `path` 절대 경로 + `sha256` 필수.
+   *  지정 안 하면 내장 한국어 사전(11,945자) */
+  ocrRecDict?: OcrModelFile
   /** 진행률 콜백 — current: 현재 페이지/섹션, total: 전체 수 */
   onProgress?: (current: number, total: number) => void
   /** PDF 머리글/바닥글 자동 제거 */
   removeHeaderFooter?: boolean
+  /**
+   * 위·아래첨자를 인라인 HTML `<sup>`·`<sub>` 로 표기 — 평문으로 펴면 "10⁴ m²" 가 "104 m2", "x_i" 가 "xi" 로 값이 바뀐다.
+   * 기본: HWPX·HWP·DOCX 켬(글자 모양에 적힌 첨자), PDF 끔(글자 크기·기준선으로 추정 — 논문·수식 문서는 true 권장.
+   * 공개 벤치 ODL 정답이 첨자를 평문으로 적어 기본값을 두지 않는다). false 면 모든 형식에서 평문. OCR 로 읽은 글은 늘 평문
+   */
+  scriptTags?: boolean
+  /** 평문 Markdown — 그림 자리 표시·링크 URL·밑줄(`<u>`)·굵게(`**`) 표기를 빼고 글만 (제목·목록·표 구조는 유지).
+   *  첨자 `<sup>`·`<sub>` 는 값이 남게 `10^4`·`H_2O` 로 편다. 이미지 바이트를 따로 저장하지 않는 색인·RAG 용. 기본 false. `blocks` IR 은 그대로 */
+  plain?: boolean
+  /** 모든 표를 HTML 로 — 파이프 표도 HTML 표로 옮기고, 표마다 태그를 한 줄씩 들여써 낸다(BeautifulSoup prettify 모양, 첫 행 `<th>`).
+   *  HTML 표만 다루는 소비자·채점기용. 기본 false(병합·중첩 없는 표는 GFM 파이프 표) */
+  htmlTables?: boolean
+  /** HTML 표 셀의 `[텍스트](URL)`·URL 을 `<a href>` 로 — GFM 은 HTML 블록 안의 마크다운을 해석하지 않아 병합·중첩 표 셀의 링크가 뷰어에서
+   *  눌리지 않는다. 안전한 스킴(http·https·mailto·tel, `#`)만. 기본 false — LLM·RAG 에는 주소를 두 번 싣는 표기라서 */
+  htmlCellLinks?: boolean
+  /** `"gfm"`: 모든 표를 HTML 없이 GFM 파이프 표로 — 세로 병합 칸은 덮인 행마다 같은 값, 가로 병합 칸은 시작 칸에만 값, 셀 안 표는 부모 표 뒤 독립 표로 꺼내고
+   *  부모·자식 관계를 `<!-- <table id="t2" parent_id="t1" /> -->` 표지로 남긴다(RAG 색인용). `htmlTables` 와 함께 쓸 수 없다. 기본: 병합·중첩 표는 HTML */
+  tableFormat?: "gfm"
+  /** 표 오른쪽 끝의 빈 열(서식 문서의 입력란) 보존 (#47).
+   *  기본 false: 마크다운 가독성을 위해 후행 빈 열을 트림.
+   *  양식 인식 경로(parse_form·fill)는 내부적으로 항상 켠다. */
+  keepTrailingEmptyCols?: boolean
+  /** 테두리가 안 보이는 틀 표 처리 (v4.17.0). 기본 `"visual"`: 보이는 대로 — 선이 없는 틀은 글로 풀고 선이 보이는 부분만 표로,
+   *  칸으로 조립한 분수는 `$\frac{…}{…}$` 수식으로. `"keep"`: 종전대로 원본 표 구조 그대로(왕복 패치·양식 채우기처럼
+   *  원본 표 서수가 필요한 경로). HWPX·HWP5·PDF */
+  layoutTables?: "visual" | "keep"
+  /** 구조 파싱 뒤 표를 의미표/레이아웃/불확실로 분류해 `IRTable.classification` 에 붙인다 (#76).
+   *  기본 false — 기본 parse 출력 불변. 중첩표·셀 blocks·캡션 blocks 까지 재귀, 원문 순서는 바꾸지 않는다. */
+  classifyTables?: boolean
+  /** 빈 문단(텍스트 없는 hp:p) 보존 (#57). 기본 false: 종전대로 빈 문단 제거.
+   *  켜면 본문은 `text: ""` paragraph 블록으로, 표 셀은 빈 줄로 순서대로 보존해
+   *  "원문 문단 수 = 줄 수" 대응을 유지한다 (행 줄맞춤 서식 문서용).
+   *  개체(표·이미지·글상자)만 있는 문단은 개체 출력이 따로 있어 대상이 아니다.
+   *  현재 HWPX 경로 적용. */
+  keepEmptyParagraphs?: boolean
+  /** 미기입 누름틀 안내문도 마크다운에 낸다 (#92). 기본 false: 종전대로 뺀다(한컴은 화면에만 흐리게 보이고 인쇄하지 않는 글).
+   *  빈 서식 문서에서 "이 칸에 무엇을 적나"(예: "학교명 기재 금지")가 안내문뿐일 때 켠다. HWPX·HWP5 */
+  includeFieldPlaceholders?: boolean
+  /** 메모(한글 "메모 넣기")를 마크다운 끝에 "메모" 절로 모아 낸다 (#180). 기본 false: 본문만 — 메모는 결과 `memos` 로만. HWPX·HWP5 */
+  memos?: boolean
+  /** 비밀번호로 보호된 문서의 열기 암호.
+   *  HWPX(ODF AES-256-CBC)·HWP3(DES) 지원. 한컴 DRM(문서 보안)은 별개라 해당 없음. */
+  password?: string
   /** 원본 파일 경로 (DRM COM fallback에 필요, 내부 전용) */
   filePath?: string
   /**
-   * PDF 수식 OCR 활성화 (기본 false).
+   * PDF·이미지 수식 OCR 활성화 (기본 false). 이미지 입력은 같은 모델로 래스터의 수식 영역을 찾아 그 자리 OCR 글상자를
+   * `$...$` 로 바꾼다(수식 구조가 있고 덮은 글이 한글 위주가 아닌 영역만 — src/ocr/image-formula.ts).
    *
    * 활성화 시 각 PDF 페이지를 이미지로 렌더링 → YOLOv8 기반 수식 영역 검출 →
    * TrOCR 기반 LaTeX 인식. 감지된 수식은 `$...$` (inline) / `$$...$$` (display) 로
    * 블록 텍스트에 삽입된다.
    *
-   * 필수 optional 의존성: `onnxruntime-node`, `@huggingface/transformers`,
-   * `@hyzyla/pdfium`, `sharp`. 미설치 시 parse 에 실패하지 않고 **경고만** 남기고
+   * 필수 optional 의존성: `onnxruntime-node`, `@huggingface/tokenizers`,
+   * `sharp`. 미설치 시 parse 에 실패하지 않고 **경고만** 남기고
    * 수식 인식은 skip 한다 (일반 텍스트 추출은 정상 동작).
    *
    * 모델(~155MB) 은 첫 사용 시 HuggingFace 에서 자동 다운로드 되어
    * `~/.cache/kordoc/models/pix2text/` 에 SHA-256 검증과 함께 저장된다.
    */
   formulaOcr?: boolean
+  /**
+   * 레이아웃 표 페이지 반복 헤더(러닝 헤더) 정리 휴리스틱 활성화 (기본 false).
+   *
+   * 구형 HWP5 문서가 페이지마다 재삽입한 짧은 번호매김 러닝 헤더
+   * ("2. 과제 구축 내용")를 최초 1회만 남기고 이후 중복을 제거한다.
+   * 다만 페이지 위치 정보가 없는 HWP5 특성상 이 휴리스틱은 정당하게 반복되는
+   * 번호매김 문단(예: 붙임/별지별 재번호 "1. 목적")도 삭제할 수 있어 opt-in 으로
+   * 둔다. 활성 시 제거가 발생하면 HIDDEN_TEXT_FILTERED 경고를 남긴다.
+   */
+  dedupeRunningHeaders?: boolean
+  /**
+   * 추출된 이미지를 마크다운에 base64 data URI 로 인라인 (기본 false).
+   *
+   * 활성화 시 `![image](image_001.bmp)` 참조를 `![image](data:image/png;base64,...)` 로
+   * 치환한다. 임베드된 BMP 는 PNG 로 무손실 압축 후 인라인하여 용량을 크게 줄인다.
+   * 별도 이미지 파일 없이 자체 완결형 마크다운이 되어 MCP/AI 에이전트 소비에 적합하다.
+   * (현재 HWP5 경로 지원)
+   */
+  inlineImages?: boolean
+  /**
+   * 이미지 바이트 추출 (기본 true). false 면 결과에 이미지 바이트를 싣지 않는다.
+   * `images` 는 비고, 블록의 `imageData` 도 떼며, HWP5 `inlineImages` 도 무시한다.
+   * 그림 자리 표시(`![image](…)`)는 마크다운·블록에 그대로 남아 위치는 알 수 있다.
+   * PDF 는 PNG 인코딩을 건너뛴다. 거르는 기준은 같되 메모리 보호용 128MB 누적 상한은 걸리지
+   * 않아, 그 상한 뒤의 그림도 자리 표시가 남는다. DOCX 는 그림 파트(`word/media`·`word/embeddings`)를
+   * 풀지 않고 ZIP 비압축 상한(100MB)에도 세지 않는다 (#108).
+   *
+   * 검색 색인처럼 글자만 필요한 호출자용이다. 그림이 많은 문서는 base64 로 불어난 이미지가
+   * JSON 출력의 대부분을 차지했다 (PDF 실측 200MB → 9.5MB, CPU 시간 30% 감소). 본문 글자와
+   * OCR 은 이 옵션과 무관하다.
+   */
+  images?: boolean
+  /** 그림 속 QR 코드를 읽어 그림 블록 `qr` 과 Markdown 그림 자리 다음 줄에 값을 낸다 (#187). 기본 false — 끄면 출력 불변.
+   *  모든 형식의 그림(HWP·HWPX·HWP3·DOCX·PPTX·PDF), `images: false` 여도 읽는다. optional dependency `zxing-wasm` 이 필요하다 */
+  qrCodes?: boolean
+  /**
+   * 그림 형식 (#188). 기본(지정 안 함)은 LLM 이 읽는 형식으로 정규화한다 — 주요 LLM API(Claude·OpenAI·Gemini)가 모두 받는
+   * PNG·JPEG·WebP 는 원본 바이트 그대로, 그 밖(BMP·GIF·TIFF·AVIF·HEIC·SVG)은 PNG. PDF 그림은 지금처럼 PNG. 이미지 파일 입력은 페이지마다 그 페이지 이미지.
+   * 지정하면 모든 그림이 그 형식이다 — 파일명(`image_NNN.png`·`.webp`)·MIME·바이트가 같은 형식이고, 형식은 확장자가 아니라 바이트로 판정한다.
+   * - `"png"`: PNG. 이미 PNG 인 그림은 바이트 그대로, BMP 는 kordoc 디코더, HEIC 는 optional dependency `libheif-js`, 그 밖(JPEG·GIF·TIFF·AVIF·WebP·SVG)은 sharp.
+   * - `"webp"`: 무손실 WebP(`exact`). PDF 그림 200개 실측 25.5 → 14.8MB(58%), 인코딩 CPU 3.25 → 8.6초(4개 스레드로 경과 시간 2.58 → 2.1초).
+   * 보이는 그림을 맞춘다: EXIF 회전 적용, ICC 프로필·CMYK 는 sRGB, 움직이는 GIF 는 첫 장, SVG 는 그린 그림.
+   * 바꿀 수 없는 그림(WMF·EMF, 못 읽는 BMP 변형·손상, WebP 한도 16,383px 초과)은 원본 형식(PDF 는 PNG)으로 내고 경고(`SKIPPED_IMAGE`)한다.
+   * HWP·HWPX·DOCX 2,782개(그림 6,412개) 실측: png 6,109개 바꿈·4,099 → 775MB, webp 5,680개 바꿈·4,099 → 504MB.
+   * optional dependency `sharp` 가 필요하다(없으면 `"png"` 는 BMP·PNG 만 맞추고 경고). `images: false` 면 인코딩하지 않는다
+   */
+  imageFormat?: "png" | "webp"
+  /**
+   * PDF 그림 블록의 자리. 기본 `"page-end"` — 그 쪽 마지막 블록 뒤에 모으고 그림 블록에 `bbox` 가 없다(4.24.51 까지와 같다).
+   * `"flow"` — 그림을 쪽 위 자리로 글 블록 사이에 끼운다: 같은 단(가로로 겹치는 블록)에서
+   * 그림 위쪽 변 이상 높이에서 시작하는 마지막 블록 뒤, 그런 블록이 없으면 그 단의 첫 블록 앞. 쪽 안 그림은 위→아래·왼→오른 순서.
+   * 그림 블록에 `bbox` 를 붙인다. 같은 그림을 여러 쪽에 다시 그리면 처음 나온 자리에만 블록이 생긴다.
+   * 다른 형식은 원문 순서라 무관하다. 기본이 `"page-end"` 인 까닭: ODL 정답 마크다운에 그림 줄이 없어 `"flow"` 는 쪽 머리 로고가
+   * 첫 제목 앞에 오는 등 제목 구조 점수만 깎는다(종합 .9649 → .9640, 글은 같음)
+   */
+  imagePlacement?: "page-end" | "flow"
+  /**
+   * 빈 그림 빼기 (기본 false — 출력 불변). 켜면 흰 바탕에 합성했을 때 거의 한 색인 그림(채널마다 최댓값−최솟값 24 이하:
+   * 빈 판·단색 띠·옅은 그러데이션 배경)을 그림 블록·`images`·글에 박힌 참조에서 뺀다. 한 색에 투명도로 모양을 낸 아이콘은 남는다.
+   * 그림 바이트를 낼 때만 본다(`images: false` 면 판정하지 않는다). 모든 형식. PDF 는 디코딩한 화소로 보고, 다른 형식은 원본 그림을
+   * 풀어 본다(BMP 는 내장 디코더, 그 밖은 optional dependency `sharp`, WMF·EMF 는 남긴다). 번호(`image_NNN`)는 남은 그림으로 매긴다(PDF)
+   */
+  dropBlankImages?: boolean
+  /**
+   * PDF 표 감지 활성화 (기본 true). false 면 선 기반 그리드·클러스터 표 감지를 모두 끄고
+   * 자연 읽기순 텍스트만 뽑는다 (#64).
+   *
+   * 시각적 테두리 박스(시험지 안내문·보기 상자)가 표로 잡히면 주변 본문이 셀 매핑으로
+   * 끌려 들어가 문항 순서가 뒤집히는데, 표가 애초에 필요 없는 텍스트 중심 사용처에는
+   * 우회 수단이 없었다. 표가 실제로 있는 문서에 켜면 표 구조가 문단으로 흩어지므로
+   * 문서 종류를 아는 호출자만 쓰는 opt-out 이다. PDF 전용 — 다른 포맷은 무시.
+   */
+  tables?: boolean
 }
 
 // ─── 파싱 경고 ──────────────────────────────────────
@@ -175,6 +423,13 @@ export type WarningCode =
   | "PARTIAL_PARSE"
   | "LENIENT_CFB_RECOVERY"
   | "NEEDS_OCR"
+  | "OCR_FAILED"
+  | "OCR_APPLIED"
+  | "OCR_LOW_CONF"
+  | "COM_EMPTY"
+  | "DRM_COM_FALLBACK"
+  /** pages 옵션 요청됐으나 조판 캐시가 없어 섹션 단위 근사로 적용됨 (#66) */
+  | "PAGE_BOUNDARY_APPROXIMATE"
 
 /** 문서 구조 (헤딩 트리) */
 export interface OutlineItem {
@@ -198,10 +453,15 @@ export type ErrorCode =
   | "NO_SECTIONS"
   | "PARSE_ERROR"
   | "MISSING_DEPENDENCY"
+  /** 결과 직렬화가 런타임 문자열 한계를 넘음 — 이미지 다량 문서의 JSON 출력 (#65) */
+  | "OUTPUT_TOO_LARGE"
+  /** 입력 경로가 존재하지 않음(ENOENT) — 문서 파싱 이전 단계의 실패 */
+  | "FILE_NOT_FOUND"
 
 // ─── 파싱 결과 (discriminated union) ────────────────
 
-export type FileType = "hwpx" | "hwp" | "hwp3" | "hwpml" | "pdf" | "xlsx" | "xls" | "docx" | "unknown"
+/** 감지된 파일 형식 */
+export type FileType = "hwpx" | "hwp" | "hwp3" | "hwpml" | "pdf" | "xlsx" | "xls" | "docx" | "pptx" | "image" | "unknown"
 
 interface ParseResultBase {
   fileType: FileType
@@ -215,7 +475,11 @@ export interface ParseSuccess extends ParseResultBase {
   success: true
   /** 추출된 마크다운 텍스트 */
   markdown: string
-  /** 중간 표현 블록 (구조화된 데이터 접근용) */
+  /**
+   * 중간 표현 블록 (구조화된 데이터 접근용).
+   * 블록은 문서(원문) 읽기 순서를 따른다 — 한 문단 안에 글자취급(treatAsChar)
+   * 표와 텍스트가 섞여 있어도 배치 순서대로 방출된다 (v4.2.3, #50).
+   */
   blocks: IRBlock[]
   /** 문서 메타데이터 */
   metadata?: DocumentMetadata
@@ -225,10 +489,93 @@ export interface ParseSuccess extends ParseResultBase {
   warnings?: ParseWarning[]
   /** 추출된 이미지 목록 — 마크다운에서 파일명으로 참조됨 */
   images?: ExtractedImage[]
+  /**
+   * 페이지별 마크다운 (#68) — `blocks` 의 `pageNumber` 로 갈라 페이지마다 다시
+   * 마크다운을 만든 것. 페이지 경계의 신뢰도는 `metadata.pageMode` 를 따른다
+   * ("layout" = 실제 페이지, "section" = 섹션 근사). `pages` 옵션으로 범위를
+   * 줄이면 그 범위만 담긴다. 페이지 번호를 매기지 않는 문서(Word 조판 표지가 없는 DOCX 등)에서는 없고,
+   * XLSX 는 `pageCount` 와 같은 의미로 시트 한 장이 한 쪽이다.
+   *
+   * 여러 페이지에 걸친 표는 시작 페이지 한 블록이라, 표가 이어지는 중간
+   * 페이지의 `markdown` 은 빈 문자열일 수 있다 (현 IR 구조의 한계).
+   */
+  pages?: PageMarkdown[]
   /** 페이지별 텍스트 품질 신호 — PDF에서만 제공 */
   pageQuality?: PageQuality[]
   /** 문서 단위 품질 요약 — PDF에서만 제공 */
   qualitySummary?: DocumentQualitySummary
+  /** 내장 OCR 이 읽은 쪽별 글줄 — `ocrLines` 옵션을 켠 PDF·이미지 입력에서만(OCR 을 돌린 쪽이 없으면 빈 배열). 쪽 번호 순 */
+  ocrLines?: OcrPageLines[]
+  /** 문서의 메모(한글 "메모 넣기") — 메모가 있는 HWPX·HWP5 문서에서만, 문서 순서 (#180). 본문 마크다운에는 섞지 않는다
+   *  (`memos` 옵션을 켜면 끝에 모아 낸다) */
+  memos?: MemoNote[]
+}
+
+/** 메모 하나 (#180) */
+export interface MemoNote {
+  /** 메모 글 — 메모 안 문단은 줄바꿈으로 잇는다 */
+  text: string
+  /** 메모가 붙은 본문 글 (한글이 메모 범위로 칠한 글) */
+  anchor: string
+  /** 메모가 붙은 문단의 글 (표 칸 안이면 그 칸 문단) */
+  paragraph: string
+  /** `paragraph` 안에서 `anchor` 가 시작하는 글자 위치 */
+  offset: number
+  /** 메모가 붙은 문단이 든 블록의 `blocks` 순번 (표 칸 안이면 그 표 블록) — 못 찾으면 없음 */
+  blockIndex?: number
+  /** 작성자 */
+  author?: string
+  /** 만든 시각 (ISO 8601) */
+  createdAt?: string
+  /** 문서 안 메모 번호 */
+  number?: number
+}
+
+/** 로컬 OCR 모델 파일 — 엔진은 로드 전에 SHA-256 을 대조하고 다르면 거부한다 */
+export interface OcrModelFile {
+  /** 절대 경로 */
+  path: string
+  /** 기대 SHA-256 (16진 소문자 64자) */
+  sha256: string
+}
+
+/**
+ * OCR 쪽 하나의 글줄. 좌표는 OCR 래스터 픽셀(왼쪽 위 원점, y 아래로)이다 — PDF 는 쪽을 `scale` 배(기본 3 = 216dpi)로 그린 래스터,
+ * 이미지는 EXIF 방향대로 세운 이미지 자체(24MP 를 넘어 줄였으면 줄인 크기 — `width`·`height` 로 안다).
+ * 블록 `bbox`(PDF pt, 아래 원점)로 옮기려면 `x / scale`, `pageHeightPt − (y + h) / scale`.
+ */
+export interface OcrPageLines {
+  pageNumber: number
+  /** 래스터 폭·높이 (px) */
+  width: number
+  height: number
+  /** 래스터 px / PDF pt (이미지는 메타데이터 DPI·판형으로 추정한 값) */
+  scale: number
+  /** 기울기 보정으로 래스터를 돌린 각(°, 양수 = 반시계로 세움). 좌표는 돌린 래스터 기준 — 보정하지 않았으면 0.
+   *  입력 좌표로는 θ = deskewAngle, (cx, cy) = ((width−1)/2, (height−1)/2) 로 x₀ = cx + (x−cx)cosθ − (y−cy)sinθ, y₀ = cy + (x−cx)sinθ + (y−cy)cosθ */
+  deskewAngle: number
+  /** 텍스트층이 있는 쪽이라 그림 영역만 읽었다 — 원본 PDF 좌표를 유지하고 deskewAngle은 0, 그 영역 안 줄만 담긴다 */
+  regionsOnly?: true
+  /** 위→아래, 왼→오른 순 */
+  lines: OcrLine[]
+}
+
+export interface OcrLine {
+  text: string
+  /** 잉크 외곽 상자 (래스터 px) */
+  box: { x: number; y: number; w: number; h: number }
+  /** CTC 평균 신뢰도 0~1 */
+  confidence: number
+  /** 저신뢰로 버려 블록에 들어가지 않은 줄 (`ocrLines: "all"` 일 때만) */
+  dropped?: true
+}
+
+/** 페이지 한 장의 마크다운 (#68). ParseSuccess.pages 항목. */
+export interface PageMarkdown {
+  /** 원본 페이지 번호 (1-based) */
+  pageNumber: number
+  /** 그 페이지 블록만으로 만든 마크다운. 블록이 없으면 빈 문자열 */
+  markdown: string
 }
 
 /** 페이지별 텍스트 품질 신호 (PDF 전용). 자세한 설명은 src/pdf/quality.ts */
@@ -240,7 +587,7 @@ export interface PageQuality {
   replacementCharRatio: number
   puaRatio: number
   needsOcr: boolean
-  ocrReason?: "low_text" | "high_pua" | "high_control" | "high_replacement"
+  ocrReason?: "vector_text" | "low_text" | "high_pua" | "high_control" | "high_replacement" | "garbled_hangul"
 }
 
 /** 문서 단위 품질 요약 (PDF 전용). */
@@ -265,6 +612,8 @@ export interface ExtractedImage {
   data: Uint8Array
   /** MIME 타입 */
   mimeType: string
+  /** 원본 컨테이너 내 항목명 (HWPX/DOCX ZIP 경로, HWP5 BinData 스토리지명 — PDF 등 합성 이미지는 없음, #70) */
+  source?: string
 }
 
 export interface ParseFailure extends ParseResultBase {
@@ -314,12 +663,27 @@ export interface PatchSkip {
   before?: string
   /** 편집 쪽 내용 요약 (최대 80자) */
   after?: string
+  /**
+   * 부분 적용 표시 — 변경이 적용은 됐지만(applied 계상) 편집 원형 그대로는
+   * 아님 (예: 셀 내 줄 추가를 마지막 문단에 병합). 완전 미적용 skip과 구분.
+   */
+  partial?: boolean
 }
 
 /** patchHwpx 옵션 */
 export interface PatchOptions {
   /** 패치 후 재파싱 자동 검증 (기본 true) */
   verify?: boolean
+  /**
+   * 문단 추가·삭제 반영 (HWPX, 기본 true) — 추가 문단은 같은 항목 부호(□·○·-·1.·가. …)를 단 원본 문단을 복제해
+   * 견본 서식 그대로 쓴다. false 면 추가·삭제를 건너뛰고 skipped 로 보고한다 (HWP 5.x 는 늘 건너뜀)
+   */
+  structure?: boolean
+  /**
+   * HWP 5.x: 글이 바뀐 문단의 줄 나눔 정보(PARA_LINE_SEG)를 남긴다 (기본 false — 지워서 한컴이 새 글에 맞게 다시 짜게 한다).
+   * 남기면 원본 줄 위치에서 끊겨 줄 앞 빈칸·마침표가 생길 수 있다. HWPX 는 늘 지운다(어긋난 캐시는 한컴 변조 경고)
+   */
+  keepLineseg?: boolean
 }
 
 /** patchHwpx / patchBlocks 결과 */
@@ -343,6 +707,8 @@ export interface PatchResult {
    * 정반대이므로 혼용 금지.
    */
   changes?: DiffResult
+  /** 적용은 됐지만 알아야 할 것 (patchHwp — 변경 추적 문서의 추적 표시를 끈 경우 등) */
+  warnings?: string[]
   /** 실패 사유 (success=false) */
   error?: string
 }
@@ -356,6 +722,15 @@ export interface FormField {
   row: number
   /** 0-based 소스 열 */
   col: number
+  /** 매칭된 입력 키(정규화) — 모호 라벨 거부 가드(fillWithUniqueGuard)의 집계 기준 */
+  key?: string
+  /** 채우기 결과 전용: 값을 쓴 칸 — 표 번호(문서 순서, 중첩표 포함 0-based)와 그 표의 격자 행·열(0-based).
+   *  표 밖 본문·누름틀 채움은 없다. row/col 은 경로에 따라 라벨 칸 좌표라 대상 칸은 이것으로 본다 (#145) */
+  target?: { table: number; row: number; col: number }
+  /** 매칭 근거. `clickhere`(누름틀 name 정확 일치)는 서식 제작자가 선언한 계약이라
+   *  여러 곳에 같은 이름이 있어도 "모호"가 아니다 — 모호 라벨 거부 집계에서 제외된다.
+   *  (머리말·본문에 같은 이름의 누름틀을 두는 서식이 실제로 있다) */
+  source?: "clickhere"
 }
 
 export interface FormResult {
@@ -366,11 +741,12 @@ export interface FormResult {
 
 // ─── OCR 프로바이더 ─────────────────────────────────
 
-/** 사용자 제공 OCR 함수 — 페이지 이미지를 받아 텍스트 반환 */
+/** 사용자 제공 OCR 함수 — 페이지 이미지를 받아 텍스트 반환.
+ *  PDF 경로는 항상 "image/png", 이미지 직접 입력 경로는 PNG·JPEG·WebP 면 원본 그대로, 그 밖(TIFF·GIF·AVIF·HEIC·BMP·PCX·DCX)은 해당 페이지를 PNG 로 변환해 전달. */
 export type OcrProvider = (
   pageImage: Uint8Array,
   pageNumber: number,
-  mimeType: "image/png"
+  mimeType: "image/png" | "image/jpeg" | "image/webp"
 ) => Promise<string>
 
 // ─── Watch 모드 ─────────────────────────────────────
@@ -401,10 +777,16 @@ export interface InternalParseResult {
   outline?: OutlineItem[]
   warnings?: ParseWarning[]
   images?: ExtractedImage[]
+  /** HWPX·HWP5: 메모 (#180) */
+  memos?: MemoNote[]
   /** PDF 전용: 이미지 기반 PDF 여부 */
   isImageBased?: boolean
   /** PDF 전용: 페이지별 품질 신호 */
   pageQuality?: PageQuality[]
   /** PDF 전용: 문서 단위 품질 요약 */
   qualitySummary?: DocumentQualitySummary
+  /** PDF 전용: 페이지별 마크다운 — 문서 마크다운과 같은 PDF 마무리(1×1 표 펴기·cleanPdfText)를 쪽마다 적용한 것 */
+  pages?: PageMarkdown[]
+  /** PDF 전용: ocrLines 옵션일 때 쪽별 OCR 줄 */
+  ocrLines?: OcrPageLines[]
 }

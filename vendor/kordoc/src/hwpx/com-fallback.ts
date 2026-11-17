@@ -29,64 +29,10 @@ export function extractTextViaCom(filePath: string): { pages: string[]; pageCoun
   if (!isComFallbackAvailable()) {
     throw new Error("COM fallback은 Windows에서만 사용 가능합니다")
   }
-
-  // PowerShell 스크립트를 인라인으로 실행
-  //
-  // 핵심 우회: 파일을 %TEMP%로 복사한 뒤 해당 경로로 Open.
-  //   한컴 오피스는 파일 경로가 "신뢰 영역"(사용자 Temp/AppData 등) 밖일 때
-  //   FilePathChecker가 경고 팝업을 띄운다. FilePathCheckerModuleExample DLL이
-  //   등록된 개발 환경에서는 RegisterModule이 작동해 경고가 억제되지만, 일반
-  //   사용자 환경에는 해당 DLL이 없다.
-  //   %TEMP% 하위 경로로 복사하면 신뢰 영역 규칙에 의해 경고가 나오지 않아
-  //   DLL 등록 없이도 안정적으로 DRM 텍스트를 추출할 수 있다.
-  //
-  // - RegisterModule: 보안 경고 1차 억제(DLL 없어도 해가 없음)
-  // - GetPageText: DRM 우회 텍스트 추출
-  // filePath를 single-quote로 이스케이프 (내부 ' → '')
-  const escaped = filePath.replace(/'/g, "''")
-  const ps1 = `
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$ErrorActionPreference = 'Stop'
-
-$src = '${escaped}'
-$tmpDir = Join-Path $env:TEMP ('hwp-com-' + [guid]::NewGuid().ToString('N'))
-[void](New-Item -ItemType Directory -Path $tmpDir -Force)
-$tmpFile = Join-Path $tmpDir (Split-Path $src -Leaf)
-Copy-Item -LiteralPath $src -Destination $tmpFile -Force
-
-try {
-  $hwp = New-Object -ComObject HWPFrame.HwpObject
-  $hwp.RegisterModule('FilePathCheckerModule', 'FilePathCheckerModuleExample') | Out-Null
-  $hwp.Open($tmpFile, '', '') | Out-Null
-  $pc = $hwp.PageCount
-  $result = @{ pageCount = $pc; pages = @() }
-  for ($p = 1; $p -le $pc; $p++) {
-    $t = $hwp.GetPageText($p, 0)
-    $result.pages += @($t)
-  }
-  $hwp.Clear(1) | Out-Null
-  try { $hwp.Quit() | Out-Null } catch { }
-  [System.Runtime.InteropServices.Marshal]::ReleaseComObject($hwp) | Out-Null
-  [GC]::Collect()
-  [GC]::WaitForPendingFinalizers()
-  $result | ConvertTo-Json -Depth 3 -Compress
-} catch {
-  @{ error = $_.Exception.Message } | ConvertTo-Json -Compress
-} finally {
-  # 임시 파일 정리 + 좀비 Hwp.exe 방지용 garbage collect
-  try { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue } catch { }
-  [GC]::Collect()
-  [GC]::WaitForPendingFinalizers()
-}
-`
-
-  const stdout = execFileSync("powershell", [
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy", "Bypass",
-    "-Command", ps1,
-  ], {
+  const { args, env } = comPowerShellInvocation(filePath)
+  const stdout = execFileSync("powershell", args, {
     encoding: "utf-8",
+    env,
     timeout: 120_000,      // 2분 타임아웃
     windowsHide: true,
     maxBuffer: 50 * 1024 * 1024,  // 50MB
@@ -110,6 +56,69 @@ try {
   }
 
   return { pages, pageCount, warnings }
+}
+
+/** COM 추출 PowerShell 인자·환경 — 파일 경로는 인자(스크립트)에 넣지 않고 환경 변수 KORDOC_COM_SRC 로만 넘긴다 */
+export function comPowerShellInvocation(filePath: string): { args: string[]; env: NodeJS.ProcessEnv } {
+  // PowerShell 스크립트를 인라인으로 실행
+  //
+  // 핵심 우회: 파일을 %TEMP%로 복사한 뒤 해당 경로로 Open.
+  //   한컴 오피스는 파일 경로가 "신뢰 영역"(사용자 Temp/AppData 등) 밖일 때
+  //   FilePathChecker가 경고 팝업을 띄운다. FilePathCheckerModuleExample DLL이
+  //   등록된 개발 환경에서는 RegisterModule이 작동해 경고가 억제되지만, 일반
+  //   사용자 환경에는 해당 DLL이 없다.
+  //   %TEMP% 하위 경로로 복사하면 신뢰 영역 규칙에 의해 경고가 나오지 않아
+  //   DLL 등록 없이도 안정적으로 DRM 텍스트를 추출할 수 있다.
+  //
+  // - RegisterModule: 보안 경고 1차 억제(DLL 없어도 해가 없음). 첫 인수는 한컴 오토메이션이 정한 모듈 종류
+  //   'FilePathCheckDLL' 이고, 둘째 인수는 HKCU\Software\HNC\HwpAutomation\Modules 에 DLL 경로를 담은 값 이름이다.
+  //   종류를 'FilePathCheckerModule' 로 주면 DLL 을 등록해 둔 환경에서도 늘 False 라 억제가 걸리지 않는다(한글 2022 실측)
+  // - GetPageText: DRM 우회 텍스트 추출
+  // 경로는 스크립트 문자열에 넣지 않고 환경 변수로 넘긴다 — PowerShell 은 ASCII ' 말고도 ‘ ’ ‚ ‛ 를 작은따옴표로 받아,
+  // 따옴표 이스케이프만으로는 파일 이름(공격자가 정한다)에 명령을 심는 것을 막지 못한다
+  const ps1 = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ErrorActionPreference = 'Stop'
+
+$src = $env:KORDOC_COM_SRC
+$tmpDir = Join-Path $env:TEMP ('hwp-com-' + [guid]::NewGuid().ToString('N'))
+
+try {
+  # 폴더 만들기·복사도 try 안 — 복사가 실패해도 finally 가 임시 폴더를 지운다 (#177)
+  [void](New-Item -ItemType Directory -Path $tmpDir -Force)
+  $tmpFile = Join-Path $tmpDir (Split-Path $src -Leaf)
+  Copy-Item -LiteralPath $src -Destination $tmpFile -Force
+  $hwp = New-Object -ComObject HWPFrame.HwpObject
+  $hwp.RegisterModule('FilePathCheckDLL', 'FilePathCheckerModuleExample') | Out-Null
+  # suspendpassword: 열기 암호가 걸린 문서는 암호 입력 창을 띄우지 않고 바로 실패 — 숨은 창이 입력을 기다리며 멈추던 것 (#93)
+  $opened = $hwp.Open($tmpFile, '', 'suspendpassword:TRUE;forceopen:TRUE;versionwarning:FALSE')
+  if (-not $opened) { throw 'Open 실패 (열기 암호가 걸린 문서일 수 있음)' }
+  $pc = $hwp.PageCount
+  $result = @{ pageCount = $pc; pages = @() }
+  for ($p = 1; $p -le $pc; $p++) {
+    $t = $hwp.GetPageText($p, 0)
+    $result.pages += @($t)
+  }
+  $hwp.Clear(1) | Out-Null
+  try { $hwp.Quit() | Out-Null } catch { }
+  [System.Runtime.InteropServices.Marshal]::ReleaseComObject($hwp) | Out-Null
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+  $result | ConvertTo-Json -Depth 3 -Compress
+} catch {
+  @{ error = $_.Exception.Message } | ConvertTo-Json -Compress
+} finally {
+  # 임시 파일 정리 + 좀비 Hwp.exe 방지용 garbage collect
+  try { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue } catch { }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+}
+`
+
+  return {
+    args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps1],
+    env: { ...process.env, KORDOC_COM_SRC: filePath },
+  }
 }
 
 /**
@@ -138,7 +147,8 @@ export function comResultToParseResult(
   }
 
   const markdown = lines.join("\n\n")
-  const metadata: DocumentMetadata = { pageCount }
+  // COM GetPageText는 실제 페이지 단위 (#66)
+  const metadata: DocumentMetadata = { pageCount, pageMode: "layout" }
 
   warnings.push({
     message: "DRM 문서: 한컴 COM API로 텍스트 추출 (서식/표 정보 제한적)",

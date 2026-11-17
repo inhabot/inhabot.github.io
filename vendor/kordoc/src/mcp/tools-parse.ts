@@ -1,0 +1,433 @@
+/** kordoc MCP 도구 — 문서 읽기 — parse_document·detect_format·parse_metadata·parse_pages·parse_table·compare_documents·parse_chunks */
+
+import { z } from "zod"
+import { parse, detectFormat, detectZipFormat, detectOle2Format, blocksToMarkdown, compare } from "../index.js"
+import { KordocError } from "../utils.js"
+import { extractHwp5MetadataOnly } from "../hwp5/parser.js"
+import { extractHwpxMetadataOnly } from "../hwpx/parser.js"
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { PARSE_EXTENSIONS, MAX_FILE_SIZE, safePath, describeError, capResponseText, MAX_METADATA_FILE_SIZE, readValidatedFile, detectFormatFromHeader } from "./shared.js"
+
+export function registerParseTools(server: McpServer): void {
+  // ─── 도구: parse_document ────────────────────────────
+
+  server.tool(
+    "parse_document",
+    "한국 문서 파일(HWP, HWPX, PDF, XLSX, DOCX)과 이미지(PNG/JPG/WebP/TIFF/GIF/BMP/AVIF/HEIC/PCX)를 마크다운으로 변환합니다. 파일 경로를 입력하면 포맷을 자동 감지하여 텍스트를 추출합니다. 이미지는 OCR(내장 PP-OCRv5)이 자동 적용되고 표 괘선도 복원됩니다. 견본 서식대로 새 문서를 쓰거나(서식 베끼기) 문구를 고쳐 patch_document 로 넘길 마크다운이면 keep_layout_tables: true 로 읽으세요.",
+    {
+      file_path: z.string().min(1).describe("파싱할 문서 파일의 절대 경로 (HWP, HWPX, PDF, XLSX, DOCX, PNG/JPG/WebP/TIFF/GIF/BMP/AVIF/HEIC/PCX)"),
+      ocr: z.union([z.boolean(), z.literal("force")]).optional()
+        .describe("스캔/이미지 PDF 텍스트 OCR (내장 PP-OCRv5 korean, 첫 사용 시 ~18MB 자동 다운로드). true=텍스트층이 없거나 깨진 페이지만 인식하고 정상 페이지는 그대로 둡니다. \"force\"=텍스트층이 있어도 무시하고 전 페이지 강제 재인식. parse 결과에 NEEDS_OCR 경고가 있으면 이 옵션으로 재시도하세요"),
+      remove_header_footer: z.boolean().optional()
+        .describe("PDF 머리글/바닥글 자동 제거 (기본 true — false로 끄기, CLI --no-header-footer 대응)"),
+      formula_ocr: z.boolean().optional()
+        .describe("PDF 수식 OCR 활성화 (MFD+MFR ONNX, 첫 사용 시 모델 ~155MB 자동 다운로드, CLI --formula-ocr 대응)"),
+      ocr_rec: z.enum(["handwriting", "auto", "printed"]).optional()
+        .describe("OCR 글자 인식 모델 — \"handwriting\": 수기 서류용 한국어 손글씨 rec(첫 사용 시 ~15MB 다운로드). 손글씨 칸이 많은 서식용이며 금액·날짜·전화번호의 쉼표·마침표·하이픈을 빠뜨리는 경우가 있다. \"auto\": 기본보다 너그러운 문턱으로 확신도 낮은 손글씨 쪽을 손글씨 rec 로 다시 읽는다(인쇄·손글씨 섞인 묶음용 — 기본도 뚜렷한 손글씨 쪽은 손글씨 rec 로 바꾼다). \"printed\": 기본 rec 만(손글씨 rec 를 받지도 쓰지도 않는다). OCR 이 도는 곳(이미지, PDF 는 ocr: true·\"force\" — ocr 을 빼면 고른 모델이 캐시에 있을 때만 자동 OCR)에 적용 (CLI --ocr-rec 대응)"),
+      ocr_det: z.enum(["mobile", "server", "medium"]).optional()
+        .describe("OCR 글줄 검출 모델 — \"mobile\"(기본) | \"server\"(첫 사용 시 ~88MB 다운로드) | \"medium\"(PP-OCRv6, 첫 사용 시 ~62MB 다운로드 — 기울임·흐림·스캔 같은 열화 입력용) (CLI --ocr-det 대응)"),
+      ocr_det_long_side: z.number().int().min(32).max(4096).optional()
+        .describe("OCR 글줄 검출 입력 긴 변 픽셀 (32~4096, 기본 960) — 키우면 작은 글씨를 더 잡고 느려진다 (CLI --ocr-det-long-side 대응)"),
+      dedupe_running_headers: z.boolean().optional()
+        .describe("HWP5 레이아웃 표 페이지 반복 러닝 헤더 중복 제거 (기본 off — 붙임별 재번호 오삭제 주의, CLI --dedupe-headers 대응)"),
+      keep_trailing_empty_cols: z.boolean().optional()
+        .describe("표 오른쪽 끝 빈 열(서식 입력란) 보존 (#47, 기본 off: 후행 빈 열 트림, CLI --keep-empty-cols 대응)"),
+      keep_empty_paragraphs: z.boolean().optional()
+        .describe("빈 문단 보존 — 본문은 빈 paragraph 블록, 표 셀은 빈 줄 (#57, 기본 off, CLI --keep-empty-paragraphs 대응)"),
+      include_field_placeholders: z.boolean().optional()
+        .describe("미기입 누름틀 안내문도 출력 — 빈 서식 문서의 칸 용도 보존 (#92, 기본 off, CLI --include-field-placeholders 대응)"),
+      memos: z.boolean().optional()
+        .describe("메모(한글 \"메모 넣기\")를 문서 끝 \"메모\" 절로 — 작성자·시각·붙은 글·메모 글 (#180, HWPX·HWP5, 기본 off, CLI --memos 대응). 메모가 있으면 끄더라도 머리 줄에 개수를 알린다"),
+      keep_layout_tables: z.boolean().optional()
+        .describe("테두리가 안 보이는 틀 표도 원본 표 구조 그대로 (기본 off = 보이는 대로: 틀은 글, 칸으로 조립한 분수는 수식). patch_document 로 되돌릴 편집본은 켜서 뽑는다 (CLI --keep-layout-tables)"),
+      html_tables: z.boolean().optional()
+        .describe("모든 표를 HTML 로 — 파이프 표도 HTML 표로, 태그마다 한 줄씩 들여써 냄 (기본 off, CLI --html-tables 대응)"),
+      table_format: z.enum(["gfm"]).optional()
+        .describe("\"gfm\": 모든 표를 HTML 없이 GFM 파이프 표로 — 셀 안 표는 부모 뒤 독립 표로 꺼내고 관계를 <!-- <table id parent_id /> --> 표지로 남김 (RAG 색인용, html_tables 와 함께 못 씀, CLI --table-format 대응)"),
+      script_tags: z.boolean().optional()
+        .describe("위·아래첨자를 <sup>·<sub> 로 표기(\"10⁴ m²\" 가 \"104 m2\" 로 펴지지 않게) — 기본: HWPX·HWP·DOCX 켬, PDF 끔(논문·수식 PDF 는 true 권장), false 면 모두 평문. CLI --script-tags / --no-script-tags 대응"),
+      plain: z.boolean().optional()
+        .describe("평문 Markdown — 그림 자리 표시·링크 URL·밑줄/굵게 표기를 빼고 글만 (제목·목록·표 구조는 유지, 기본 off, CLI --plain 대응)"),
+      password: z.string().optional()
+        .describe("암호로 보호된 문서의 열기 암호 (#59, HWPX·HWP3·HWP5 지원. 파싱이 ENCRYPTED로 실패하면 이 옵션으로 재시도하세요. 한컴 DRM 보호 문서는 해당 없음)"),
+      tables: z.boolean().optional()
+        .describe("PDF 표 감지 (기본 true — false로 끄기, CLI --no-tables 대응). 테두리 박스를 표로 오인해 읽기 순서가 뒤집히는 문서(2단 시험지 등)에서 자연 읽기순 텍스트만 뽑습니다 (#64)"),
+    },
+    async ({ file_path, ocr, remove_header_footer, formula_ocr, ocr_rec, ocr_det, ocr_det_long_side, dedupe_running_headers, keep_trailing_empty_cols, keep_empty_paragraphs, include_field_placeholders, memos, keep_layout_tables, html_tables, table_format, script_tags, plain, password, tables }) => {
+      try {
+        const { buffer, resolved } = await readValidatedFile(file_path, MAX_FILE_SIZE, PARSE_EXTENSIONS)
+        const format = detectFormat(buffer)
+
+        if (format === "unknown") {
+          return {
+            content: [{ type: "text", text: `지원하지 않는 파일 형식입니다: ${file_path}` }],
+            isError: true,
+          }
+        }
+
+        // 이미지는 파일 참조(image_NNN)로 둔다 — MCP 텍스트 응답에 base64 를 인라인해도
+        // 모델은 data URI 를 이미지로 해석하지 못하고, 사진 한 장(≈100KB → base64 133KB)
+        // 만으로 클라이언트 도구 응답 한도(Claude Code 기본 25k 토큰)를 넘겨 호출 자체가
+        // 깨진다(v3.18.0 회귀). 자체 완결형 마크다운이 필요하면 CLI `--inline-images`.
+        // filePath 전달 — 배포용 HWP의 COM fallback에 필요 (CLI와 동일)
+        const result = await parse(buffer, {
+          filePath: resolved,
+          ...(ocr !== undefined ? { ocr } : {}),
+          ...(remove_header_footer !== undefined ? { removeHeaderFooter: remove_header_footer } : {}),
+          ...(formula_ocr ? { formulaOcr: true } : {}),
+          // 모델은 프리셋 이름만 — 로컬 ONNX 파일({path, sha256})은 CLI·라이브러리에서
+          ...(ocr_rec ? { ocrRec: ocr_rec } : {}),
+          ...(ocr_det ? { ocrDet: ocr_det } : {}),
+          ...(ocr_det_long_side !== undefined ? { ocrDetLongSide: ocr_det_long_side } : {}),
+          ...(dedupe_running_headers ? { dedupeRunningHeaders: true } : {}),
+          ...(keep_trailing_empty_cols ? { keepTrailingEmptyCols: true } : {}),
+          ...(keep_empty_paragraphs ? { keepEmptyParagraphs: true } : {}),
+          ...(include_field_placeholders ? { includeFieldPlaceholders: true } : {}),
+          ...(memos ? { memos: true } : {}),
+          ...(plain ? { plain: true } : {}),
+          ...(script_tags !== undefined ? { scriptTags: script_tags } : {}),
+          ...(html_tables ? { htmlTables: true } : {}),
+          ...(table_format ? { tableFormat: table_format } : {}),
+          ...(keep_layout_tables ? { layoutTables: "keep" as const } : {}),
+          ...(password ? { password } : {}),
+          ...(tables === false ? { tables: false } : {}),
+        })
+
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `파싱 실패 (${result.fileType}): ${result.error}` }],
+            isError: true,
+          }
+        }
+
+        const markdown = result.markdown
+
+        const meta = [
+          `포맷: ${result.fileType.toUpperCase()}`,
+          result.pageCount ? `페이지: ${result.pageCount}` : null,
+          result.metadata?.title ? `제목: ${result.metadata.title}` : null,
+          result.metadata?.author ? `작성자: ${result.metadata.author}` : null,
+          result.memos?.length ? `메모: ${result.memos.length}개${memos ? "" : " (memos: true 로 끝에 모아 보기)"}` : null,
+          result.isImageBased
+            ? (result.warnings?.some(w => w.code === "OCR_APPLIED") ? "이미지 기반 PDF (OCR 적용)" : "이미지 기반 PDF (텍스트 추출 불가 — ocr: true 로 재시도 가능)")
+            : null,
+        ].filter(Boolean).join(" | ")
+
+        // outline/warnings 부가 정보 추가
+        const parts: string[] = [`[${meta}]`]
+
+        if (result.outline && result.outline.length > 0) {
+          const outlineText = result.outline.map(o => `${"  ".repeat(o.level - 1)}- ${o.text}`).join("\n")
+          parts.push(`\n📑 문서 구조:\n${outlineText}`)
+        }
+
+        if (result.warnings && result.warnings.length > 0) {
+          const warnText = result.warnings.map(w => `- [p${w.page || "?"}] ${w.message}`).join("\n")
+          parts.push(`\n⚠️ 경고:\n${warnText}`)
+        }
+
+        parts.push(`\n\n${markdown}`)
+
+        return {
+          content: [{ type: "text", text: capResponseText(parts.join("")) }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // ─── 도구: detect_format ─────────────────────────────
+
+  server.tool(
+    "detect_format",
+    "파일의 포맷을 매직 바이트와 컨테이너 내부 구조로 감지합니다 (hwpx, hwp, hwp3, hwpml, pdf, xls, xlsx, docx, pptx, image, unknown).",
+    {
+      file_path: z.string().min(1).describe("감지할 파일의 절대 경로"),
+    },
+    async ({ file_path }) => {
+      try {
+        const resolved = safePath(file_path, PARSE_EXTENSIONS)
+        let format: string = detectFormatFromHeader(resolved)
+        // 16바이트 헤더로는 모든 ZIP이 'hwpx'로 나온다 — 파일을 읽어 내부 구조로
+        // hwpx/xlsx/docx/pptx 세분화 (parse_metadata와 판정 일치)
+        // 크기 상한은 parse_document와 동일(500MB) — 50MB 초과 ZIP 감지 실패 방지
+        if (format === "hwpx") {
+          const { buffer } = await readValidatedFile(file_path, MAX_FILE_SIZE, PARSE_EXTENSIONS)
+          format = await detectZipFormat(buffer)
+        } else if (format === "hwp") {
+          // OLE2 도 동일하게 세분화 — .xls(Excel 97-2003)를 'hwp'로 보고하던 누락 (parse()와 판정 일치)
+          const { buffer } = await readValidatedFile(file_path, MAX_FILE_SIZE, PARSE_EXTENSIONS)
+          const ole2Format = detectOle2Format(buffer)
+          if (ole2Format !== "unknown") format = ole2Format
+        }
+        return {
+          content: [{ type: "text", text: `${file_path}: ${format}` }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // ─── 도구: parse_metadata ────────────────────────────
+
+  server.tool(
+    "parse_metadata",
+    "문서의 메타데이터(제목, 작성자, 날짜 등)만 빠르게 추출합니다. 전체 파싱 없이 헤더/매니페스트만 읽습니다.",
+    {
+      file_path: z.string().min(1).describe("메타데이터를 추출할 문서 파일의 절대 경로"),
+    },
+    async ({ file_path }) => {
+      try {
+        const resolved = safePath(file_path, PARSE_EXTENSIONS)
+        const format = detectFormatFromHeader(resolved)
+
+        if (format === "unknown") {
+          return {
+            content: [{ type: "text", text: `지원하지 않는 파일 형식입니다: ${file_path}` }],
+            isError: true,
+          }
+        }
+
+        // metadata 전용 크기 제한 (50MB)
+        const { buffer } = await readValidatedFile(file_path, MAX_METADATA_FILE_SIZE, PARSE_EXTENSIONS)
+
+        let metadata
+        // ZIP(hwpx→xlsx/docx/pptx)·OLE2(hwp→xls) 모두 내부 구조로 세분화 — parse()와 판정 일치
+        let effectiveFormat: ReturnType<typeof detectFormat> = format
+        if (format === "hwpx") {
+          const zipFormat = await detectZipFormat(buffer)
+          if (zipFormat !== "unknown") effectiveFormat = zipFormat
+        } else if (format === "hwp") {
+          if (detectOle2Format(buffer) === "xls") effectiveFormat = "xls"
+        }
+        switch (effectiveFormat) {
+          case "hwp":
+            metadata = extractHwp5MetadataOnly(Buffer.from(buffer))
+            break
+          case "hwpx":
+            metadata = await extractHwpxMetadataOnly(buffer)
+            break
+          case "pdf":
+            try {
+              const { extractPdfMetadataOnly } = await import("../pdf/parser.js")
+              metadata = await extractPdfMetadataOnly(buffer)
+            } catch {
+              metadata = undefined // 열 수 없는 PDF 는 metadata 생략
+            }
+            break
+          case "hwp3":
+          case "hwpml":
+          case "xls":
+          case "xlsx":
+          case "docx":
+          case "pptx": {
+            // 전용 metadata 추출기가 없는 포맷은 전체 파싱 후 metadata 반환
+            const result = await parse(buffer)
+            metadata = result.success ? result.metadata : undefined
+            break
+          }
+          default:
+            // image 등 — 헤더성 메타데이터 없음. 무음 undefined 대신 포맷만 정직하게 반환.
+            metadata = undefined
+            break
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify({ format: effectiveFormat, ...metadata }, null, 2) }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // ─── 도구: parse_pages ──────────────────────────────
+
+  server.tool(
+    "parse_pages",
+    "문서의 특정 페이지 범위만 파싱합니다. PDF와 한컴 저장본 HWP/HWPX는 실제 페이지 기준(metadata.pageMode=layout), 조판 캐시가 없는 생성 파일은 섹션 단위 근사(pageMode=section)입니다.",
+    {
+      file_path: z.string().min(1).describe("파싱할 문서 파일의 절대 경로"),
+      pages: z.string().min(1).describe("페이지 범위 (예: '1-3', '1,3,5-7')"),
+    },
+    async ({ file_path, pages }) => {
+      try {
+        const resolved = safePath(file_path, PARSE_EXTENSIONS)
+        const { buffer } = await readValidatedFile(file_path, MAX_FILE_SIZE, PARSE_EXTENSIONS)
+        const format = detectFormat(buffer)
+
+        if (format === "unknown") {
+          return {
+            content: [{ type: "text", text: `지원하지 않는 파일 형식입니다: ${file_path}` }],
+            isError: true,
+          }
+        }
+
+        // filePath 전달 — 배포용 HWP의 COM fallback에 필요 (parse_document·parse_chunks와 동일)
+        const result = await parse(buffer, { pages, filePath: resolved })
+
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `파싱 실패 (${result.fileType}): ${result.error}` }],
+            isError: true,
+          }
+        }
+
+        const meta = [
+          `포맷: ${result.fileType.toUpperCase()}`,
+          `범위: ${pages}`,
+          result.pageCount ? `페이지: ${result.pageCount}` : null,
+          result.metadata?.pageMode === "section" ? "기준: 섹션 근사" : null,
+        ].filter(Boolean).join(" | ")
+
+        return {
+          content: [{ type: "text", text: capResponseText(`[${meta}]\n\n${result.markdown}`) }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // ─── 도구: parse_table ──────────────────────────────
+
+  server.tool(
+    "parse_table",
+    "문서에서 N번째 테이블만 추출합니다 (0-based index). 테이블이 없거나 인덱스 범위를 초과하면 오류를 반환합니다.",
+    {
+      file_path: z.string().min(1).describe("파싱할 문서 파일의 절대 경로"),
+      table_index: z.number().int().min(0).describe("추출할 테이블 인덱스 (0부터 시작)"),
+    },
+    async ({ file_path, table_index }) => {
+      try {
+        const { buffer } = await readValidatedFile(file_path, MAX_FILE_SIZE, PARSE_EXTENSIONS)
+        const format = detectFormat(buffer)
+
+        if (format === "unknown") {
+          return {
+            content: [{ type: "text", text: `지원하지 않는 파일 형식입니다: ${file_path}` }],
+            isError: true,
+          }
+        }
+
+        const result = await parse(buffer)
+
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `파싱 실패 (${result.fileType}): ${result.error}` }],
+            isError: true,
+          }
+        }
+
+        const tableBlocks = result.blocks.filter(b => b.type === "table" && b.table)
+        if (tableBlocks.length === 0) {
+          return {
+            content: [{ type: "text", text: `문서에 테이블이 없습니다.` }],
+            isError: true,
+          }
+        }
+
+        if (table_index >= tableBlocks.length) {
+          return {
+            content: [{ type: "text", text: `테이블 인덱스 초과: ${table_index} (총 ${tableBlocks.length}개 테이블)` }],
+            isError: true,
+          }
+        }
+
+        const tableBlock = tableBlocks[table_index]
+        const tableMarkdown = blocksToMarkdown([tableBlock])
+
+        return {
+          content: [{ type: "text", text: `[테이블 #${table_index} / 총 ${tableBlocks.length}개]\n\n${tableMarkdown}` }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // ─── 도구: compare_documents ─────────────────────────
+
+  server.tool(
+    "compare_documents",
+    "두 한국 문서 파일을 비교하여 추가/삭제/변경된 블록을 표시합니다. 신구대조표 생성에 활용됩니다. 크로스 포맷(HWP↔HWPX) 비교 가능.",
+    {
+      file_path_a: z.string().min(1).describe("비교 원본 문서의 절대 경로"),
+      file_path_b: z.string().min(1).describe("비교 대상 문서의 절대 경로"),
+    },
+    async ({ file_path_a, file_path_b }) => {
+      try {
+        const { buffer: bufA } = await readValidatedFile(file_path_a)
+        const { buffer: bufB } = await readValidatedFile(file_path_b)
+
+        const result = await compare(bufA, bufB)
+        const { stats, diffs } = result
+
+        const lines: string[] = [
+          `## 문서 비교 결과`,
+          `추가: ${stats.added} | 삭제: ${stats.removed} | 변경: ${stats.modified} | 동일: ${stats.unchanged}`,
+          "",
+        ]
+
+        for (const d of diffs) {
+          const prefix = d.type === "added" ? "+" : d.type === "removed" ? "-" : d.type === "modified" ? "~" : " "
+          const text = d.after?.text || d.before?.text || (d.after?.table ? "[테이블]" : d.before?.table ? "[테이블]" : "")
+          const sim = d.similarity !== undefined ? ` (${(d.similarity * 100).toFixed(0)}%)` : ""
+          lines.push(`${prefix} ${text.substring(0, 200)}${sim}`)
+        }
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // ─── 도구: parse_chunks ──────────────────────────────
+
+  server.tool(
+    "parse_chunks",
+    "문서를 RAG용 구조 청크 JSON으로 파싱합니다. 헤딩·개조식 위계(□○- / 1.·가.·1))가 breadcrumb 경로로 보존되고 표는 독립 청크로 나옵니다 — 임베딩·인덱싱 전처리용. 자르기(토큰 상한·오버랩)는 소비자 몫입니다.",
+    {
+      file_path: z.string().min(1).describe("대상 문서의 절대 경로 (HWP/HWPX/PDF/XLSX/DOCX)"),
+      granularity: z.enum(["section", "block"]).default("section").describe("section=같은 breadcrumb 아래 연속 텍스트 병합(기본), block=IRBlock 1개=청크 1개"),
+      include_table_cells: z.boolean().default(false).describe("표 청크에 셀 텍스트 2차원 배열 포함 여부"),
+    },
+    async ({ file_path, granularity, include_table_cells }) => {
+      try {
+        const { buffer, resolved } = await readValidatedFile(file_path, MAX_FILE_SIZE, PARSE_EXTENSIONS)
+        const parsed = await parse(buffer, { filePath: resolved })
+        if (!parsed.success) {
+          return { content: [{ type: "text", text: `파싱 실패: ${parsed.error}` }], isError: true }
+        }
+        const { blocksToChunks } = await import("../chunks.js")
+        const chunks = blocksToChunks(parsed.blocks, { granularity, includeTableCells: include_table_cells })
+        return { content: [{ type: "text", text: capResponseText(JSON.stringify(chunks, null, 2)) }] }
+      } catch (err) {
+        return { content: [{ type: "text", text: `청크 파싱 실패: ${describeError(err)}` }], isError: true }
+      }
+    },
+  )
+}

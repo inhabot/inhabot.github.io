@@ -7,6 +7,9 @@
  * 변경 문단 외 XML 바이트가 그대로 보존된다 (filler-hwpx.ts 패턴의 오프셋 버전).
  */
 
+import { isDatePlaceholder } from "../form/recognize.js"
+import { mapPuaText, pairedNumber } from "../shared/pua.js"
+
 // ─── 타입 ───────────────────────────────────────────
 
 /** <hp:t> 콘텐츠 범위 — [contentStart, contentEnd) 가 여는/닫는 태그 사이 */
@@ -50,6 +53,10 @@ export interface ScanCell {
   paragraphs: ScanParagraph[]
   /** 셀 내부 중첩표 (문서 순서) */
   tables: ScanTable[]
+  /** <hp:cellAddr> 태그 범위 (자기닫힘=태그 전체, 펼친형=여는 태그) — rowAddr 재작성용 */
+  addrTagRange?: { start: number; end: number }
+  /** <hp:tc name="…"> — kordoc 생성기의 왕복 마커(`__kordoc_h1` 등) 판독용 */
+  name?: string
 }
 
 /** 스캔된 표 */
@@ -60,8 +67,17 @@ export interface ScanTable {
   topLevel: boolean
   /** 비어있지 않은 행들 (tr 순서) */
   rows: ScanCell[][]
+  /** rows[i]의 <hp:tr>...</hp:tr> XML 범위 (행 추가/삭제 splice용, rows와 정렬) */
+  rowRanges: { start: number; end: number }[]
   /** 앵커 좌표 → 셀 ("r,c") */
   cellByAnchor: Map<string, ScanCell>
+  /**
+   * kordoc 생성기의 장식표(제목 틀·장 띠·요약 상자·목차) — 파서가 표 대신 heading·인용문으로 내거나 건너뛰므로
+   * 패치의 표 서수에서 빠지고, heading·quote 면 표시 칸(channelCell)의 문단이 문단 매핑 대상이 된다.
+   * 최상위 표만 판독 (파서 section-walker kordocTableChannel 과 같은 규칙)
+   */
+  channel?: "heading" | "quote" | "skip"
+  channelCell?: ScanCell
 }
 
 /** 섹션 하나의 스캔 결과 */
@@ -96,9 +112,11 @@ export interface SpliceEdit {
 
 // ─── XML 텍스트 유틸 ─────────────────────────────────
 
-/** XML 텍스트 노드 이스케이프 (속성 아님 — & < > 만) */
+/** XML 텍스트 노드 이스케이프 (속성 아님 — & < > 만).
+ *  XML 1.0 불법 C0 제어문자는 제거한다(\t \n \r 보존) — 문서를 못 여는 손상 방지 */
 export function escapeXmlText(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
 /** XML 엔티티 디코딩 */
@@ -121,12 +139,12 @@ export function decodeXmlEntities(text: string): string {
   })
 }
 
-/** hp:t 콘텐츠에서 텍스트 추출 — 파서가 공백류로 취급하는 태그(tab/fwSpace/hwSpace/
+/** hp:t 콘텐츠에서 텍스트 추출 — 파서가 공백류로 취급하는 태그(tab/fwSpace/hwSpace/nbSpace/
  *  br/lineBreak)만 공백, 나머지 태그(markpen 등 파서가 무시)는 제거 (파서 모델 정합) */
 function tContentToText(raw: string): string {
   return decodeXmlEntities(
     raw
-      .replace(/<\/?(?:[A-Za-z0-9_]+:)?(?:tab|fwSpace|hwSpace|br|lineBreak)(?:\s[^>]*)?\/?>/g, " ")
+      .replace(/<\/?(?:[A-Za-z0-9_]+:)?(?:tab|fwSpace|hwSpace|nbSpace|br|lineBreak)(?:\s[^>]*)?\/?>/g, " ")
       .replace(/<[^>]*>/g, ""),
   )
 }
@@ -190,6 +208,7 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
   const paraStack: ScanParagraph[] = []
   const tableStack: ScanTable[] = []
   const rowStack: ScanCell[][] = []     // 테이블별 currentRow
+  const trStartStack: number[] = []     // 테이블별 진행 중 <hp:tr> 시작 위치 (-1 = 없음)
   const cellStack: ScanCell[] = []
   let pendingT: { para: ScanParagraph; contentStart: number } | null = null
   const ctrlSubStack: OpenCtrlSub[] = []
@@ -271,13 +290,20 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
       } else if (local === "tr") {
         const row = rowStack[rowStack.length - 1]
         const table = tableStack[tableStack.length - 1]
-        if (row && table && row.length > 0) table.rows.push(row)
+        if (row && table && row.length > 0) {
+          table.rows.push(row)
+          const trStart = trStartStack[trStartStack.length - 1]
+          if (trStart >= 0) table.rowRanges.push({ start: trStart, end: m.index + full.length })
+        }
         if (rowStack.length > 0) rowStack[rowStack.length - 1] = []
+        if (trStartStack.length > 0) trStartStack[trStartStack.length - 1] = -1
       } else if (local === "tbl") {
         const table = tableStack.pop()
         rowStack.pop()
+        trStartStack.pop()
         if (table) {
           finalizeTable(table)
+          if (table.topLevel) markKordocChannel(table)
           // 중첩표는 둘러싼 셀에 부착 (재귀 패치용), 셀이 없으면(머리말 등
           // ctrl 내부) orphanTables로 — filler가 채우기 대상에 포함 (v3.1)
           if (!table.topLevel) {
@@ -310,7 +336,7 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
       if (local === "t") {
         const para = owningPara()
         if (para) para.tRanges.push({ contentStart: m.index, contentEnd: m.index + full.length, selfClosing: true, prefix: prefixOf(qname) })
-      } else if (local === "tab" || local === "fwSpace" || local === "hwSpace" || local === "br" || local === "lineBreak") {
+      } else if (local === "tab" || local === "fwSpace" || local === "hwSpace" || local === "nbSpace" || local === "br" || local === "lineBreak") {
         // pendingT 내부면 t 콘텐츠 추출이 공백 처리하므로 중복 방지
         if (!pendingT) {
           const para = owningPara()
@@ -327,6 +353,7 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
           const ra = parseInt(getAttr(attrsRaw, "rowAddr") || "", 10)
           if (!isNaN(ca)) cell.colAddr = ca
           if (!isNaN(ra)) cell.rowAddr = ra
+          cell.addrTagRange = { start: m.index, end: m.index + full.length }
         }
       } else if (local === "cellSpan") {
         const cell = cellStack[cellStack.length - 1]
@@ -383,6 +410,7 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
         start: m.index,
         topLevel: false,
         rows: [],
+        rowRanges: [],
         cellByAnchor: new Map(),
       }
       // 자기 자신 제외하고 판별
@@ -391,11 +419,14 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
       stack.push({ local, qname, contentStart })
       tableStack.push(table)
       rowStack.push([])
+      trStartStack.push(-1)
       if (table.topLevel) tables.push(table)
     } else if (local === "tr") {
       if (rowStack.length > 0) rowStack[rowStack.length - 1] = []
+      if (trStartStack.length > 0) trStartStack[trStartStack.length - 1] = m.index
     } else if (local === "tc") {
-      cellStack.push({ colSpan: 1, rowSpan: 1, paragraphs: [], tables: [] })
+      const name = getAttr(attrsRaw, "name")
+      cellStack.push({ colSpan: 1, rowSpan: 1, paragraphs: [], tables: [], ...(name ? { name } : {}) })
     } else if (local === "cellAddr" || local === "cellSpan") {
       // 자기닫힘이 일반적이지만 펼친 형태(<hp:cellAddr ...></hp:cellAddr>)도 동일 처리
       const cell = cellStack[cellStack.length - 1]
@@ -405,6 +436,7 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
           const ra = parseInt(getAttr(attrsRaw, "rowAddr") || "", 10)
           if (!isNaN(ca)) cell.colAddr = ca
           if (!isNaN(ra)) cell.rowAddr = ra
+          cell.addrTagRange = { start: m.index, end: contentStart }
         } else {
           const cs = parseInt(getAttr(attrsRaw, "colSpan") || "1", 10)
           const rs = parseInt(getAttr(attrsRaw, "rowSpan") || "1", 10)
@@ -417,7 +449,7 @@ export function scanSectionXml(xml: string, sectionIndex: number): SectionScan {
       if (stack.some(f => f.local === "ctrl")) {
         ctrlSubStack.push({ kind: local, texts: [] })
       }
-    } else if (local === "tab" || local === "fwSpace" || local === "hwSpace" || local === "br" || local === "lineBreak") {
+    } else if (local === "tab" || local === "fwSpace" || local === "hwSpace" || local === "nbSpace" || local === "br" || local === "lineBreak") {
       const para = owningPara()
       if (para) para.text += " "
     }
@@ -477,11 +509,15 @@ function fillRunInsertPos(para: ScanParagraph, xml: string): void {
 }
 
 /** start 위치의 여는 태그에 대응하는 닫는 태그 뒤 위치 (동일 로컬명 중첩 추적) */
-function findElementEnd(xml: string, start: number): number {
-  const open = xml.slice(start).match(/^<([^\s/>!?]+)/)
+export function findElementEnd(xml: string, start: number): number {
+  // 요소 이름은 XML 이름 꼴만 — 문서에서 온 이름을 정규식에 그대로 넣으면 `<(a|a)+b` 같은 이름이 지수 역추적·문법 오류를 낸다
+  const head = /<([\w.-]+(?::[\w.-]+)?)(?=[\s/>])/y
+  head.lastIndex = start
+  const open = head.exec(xml)
   if (!open) return -1
-  const qname = open[1]
-  const re = new RegExp(`<${qname}(?=[\\s/>])(?:"[^"]*"|'[^']*'|[^>"'])*?(/?)>|</${qname}\\s*>`, "g")
+  const qname = open[1].replace(/\./g, "\\.")
+  // 속성 구간은 따옴표 값·그 밖 글자·"/>" 아닌 '/' 로 겹침 없이 — 역추적이 선형
+  const re = new RegExp(`<${qname}(?=[\\s/>])(?:"[^"]*"|'[^']*'|[^>"'/]|/(?!>))*(/?)>|</${qname}\\s*>`, "g")
   re.lastIndex = start
   let depth = 0
   let mm: RegExpExecArray | null
@@ -529,6 +565,19 @@ function finalizeTable(table: ScanTable): void {
   }
 }
 
+/** 표의 첫 `__kordoc_` 이름 칸으로 왕복 채널 판독 — 파서가 그 표를 heading·인용문으로 내거나 건너뛴다 */
+function markKordocChannel(table: ScanTable): void {
+  let cell: ScanCell | undefined
+  for (const row of table.rows) {
+    cell = row.find(c => c.name?.startsWith("__kordoc_"))
+    if (cell) break
+  }
+  const m = cell?.name?.match(/^__kordoc_(?:(h[1-6])|(toc|skip)|(summary))$/)
+  if (!cell || !m) return
+  table.channel = m[1] ? "heading" : m[3] ? "quote" : "skip"
+  if (table.channel !== "skip") table.channelCell = cell
+}
+
 // ─── 치환 ────────────────────────────────────────────
 
 /**
@@ -543,7 +592,8 @@ function finalizeTable(table: ScanTable): void {
 export function buildParagraphSplices(para: ScanParagraph, newText: string, xml?: string): SpliceEdit[] | null {
   if (newText && xml) {
     const orig = paraTText(para, xml)
-    if (orig && orig.trim() !== "") {
+    // 날짜 자리표시("     년   월 -     년   월")의 공백은 값이 들어갈 빈칸이지 들여쓰기가 아니다 — 복원하지 않는다(patch 와 같다, #151)
+    if (orig && orig.trim() !== "" && !isDatePlaceholder(orig.trim())) {
       const lead = orig.match(/^\s*/)![0]
       const trail = orig.match(/\s*$/)![0]
       if ((lead || trail) && newText.trim() !== "") {
@@ -591,6 +641,19 @@ export function buildParagraphSplices(para: ScanParagraph, newText: string, xml?
     return [{ start, end, replacement: `${opened}<${prefix}t>${escaped}</${prefix}t></${qname}>` }]
   }
   return newText ? null : []
+}
+
+/**
+ * 선두 부호 run 보존 — kordoc 공문서 항목은 부호를 따로 된 run(부호 + 탭)으로 낸다(내어쓰기용 자동 탭 정렬).
+ * 편집이 부호 뒤 내용만 바꿨으면 부호 run 은 그대로 두고 나머지 hp:t 만 다시 쓴다. 문단 전체 재작성은 부호와 내용을
+ * 첫 hp:t 하나에 합치며 탭을 공백으로 바꿔 정렬이 깨진다. 부호가 바뀌었거나 그 꼴이 아니면 null(호출자가 전체 재작성).
+ */
+export function markerRunSplices(para: ScanParagraph, xml: string, newText: string): SpliceEdit[] | null {
+  const first = para.tRanges[0]
+  if (!first || first.selfClosing || para.tRanges.length < 2) return null
+  const m = /^([^<&\s]{1,6})<(?:\w+:)?tab\b[^>]*\/>$/.exec(xml.slice(first.contentStart, first.contentEnd))
+  if (!m || !newText.startsWith(m[1] + " ")) return null
+  return buildParagraphSplices({ ...para, tRanges: para.tRanges.slice(1) }, newText.slice(m[1].length + 1), xml)
 }
 
 /**
@@ -678,7 +741,94 @@ export function buildRangeSplices(
   return placed ? splices : null
 }
 
-/** splice 일괄 적용 — 겹침 검증 후 뒤에서부터 치환 */
+/** hp:t 콘텐츠 안 글자 요소 — tContentToText 가 공백 한 칸으로 보는 것 */
+const T_CHAR_TAG_RE = /^<\/?(?:[A-Za-z0-9_]+:)?(?:tab|fwSpace|hwSpace|nbSpace|br|lineBreak)(?:\s[^>]*)?\/?>$/
+
+/** paraTCharMap 좌표계 — 글자마다 소속 hp:t(tRanges 번호)와 원문 범위 [from, to) */
+export interface TCharMap { text: string; seg: number[]; from: number[]; to: number[] }
+
+const PUA_RE = /[\uE000-\uF8FF]|[\u{F0000}-\u{10FFFF}]/u
+
+/** hp:t 글에 한컴 PUA 기호가 있는가 — IR·normForMatch 는 표시값(mapPuaText)이라 원문 글과 바로 맞대지 못한다 */
+export function hasPua(text: string): boolean { return PUA_RE.test(text) }
+
+/**
+ * hp:t 이음 글을 IR 평문과 맞댈 꼴로 펴고 글자마다 원문 범위를 단다: 엔티티를 풀고 탭·줄바꿈 요소는 공백 한 칸, 그 밖 요소는 지움
+ * (tContentToText), PUA 기호는 표시값(sanitizePua 의 mapPuaText·남은 보조 PUA 지움). 엔티티·PUA 에서 나온 글자는 그 원문 전체, 요소
+ * 글자는 그 태그 범위. paraTText 가 못 다루는 문단(hp:t 안 엔티티·요소, PUA)의 정밀 치환 좌표계 (buildMappedRangeSplices)
+ */
+export function paraTCharMap(para: ScanParagraph, xml: string): TCharMap {
+  const m: TCharMap = { text: "", seg: [], from: [], to: [] }
+  const add = (c: string, k: number, a: number, b: number): void => { m.text += c; m.seg.push(k); m.from.push(a); m.to.push(b) }
+  para.tRanges.forEach((t, k) => {
+    if (t.selfClosing) return
+    const raw = xml.slice(t.contentStart, t.contentEnd)
+    const re = /<[^>]*>|&(?:lt|gt|amp|quot|apos|#x?[0-9a-fA-F]+);/g
+    let last = 0
+    for (let mm = re.exec(raw); mm; mm = re.exec(raw)) {
+      for (let i = last; i < mm.index; i++) add(raw[i], k, t.contentStart + i, t.contentStart + i + 1)
+      const a = t.contentStart + mm.index, b = a + mm[0].length
+      if (mm[0][0] !== "<") for (const c of decodeXmlEntities(mm[0]).split("")) add(c, k, a, b)
+      else if (T_CHAR_TAG_RE.test(mm[0])) add(" ", k, a, b)
+      last = mm.index + mm[0].length
+    }
+    for (let i = last; i < raw.length; i++) add(raw[i], k, t.contentStart + i, t.contentStart + i + 1)
+  })
+  if (!PUA_RE.test(m.text)) return m
+  // 두 자리 번호 조각 둘은 같은 hp:t 안일 때만 한 글자로 (아니면 맞대기가 실패해 호출자 폴백)
+  const p = puaShownMap(m.text, (i, j) => m.seg[i] === m.seg[j])
+  return { text: p.text, seg: p.from.map(i => m.seg[i]), from: p.from.map(i => m.from[i]), to: p.to.map(j => m.to[j - 1]) }
+}
+
+/**
+ * 글을 IR 표시값으로 편다 — sanitizePua 처럼 코드포인트마다 mapPuaText, 두 자리 번호 조각 둘은 한 글자(pairable 인 자리만), 남은 보조
+ * PUA 는 지움. 표시 글자마다 원래 글 범위 [from, to) (UTF-16 위치)
+ */
+export function puaShownMap(text: string, pairable: (i: number, j: number) => boolean = () => true): { text: string; from: number[]; to: number[] } {
+  const d = { text: "", from: [] as number[], to: [] as number[] }
+  const cps: Array<{ s: string; i: number }> = []
+  for (let i = 0; i < text.length;) {
+    const n = text.codePointAt(i)! > 0xffff ? 2 : 1
+    cps.push({ s: text.slice(i, i + n), i })
+    i += n
+  }
+  for (let k = 0; k < cps.length; k++) {
+    const a = cps[k]
+    const b = k + 1 < cps.length && pairable(a.i, cps[k + 1].i) ? cps[k + 1] : undefined
+    const pair = b ? pairedNumber(a.s, b.s) : undefined
+    const last = pair !== undefined ? cps[++k] : a
+    const out = (pair ?? mapPuaText(a.s)).replace(/[\u{F0000}-\u{FFFFD}]/gu, "")
+    for (const c of out.split("")) { d.text += c; d.from.push(a.i); d.to.push(last.i + last.s.length) }
+  }
+  return d
+}
+
+/**
+ * paraTCharMap 좌표 [start, end) 치환 — 겹친 hp:t 마다 그 글자들의 원문 범위를 바꾼다(buildRangeSplices 처럼 첫 조각에 새 글, 나머지는 지움).
+ * 바꿀 글자 사이에 폭 없는 요소(형광펜 표지 등)가 끼었거나 엔티티 한가운데서 끊기면 null. start === end 는 앞 글자 뒤(맨 앞이면 첫 글자 앞)에 넣는다
+ */
+export function buildMappedRangeSplices(map: TCharMap, start: number, end: number, replacement: string): SpliceEdit[] | null {
+  const n = map.text.length
+  if (n === 0 || start < 0 || end < start || end > n) return null
+  const inEntity = (i: number): boolean => i > 0 && i < n && map.from[i] === map.from[i - 1]
+  if (inEntity(start) || inEntity(end)) return null
+  const escaped = escapeXmlText(replacement)
+  if (start === end) {
+    const at = start === 0 ? map.from[0] : map.to[start - 1]
+    return [{ start: at, end: at, replacement: escaped }]
+  }
+  const splices: SpliceEdit[] = []
+  for (let i = start; i < end;) {
+    let j = i
+    for (; j + 1 < end && map.seg[j + 1] === map.seg[i]; j++) {
+      if (map.to[j] !== map.from[j + 1] && map.from[j] !== map.from[j + 1]) return null // 사이에 폭 없는 요소
+    }
+    splices.push({ start: map.from[i], end: map.to[j], replacement: splices.length ? "" : escaped })
+    i = j + 1
+  }
+  return splices
+}
+
 /**
  * 섹션 내 모든 <hp:linesegarray> 제거 splice 목록.
  *
@@ -698,17 +848,74 @@ export function allLinesegRemovalSplices(xml: string): SpliceEdit[] {
   return splices
 }
 
-export function applySplices(xml: string, splices: SpliceEdit[]): string {
-  const sorted = [...splices].sort((a, b) => a.start - b.start)
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].start < sorted[i - 1].end) {
-      throw new Error("소스맵 splice 범위 겹침 — 내부 오류")
+/**
+ * 글이 바뀐 문단의 <hp:linesegarray> 만 지우는 splice 목록: 편집 위치를 품은 가장 안쪽 문단(본문 문단·칸 문단)의 캐시만
+ * 지운다. 표를 담은 호스트 문단은 글이 그대로라 캐시를 둔다(행 추가·삭제처럼 칸 밖 편집이면 그 자리의 가장 안쪽 문단이
+ * 호스트라 지워진다). 편집 범위 안에 통째로 든 캐시(행 삭제·문단 교체)는 편집이 지우므로 뺀다.
+ *
+ * 섹션 전체를 지우면(allLinesegRemovalSplices) 자체 조판이 없는 뷰어(rhwp 미리보기·PDF)가 손대지 않은 쪽까지 다시 짜서
+ * 글자가 벌어지고 줄이 꺾이고 아래가 잘렸다(광진구 실문서 채우기·패치 27건 전부, 원본에서 캐시만 지운 대조본과 픽셀 차이 0).
+ * rhwp 는 최상위 문단 하나라도 캐시가 없으면 그 구역의 세로 배치를 다시 짜고(줄 나눔은 캐시대로), 칸 문단의 캐시가 없는
+ * 것은 그 칸만 다시 짠다: 그래서 호스트 문단 캐시를 지우지 않는 것이 채우기 결과를 지킨다(정부포상 동의서 실측: 최상위
+ * 문단 캐시 1개 삭제 → 두 쪽 픽셀 차이 11.4%·11.2%, 칸 문단 캐시 1개 삭제 → 0%).
+ * 한컴은 캐시가 일부 문단에만 없어도 경고 없이 연다: 한글 2024 실기기 대조(4.x Verified: 전체·일부·미삭제 세 변형 모두
+ * 경고 없음)와 한컴 저장본 자체의 혼합 캐시(verify-reflow 36264961) 근거
+ */
+export function changedLinesegRemovalSplices(xml: string, edits: SpliceEdit[]): SpliceEdit[] {
+  if (edits.length === 0) return []
+  const points = edits.map(e => e.start).sort((a, b) => a - b)
+  const tagRe = /<(\/?)((?:[A-Za-z0-9_]+:)?(?:p|linesegarray))(?=[\s/>])(?:"[^"]*"|'[^']*'|[^>"'])*?(\/?)>/g
+  const stack: Array<{ dirty: boolean; seg?: { start: number; end: number } }> = []
+  const out: SpliceEdit[] = []
+  let pi = 0
+  let m: RegExpExecArray | null
+  while ((m = tagRe.exec(xml)) !== null) {
+    // 이 태그 앞(같은 자리 포함)의 편집 지점은 지금 열린 가장 안쪽 문단을 더럽힌다: 문단 여는 태그 자리의 편집(문단 교체)은 바깥 문단
+    while (pi < points.length && points[pi] <= m.index) {
+      if (stack.length) stack[stack.length - 1].dirty = true
+      pi++
+    }
+    const [full, close, qname, selfClose] = m
+    const isSeg = qname.endsWith("linesegarray")
+    if (isSeg) {
+      if (close) continue
+      let end = m.index + full.length
+      if (!selfClose) {
+        const ci = xml.indexOf(`</${qname}>`, end)
+        if (ci < 0) continue
+        end = ci + qname.length + 3
+        tagRe.lastIndex = end
+      }
+      const top = stack[stack.length - 1]
+      if (top && !top.seg) top.seg = { start: m.index, end }
+      continue
+    }
+    if (close) {
+      const p = stack.pop()
+      if (p?.dirty && p.seg) out.push({ start: p.seg.start, end: p.seg.end, replacement: "" })
+    } else if (!selfClose) {
+      stack.push({ dirty: false })
     }
   }
-  let result = xml
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    const s = sorted[i]
-    result = result.slice(0, s.start) + s.replacement + result.slice(s.end)
+  const claimed = edits.filter(e => e.end > e.start)
+  return out.filter(ls => !claimed.some(c => ls.start >= c.start && ls.end <= c.end))
+}
+
+/**
+ * splice 일괄 적용 — 시작 위치로 정렬(같으면 넣은 순서), 겹치면 내부 오류, 원문 조각과 치환 글을 한 번에 잇는다.
+ * 종전엔 뒤에서부터 slice+치환+slice 를 되풀이해 splice 마다 문자열 전체를 복사했다(O(글자 수 × splice 수)) —
+ * 줄 배치 캐시를 전부 지우는 큰 섹션(1,020만 자·26,939 splice)에서 patch·fill·seal 이 32.6초 (v4.14.4 리뷰 실측).
+ * 결과는 종전과 같다 (redact-hwpx.ts applySplicesLinear 와 같은 방식)
+ */
+export function applySplices(xml: string, splices: SpliceEdit[]): string {
+  const sorted = [...splices].sort((a, b) => a.start - b.start)
+  const parts: string[] = []
+  let cursor = 0
+  for (const s of sorted) {
+    if (s.start < cursor) throw new Error("소스맵 splice 범위 겹침 — 내부 오류")
+    parts.push(xml.slice(cursor, s.start), s.replacement)
+    cursor = s.end
   }
-  return result
+  parts.push(xml.slice(cursor))
+  return parts.join("")
 }

@@ -16,3 +16,7 @@ export function inflateRawSync(input, options) {
 export function inflateSync(input, options) {
   return enforceMaxLength(pako.inflate(input), options);
 }
+
+export function deflateSync(input, options) {
+  return enforceMaxLength(pako.deflate(input), options);
+}

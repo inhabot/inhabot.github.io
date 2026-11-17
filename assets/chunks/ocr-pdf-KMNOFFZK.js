@@ -1,0 +1,1 @@
+import{j as n}from"./chunk-5T2IRQFZ.js";n();function t(){return null}async function u(){throw new Error("\uBE0C\uB77C\uC6B0\uC800\uC5D0\uC11C\uB294 PDF OCR\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.")}export{t as builtinOcrConfig,u as runPdfOcr};

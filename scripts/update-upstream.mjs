@@ -9,9 +9,14 @@ const UPSTREAM_URL = "https://github.com/chrisryugj/kordoc.git";
 const UPSTREAM_REF = `${UPSTREAM_NAME}/main`;
 const VENDOR_DIR = path.join(ROOT, "vendor", "kordoc");
 const VENDOR_ARCHIVE_ITEMS = ["src", "package.json", "LICENSE", "NOTICE", "README.md"];
+const BROWSER_UPSTREAM_PACKAGES = ["cfb", "jszip", "markdown-it", "zod"];
 const LOCAL_BROWSER_DEPENDENCIES = {
   buffer: "^6.0.3",
+  "crypto-browserify": "^3.12.1",
+  events: "^3.3.0",
   pako: "^2.1.0",
+  "stream-browserify": "^3.0.0",
+  util: "^0.12.5",
 };
 const LOCAL_DEV_DEPENDENCIES = {
   esbuild: "^0.25.5",
@@ -83,11 +88,10 @@ async function syncRootPackageJson() {
   const rootPackage = JSON.parse(await readFile(rootPackagePath, "utf8"));
   const vendorPackage = JSON.parse(await readFile(vendorPackagePath, "utf8"));
 
-  rootPackage.dependencies = {
-    ...rootPackage.dependencies,
-    ...vendorPackage.dependencies,
-    ...LOCAL_BROWSER_DEPENDENCIES,
-  };
+  rootPackage.dependencies = Object.fromEntries(
+    BROWSER_UPSTREAM_PACKAGES.map((name) => [name, vendorPackage.dependencies[name]]),
+  );
+  Object.assign(rootPackage.dependencies, LOCAL_BROWSER_DEPENDENCIES);
 
   rootPackage.devDependencies = {
     ...rootPackage.devDependencies,

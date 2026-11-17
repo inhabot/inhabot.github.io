@@ -14,16 +14,16 @@
     "update-upstream": "node ./scripts/update-upstream.mjs"
   },
   "dependencies": {
-    "@xmldom/xmldom": "^0.9.8",
-    "buffer": "^6.0.3",
     "cfb": "1.2.2",
     "jszip": "^3.10.1",
+    "markdown-it": "^14.3.3",
+    "zod": "^4.6.7",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
+    "events": "^3.3.0",
     "pako": "^2.1.0",
-    "@modelcontextprotocol/sdk": "^1.28.0",
-    "commander": "^13.0.0",
-    "markdown-it": "^14.3.2",
-    "pdfjs-dist": "^4.10.38",
-    "zod": "^3.23.0"
+    "stream-browserify": "^3.0.0",
+    "util": "^0.12.5"
   },
   "devDependencies": {
     "esbuild": "^0.25.5"

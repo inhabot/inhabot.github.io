@@ -26,15 +26,60 @@ function normalize(s: string): string {
 /** 최대 입력 길이 합 — 초과 시 길이 차이 기반 빠른 추정 (O(m*n) CPU 폭발 방지) */
 const MAX_LEVENSHTEIN_LEN = 10_000
 
+/** normalizedSimilarity 상한용 글 구성 — 공백 정규화한 글의 길이와 UTF-16 코드 단위 다중집합(코드 오름차순) */
+export interface TextProfile { len: number; codes: Uint16Array; counts: Uint32Array }
+
+export function textProfile(text: string): TextProfile {
+  const s = normalize(text)
+  const count = new Map<number, number>()
+  for (let i = 0; i < s.length; i++) count.set(s.charCodeAt(i), (count.get(s.charCodeAt(i)) ?? 0) + 1)
+  const codes = Uint16Array.from([...count.keys()].sort((x, y) => x - y))
+  return { len: s.length, codes, counts: Uint32Array.from(codes, c => count.get(c)!) }
+}
+
+/**
+ * normalizedSimilarity 상한 — 편집 거리는 긴 쪽 길이 − 공통 글자 수(다중집합) 이상이다(같은 글자끼리 맞춘 자리만
+ * 비용 0). 그래서 유사도 ≤ 공통 / 긴 쪽 길이. 합 길이가 MAX_LEVENSHTEIN_LEN 을 넘어 근사 거리(bigram)를 쓰는
+ * 쌍은 이 상한이 성립하지 않아 1 (거르지 않음)
+ */
+export function similarityUpperBound(a: TextProfile, b: TextProfile): number {
+  const maxLen = Math.max(a.len, b.len)
+  if (maxLen === 0 || a.len + b.len > MAX_LEVENSHTEIN_LEN) return 1
+  let common = 0
+  for (let i = 0, j = 0; i < a.codes.length && j < b.codes.length;) {
+    if (a.codes[i] === b.codes[j]) common += Math.min(a.counts[i++], b.counts[j++])
+    else if (a.codes[i] < b.codes[j]) i++
+    else j++
+  }
+  return common / maxLen
+}
+
+/**
+ * 초과 길이 근사 거리 — 문자 bigram(shingle) 다중집합의 Dice 유사도 기반.
+ * 위치 정렬 샘플 비교는 접두 삽입/삭제(shift)에 전량 불일치로 폭주하던 것을 교정.
+ */
+function approxDistance(a: string, b: string): number {
+  const bigramCounts = (s: string): Map<string, number> => {
+    const m = new Map<string, number>()
+    for (let i = 0; i < s.length - 1; i++) {
+      const g = s.slice(i, i + 2)
+      m.set(g, (m.get(g) ?? 0) + 1)
+    }
+    return m
+  }
+  const ca = bigramCounts(a)
+  const cb = bigramCounts(b)
+  let inter = 0
+  for (const [g, n] of ca) inter += Math.min(n, cb.get(g) ?? 0)
+  const total = Math.max(a.length - 1, 0) + Math.max(b.length - 1, 0)
+  const dice = total > 0 ? (2 * inter) / total : 1
+  return Math.round(Math.max(a.length, b.length) * (1 - dice))
+}
+
 /** Levenshtein 편집 거리 — O(min(m,n)) 공간 최적화 */
 function levenshtein(a: string, b: string): number {
   if (a.length + b.length > MAX_LEVENSHTEIN_LEN) {
-    // 길이 차이 + 앞 500자 샘플 비교로 근사 거리 추정
-    const sampleLen = Math.min(500, a.length, b.length)
-    let diffs = 0
-    for (let i = 0; i < sampleLen; i++) if (a[i] !== b[i]) diffs++
-    const sampleRate = sampleLen > 0 ? diffs / sampleLen : 1
-    return Math.abs(a.length - b.length) + Math.round(Math.min(a.length, b.length) * sampleRate)
+    return approxDistance(a, b)
   }
   if (a.length > b.length) [a, b] = [b, a]
   const m = a.length
@@ -107,9 +152,35 @@ function lcsWords(a: string[], b: string[]): string[] {
   return result.reverse()
 }
 
+/**
+ * 대형 입력 LCS 폴백 — 그리디 순서 매칭. 결과가 a·b 양쪽의 부분수열이 되도록
+ * b에서 항상 앞으로만 전진한다 (집합 교집합은 b의 순서를 무시해 textDiff 재생 시
+ * 가짜 equal을 만들던 계약 위반 교정). O(m+n) 상각.
+ */
 function simpleIntersect(a: string[], b: string[]): string[] {
-  const setB = new Set(b)
-  return a.filter(w => setB.has(w))
+  const pos = new Map<string, number[]>()
+  for (let i = 0; i < b.length; i++) {
+    let list = pos.get(b[i])
+    if (!list) pos.set(b[i], (list = []))
+    list.push(i)
+  }
+  const ptr = new Map<string, number>()
+  const result: string[] = []
+  let j = 0
+  for (const w of a) {
+    const list = pos.get(w)
+    if (!list) continue
+    let k = ptr.get(w) ?? 0
+    while (k < list.length && list[k] < j) k++
+    if (k < list.length) {
+      result.push(w)
+      j = list[k] + 1
+      ptr.set(w, k + 1)
+    } else {
+      ptr.set(w, k)
+    }
+  }
+  return result
 }
 
 function mergeChanges(changes: TextChange[]): TextChange[] {

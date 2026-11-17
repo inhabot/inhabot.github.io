@@ -16,6 +16,12 @@
  */
 
 import type { IRTable, IRCell, BoundingBox } from "../types.js"
+import { PREFIX_SCRIPT, scriptRunFits } from "./text-line.js"
+import { isProseFragmentTable, isProseTable } from "./table-roles.js"
+import { clusterCellLines, joinClusterCellLines, type ClusterCellLine } from "./cluster-cell-text.js"
+import type { WrapLexicon } from "./line-wrap.js"
+import { ocrTextGaps } from "../ocr/text-gaps.js"
+import { OCR_GROUPED_NUMBER, isOcrNumericPair, isOcrNumericSplit, supportedOcrColumnCuts } from "./ocr-column-cuts.js"
 
 /** parser.ts의 NormItem과 동일한 인터페이스 */
 export interface ClusterItem {
@@ -28,6 +34,13 @@ export interface ClusterItem {
   fontName: string
   /** pdfjs 공백 아이템이 직전에 있었음 — 단어 경계 힌트 */
   hasSpaceBefore?: boolean
+  /** 반올림 전 x·폭 — 공백 글리프 자리의 실제 틈을 잰다(text-line exactGap) */
+  fx?: number
+  fw?: number
+  /** 직전 공백이 pdfjs 가 글자 틈으로 만든 것뿐(글리프 흐름에 공백 글리프 없음, tracked-text markSyntheticSpaces) — 균등배분 run 을 끊지 않는다 */
+  syntheticSpace?: boolean
+  /** 줄 끝 공백 글리프 (tracked-text markTrailingSpaceGlyphs) — 칸 줄 꺾임이 어절 경계 */
+  spaceAfter?: boolean
 }
 
 // ─── 상수 ──────────────────────────────────────────────
@@ -71,7 +84,10 @@ export interface ClusterTableResult {
 /**
  * 클러스터 기반 테이블 감지. 선이 없는 PDF의 fallback 경로에서 호출.
  */
-export function detectClusterTables(items: ClusterItem[], pageNum: number): ClusterTableResult[] {
+export function detectClusterTables(items: ClusterItem[], pageNum: number, rejected?: { prose: number; cutX?: number }, lex?: WrapLexicon): ClusterTableResult[] {
+  // 쪽 옆 세로 색인 탭 글자는 표 열 후보가 아니다 — 빠진 글자는 usedItems 밖이라 호출 측이 본문 글로 낸다
+  const tab = sideTabGlyphs(items)
+  if (tab.size) items = items.filter(i => !tab.has(i))
   if (items.length < MIN_ROWS * MIN_COLS) return []
 
   // 0. 균등배분 아이템 사전 병합 (개별 글자 → 단어)
@@ -82,7 +98,11 @@ export function detectClusterTables(items: ClusterItem[], pageNum: number): Clus
   // 떨어진다. 이런 조각 행이 표 헤더/열 앵커로 오인되면 본문 문단이 통째로 표에 흡수되므로
   // 수직으로 겹치는 행은 같은 시각적 줄로 병합한다.
   const rows = mergeOverlappingRows(groupByBaseline(merged))
-  if (rows.length < MIN_ROWS) return []
+  if (rows.length < MIN_ROWS) {
+    const compact = detectCompactStatisticalTables(rows, pageNum)
+    for (const table of compact) expandUsedItems(table.usedItems, originMap)
+    return compact
+  }
 
   const results: ClusterTableResult[] = []
 
@@ -100,7 +120,7 @@ export function detectClusterTables(items: ClusterItem[], pageNum: number): Clus
     // boundary 기반 region 탐색 (proximity 대신 headerItems 범위 사용)
     const tableRegions = findTableRegionsByHeader(mergedRows, columns, headerItems)
     for (const region of tableRegions) {
-      const table = buildClusterTable(region.rows, columns, pageNum)
+      const table = buildClusterTable(region.rows, columns, pageNum, lex)
       if (table) {
         expandUsedItems(table.usedItems, originMap)
         results.push(table)
@@ -115,9 +135,18 @@ export function detectClusterTables(items: ClusterItem[], pageNum: number): Clus
       const columns = extractColumnClusters(suspiciousRows)
       if (columns.length >= MIN_COLS) {
         const tableRegions = findTableRegions(rows, columns)
-        for (const region of tableRegions) {
-          const mergedRows = mergeMultiLineRows(region.rows, columns)
-          const table = buildClusterTable(mergedRows, columns, pageNum)
+        for (const found of tableRegions) {
+          const region = { ...found, rows: trimCjkProseEdges(found.rows) }
+          if (region.rows.length < MIN_ROWS) continue
+          // 열은 영역 안 행으로 다시 세운다 — 같은 쪽 다른 표의 열 x 가 섞이면 가짜 사이 열이 생긴다.
+          // 영역 열이 더 적을 때만(섞인 열을 걷어낼 때만), 그 표의 몸통 칸 글이 모두 짧고 글꼴 사용자 영역(수식 기호) 문자가 없을 때만 쓴다 — 행이 적은 영역은 기준 수가
+          // 낮아 기호 줄·문장 줄에서 가짜 표가 살아난다(수학 시험지·보도자료 본문)
+          const own = extractColumnClusters(region.rows.filter(row => hasSuspiciousGaps(row)))
+          const ownTable = own.length >= MIN_COLS && own.length < columns.length
+            ? buildClusterTable(mergeMultiLineRows(region.rows, own), own, pageNum, lex) : null
+          const table = ownTable && ownTable.table.cells.every((row, r) => row.every(cell => (r === 0 || cell.colSpan >= ownTable.table.cols || cell.text.trim().length <= 30) &&
+            !/\p{Co}/u.test(cell.text)))
+            ? ownTable : buildClusterTable(mergeMultiLineRows(region.rows, columns), columns, pageNum, lex)
           if (table) {
             expandUsedItems(table.usedItems, originMap)
             results.push(table)
@@ -127,7 +156,512 @@ export function detectClusterTables(items: ClusterItem[], pageNum: number): Clus
     }
   }
 
-  return results
+  if (results.length === 0) results.push(...detectAlignedTwoColumnTables(rows, pageNum))
+  if (results.length === 0) results.push(...detectSparseTwoColumnTables(rows, pageNum))
+  {
+    // 다른 표가 찾아진 쪽도 남은 행에서 2행 표를 찾는다 (표 사이 문장 뒤 작은 표)
+    const taken = new Set(results.flatMap(r => [...r.usedItems]))
+    const rest = results.length === 0 ? rows : rows.filter(row => !row.items.some(i => taken.has(i)))
+    for (const table of detectCompactStatisticalTables(rest, pageNum)) {
+      expandUsedItems(table.usedItems, originMap)
+      results.push(table)
+    }
+  }
+
+  // 4. 2단 조판 본문 오인 강등 — 걸러진 아이템은 usedItems에서 빠져
+  //    XY-Cut(단 분리) 경로로 흘러가 올바른 읽기 순서로 복원된다.
+  // 산문 역할의 후보도 표가 아니다 (table-roles.ts). 목차·차트는 호출 측이 그 영역의 글로 바꾼다
+  return results.filter(r => {
+    const twoColumns = isTwoColumnProse(r)
+    const prose = twoColumns || isProseTable(r.table) || gaplessCjkLines(r) || isFootnoteList(r, items) ||
+      [...r.usedItems].every(it => it.fontName === "ocr") && isProseFragmentTable(r.table)
+    if (prose && rejected) rejected.prose++
+    // OCR 두 단 본문은 단 경계(군집 상자들 사이 빈 x 띠 가운데 양쪽 글이 고른 가장 넓은 것)를 알린다 — 호출 측이 글 판정으로 못 찾은
+    // 단을 가른다. 한쪽 글이 25% 미만인 틈은 문단 번호 열("[0221]" | 본문, 특허 명세서)이라 단이 아니다
+    if (twoColumns && rejected && [...r.usedItems].every(it => it.fontName === "ocr")) {
+      const used = [...r.usedItems].sort((a, b) => a.x - b.x)
+      const total = used.reduce((n, it) => n + it.text.length, 0)
+      let reach = used[0].x + used[0].w, chars = used[0].text.length, best = 0
+      for (const it of used.slice(1)) {
+        const gap = it.x - reach, share = chars / total
+        if (gap >= 8 && gap > best && share >= 0.25 && share <= 0.75) { best = gap; rejected.cutX = (it.x + reach) / 2 }
+        reach = Math.max(reach, it.x + it.w)
+        chars += it.text.length
+      }
+    }
+    return !prose
+  })
+}
+
+/**
+ * 각주 목록 — 쪽 아래 "78) 제19장 … 참조" 줄들은 번호와 글 사이가 벌어져 2열 후보가 된다. 채워진 행이 (하나 빼고) 모두 첫 칸에 각주 번호
+ * "N)" 만 들고 번호가 하나씩 차례로 늘고, 그 번호의 절반 이상을 같은 쪽 본문의 작은 글씨 참조("가능성"78))가 가리키면 표가 아니다.
+ * 본문 글로 돌려 각주 잇기(본문 "78)" 참조 ↔ 각주 줄)가 받는다(task1725 209쪽: 참조 6pt, 각주 줄 12pt). 참조가 없으면 번호 열 표다
+ * ("1) | 사업 방식", #214). 각주 번호와 본문 글자 크기가 같은 문서가 있어 글자 크기로는 구분하지 않는다
+ */
+function isFootnoteList(r: ClusterTableResult, items: ClusterItem[]): boolean {
+  const filled = r.table.cells.map(row => row.filter(cell => cell.text.trim())).filter(row => row.length)
+  const marks = filled.map(row => /^(\d{1,3})\)$/.exec(row[0].text.trim())).filter(m => m !== null).map(m => Number(m![1]))
+  if (marks.length < 3 || marks.length < filled.length - 1 || !marks.every((v, i) => i === 0 || v === marks[i - 1] + 1)) return false
+  const sizes = [...r.usedItems].map(i => i.fontSize).sort((a, b) => a - b)
+  const small = sizes[sizes.length >> 1] * 0.85
+  const refs = new Set(items.filter(i => !r.usedItems.has(i) && i.fontSize <= small)
+    .map(i => /^\(?(\d{1,3})\)?$/.exec(i.text.trim())).filter(m => m !== null).map(m => Number(m![1])))
+  return marks.filter(m => refs.has(m)).length * 2 >= marks.length
+}
+
+/**
+ * 틈 없는 중·일문 줄로 된 후보 — 중·일문은 낱말 사이 공백이 없고 글자 폭이 고른 격자라 양쪽 맞춤 줄의 아이템 경계가 줄마다 같은 x 에
+ * 놓여 열처럼 보였다(LibreOffice 중문 계약서 ①②③ 본문이 4열 표로). 줄 안 아이템 사이 가장 큰 틈(줄머리 부호 뒤 제외)이 글자 크기 절반도
+ * 안 되는(칸 틈이 없는) 중·일문 줄이 셋 이상이고 아이템 둘 이상인 줄의 60% 이상이면 산문
+ */
+function gaplessCjkLines(r: ClusterTableResult): boolean {
+  let lines = 0, gapless = 0
+  for (const row of groupByBaseline([...r.usedItems].filter(i => i.text.trim()))) {
+    if (row.items.length < 2) continue
+    lines++
+    if (gaplessCjkRow(row.items)) gapless++
+  }
+  return gapless >= 3 && gapless >= lines * 0.6
+}
+
+/** 칸 틈 없는 중·일문 줄 — 아이템 둘 이상, 한자·가나가 절반 이상, 줄머리 부호 뒤를 뺀 가장 큰 틈이 글자 크기 절반 미만 */
+function gaplessCjkRow(items: ClusterItem[]): boolean {
+  const sorted = [...items].filter(i => i.text.trim()).sort((a, b) => a.x - b.x)
+  if (sorted.length < 2) return false
+  const text = sorted.map(i => i.text).join("").replace(/\s+/g, "")
+  if ([...text].filter(c => CJK_CHAR.test(c)).length < text.length * 0.5) return false
+  // 줄머리 항목 부호("①"·"1.") 뒤 들여쓰기 틈은 칸 틈이 아니다. 양쪽이 모두 여섯 자 넘는 글인 틈은 본문 속 기입 빈칸이다
+  // ("但出版社在 ____ 日内未履行合同义务" — 기입란 칸 글은 "银 行 名："처럼 짧다)
+  const fs = sorted[0].fontSize
+  const start = [...sorted[0].text.trim()].length <= 2 ? 2 : 1
+  const chars = (from: number, to: number) => sorted.slice(from, to).reduce((n, i) => n + i.text.trim().length, 0)
+  for (let k = start; k < sorted.length; k++) {
+    if (sorted[k].x - (sorted[k - 1].x + sorted[k - 1].w) < fs * 0.5) continue
+    // 틈 앞뒤 글 — 앞쪽 틈·뒤쪽 틈까지
+    let p = k - 1, q = k
+    while (p > 0 && sorted[p].x - (sorted[p - 1].x + sorted[p - 1].w) < fs * 0.5) p--
+    while (q + 1 < sorted.length && sorted[q + 1].x - (sorted[q].x + sorted[q].w) < fs * 0.5) q++
+    if (chars(p, k) <= 6 || chars(k, q + 1) <= 6) return false
+  }
+  return true
+}
+
+/** 영역 위아래 끝의 틈 없는 중·일문 본문 줄을 떼어 낸다 — 기입란 2열 표 위 본문 세 줄이 첫 행으로 붙었다(LibreOffice 일문 계약서 은행 기입란) */
+function trimCjkProseEdges(rows: RowGroup[]): RowGroup[] {
+  // 영역 전체가 틈 없는 본문 줄 위주면 떼지 않는다 — 통째로 산문 판정(gaplessCjkLines)을 받아야 한다. 끝만 떼면 빈칸 밑줄 틈이 있는
+  // 남은 본문 몇 줄이 작은 표로 살아났다(중문 계약서 1쪽 "出版社(Publisher) ____ 对本著作物")
+  const multi = rows.filter(r => r.items.filter(i => i.text.trim()).length >= 2)
+  const gapless = multi.filter(r => gaplessCjkRow(r.items)).length
+  if (gapless >= 3 && gapless >= multi.length * 0.6) return rows
+  let a = 0, b = rows.length
+  while (a < b && gaplessCjkRow(rows[a].items)) a++
+  while (b > a && gaplessCjkRow(rows[b - 1].items)) b--
+  // 본문 두 줄 이상이 붙었을 때만 — 제목 한 줄만 떼면 빈칸 밑줄 틈이 있는 남은 계약서 문장들이 작은 표로 살아났다(중문 계약서 1쪽)
+  return a + rows.length - b >= 2 ? rows.slice(a, b) : rows
+}
+
+/** 한자·가나·전각 문장부호 한 글자 (띄어쓰기 없는 중·일문 글) */
+const CJK_CHAR = /[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]/
+
+/** 세로 색인 탭 기둥으로 볼 최소 글자 수 */
+const SIDE_TAB_MIN = 6
+/** 쪽 바깥 띠(쪽 폭 12%) 안에 통째로 든 기둥은 이만큼만 있어도 탭이다 — 절 탭 "정⏎책⏎연⏎구"(편람)는 넉 자 */
+const SIDE_TAB_BAND_MIN = 4
+const SIDE_TAB_BAND = 0.12
+
+/** 머리 표지 때문에만 기존 바깥 판정을 못 받은 탭 — 원본 표지 뒤 읽기 위치를 보존한다. */
+export const SIDE_TAB_CAP_GROUPS = new WeakMap<object, Map<object, Pick<ClusterItem, "x" | "y" | "w" | "fontSize">>>()
+
+/**
+ * 쪽 옆 세로 색인 탭 — 책자형 문서는 장·책 이름("응⏎급⏎의⏎료⏎기⏎관…")을 쪽 바깥 좌우 띠에 한 자씩 세로로 찍는다.
+ * 여러 쪽 되풀이로 걷는 removeSideTabs(side-tabs.ts)는 표 감지 뒤에 돌고, 한 쪽만 변환(pages)하면 되풀이도 없다. 그 전에
+ * 이 글자 기둥이 표의 첫(끝) 열 앵커가 되면 옆 본문 줄("○ (평가체계)"·"- 1차 년도 : 서면평가")이 모두 2열 이상 맞는 행이 되어
+ * 본문이 표로 묶이고, 탭 글자가 첫 열 칸("료 기"·"관 평")으로 들어간다.
+ * 기둥: 같은 x 의 한 글자 아이템이 SIDE_TAB_MIN 개 이상, 글자 높이 3배 안 간격으로 쌓였고, 쪽의 다른 글이 모두
+ * 한쪽(오른쪽 또는 왼쪽)으로 글자 하나 이상 떨어져 있으며, 기둥 글자의 40% 이상이 제 baseline 줄에 혼자 선다(본문 줄 간격과
+ * 탭 글자 간격이 어긋난다). 표의 번호 열(1⏎2⏎3…)은 글자마다 같은 줄에 다른 칸이 있어 걸리지 않는다.
+ */
+export function sideTabGlyphs<T extends Pick<ClusterItem, "text" | "x" | "y" | "w" | "fontSize">>(items: T[], pageWidth?: number): Set<T> {
+  const found = new Set<T>()
+  const singles = items.filter(i => i.fontSize > 0 && [...i.text.trim()].length === 1)
+  const minLen = pageWidth ? SIDE_TAB_BAND_MIN : SIDE_TAB_MIN
+  if (singles.length < minLen) return found
+  const inBand = (col: T[]) => !!pageWidth && (Math.min(...col.map(i => i.x)) >= pageWidth * (1 - SIDE_TAB_BAND) ||
+    Math.max(...col.map(i => i.x + i.w)) <= pageWidth * SIDE_TAB_BAND)
+  const long = (col: T[]) => col.length >= SIDE_TAB_MIN || col.length >= SIDE_TAB_BAND_MIN && inBand(col)
+  const cols: T[][] = []
+  for (const it of [...singles].sort((a, b) => a.x - b.x)) {
+    const c = cols.find(col => Math.abs(col[0].x - it.x) <= Math.max(1.5, it.fontSize * 0.25))
+    if (c) c.push(it)
+    else cols.push([it])
+  }
+  // 기둥 후보 — 글자 수·글자/숫자 비율·세로 간격만 본다
+  const cands: { col: T[]; fs: number }[] = []
+  for (const col of cols) {
+    if (col.length < 2) continue
+    // 책·장 이름은 글자·숫자다 — 글머리 기호 기둥(▷·◦·□, 쪽 맨 왼쪽 목록)은 탭이 아니다
+    if (col.filter(g => /[\p{L}\p{N}]/u.test(g.text)).length < col.length * 0.8) continue
+    col.sort((a, b) => b.y - a.y)
+    const fs = [...col.map(i => i.fontSize)].sort((a, b) => a - b)[col.length >> 1]
+    if (col.slice(1).some((it, k) => col[k].y - it.y > fs * 3)) continue
+    cands.push({ col, fs })
+  }
+  // 두 줄로 세운 탭("구급차의 의료장비·" | "구급의약품 및 통신장비") — 바로 붙은 기둥 둘 이상이 높이가 겹치면 한 띠로 본다.
+  // 따로 보면 서로가 "쪽의 다른 글"이 되어 바깥 판정(outside)을 둘 다 놓치고, 탭 글자가 클러스터 표의 끝 열("운 태· 행")이 됐다
+  const bands: { col: T[]; fs: number; anchored: boolean }[] = []
+  for (const c of cands.sort((a, b) => a.col[0].x - b.col[0].x)) {
+    const last = bands[bands.length - 1]
+    if (last) {
+      const lastRight = Math.max(...last.col.map(i => i.x + i.w))
+      const gap = Math.min(...c.col.map(i => i.x)) - lastRight
+      const lTop = Math.max(...last.col.map(i => i.y)), lBot = Math.min(...last.col.map(i => i.y))
+      const cTop = c.col[0].y, cBot = c.col[c.col.length - 1].y
+      if (gap <= Math.max(last.fs, c.fs) * 1.5 && Math.min(lTop, cTop) >= Math.max(lBot, cBot)) {
+        last.col.push(...c.col)
+        last.fs = Math.max(last.fs, c.fs)
+        last.anchored ||= long(c.col)
+        continue
+      }
+    }
+    bands.push({ col: [...c.col], fs: c.fs, anchored: long(c.col) })
+  }
+  for (const { col, fs, anchored } of bands) {
+    // 짧은 형제 기둥만 합쳐 최소 글자 수를 채우지는 않는다 — 긴 탭 기둥이 하나는 있어야 한다
+    if (!anchored) continue
+    col.sort((a, b) => b.y - a.y)
+    const members = new Set(col)
+    const top = col[0].y + fs, bottom = col[col.length - 1].y - fs
+    const others = items.filter(i => !members.has(i) && i.text.trim() && i.y <= top && i.y >= bottom)
+    // 기둥 밖의 본문 글이 높이 안에 있어야 한다 — 표만 있거나 제목이 위에 있는 쪽은 every/alone 이 자명하게 참이 된다
+    if (!others.length) continue
+    const left = Math.min(...col.map(i => i.x)), right = Math.max(...col.map(i => i.x + i.w))
+    // 쪽의 다른 글이 모두 한쪽 바깥에 있어야 한다(높이가 겹치는 글만이 아니라) — 서식 표의 행 번호 열(1⏎2⏎…⏎9, 빈 행)·세로로 쓴
+    // 칸 이름·"-" 자리표시 열도 한 글자 기둥이라, 높이 겹침만 보면 표에서 빠져 쪽 앞에 한 글자씩 나왔다(4.18.2 회귀)
+    const rest = items.filter(i => !members.has(i) && i.text.trim())
+    // 기둥 바로 위 같은 띠의 짧은 머리 표지는 탭의 일부다. 글 흐름에는 그대로 남기되
+    // 탭 바깥 본문 판정의 경쟁 열로 세지 않는다 — 큰 제목·멀리 떨어진 라벨은 제외.
+    const cap = (i: T) => i.y > top && i.y - top <= fs * 3 && i.w <= fs * 3 &&
+      i.fontSize <= fs * 3 && [...i.text.trim()].length <= 3 &&
+      Math.abs(i.x + i.w / 2 - (left + right) / 2) <= fs * 0.5
+    // 맨 위 글자와 한 기준선에 선 짧은 표지 조각은 탭 머리다 — "제2절" 의 "2" 가 기둥 x 에 들어 "제"·"절" 이 기둥 양옆에 남는다(편람).
+    // 머리 줄은 글 흐름에 통째로 둔다 — 쪽마다 "제2절" 한 블록이어야 되풀이 제거(removeSideTabs)가 같은 글로 센다
+    const label = (i: T) => Math.abs(i.y - col[0].y) <= Y_TOL && [...i.text.trim()].length <= 3 &&
+      i.x + i.w > left - fs && i.x < right + fs
+    const heads = rest.filter(label)
+    const bodyRest = rest.filter(i => !cap(i) && !label(i))
+    const outside = bodyRest.every(i => i.x >= right + fs) || bodyRest.every(i => i.x + i.w <= left - fs)
+    if (!outside) continue
+    const alone = col.filter(g => !others.some(i => !heads.includes(i) && Math.abs(i.y - g.y) <= Y_TOL)).length
+    if (alone < col.length * 0.4) continue
+    const legacyRest = rest.filter(i => !label(i))
+    const legacyOutside = legacyRest.every(i => i.x >= right + fs) || legacyRest.every(i => i.x + i.w <= left - fs)
+    const head = !legacyOutside ? rest.find(cap) : undefined
+    for (const g of heads.length ? col.filter(g => Math.abs(g.y - col[0].y) > Y_TOL) : col) {
+      found.add(g)
+      if (head) {
+        const caps = SIDE_TAB_CAP_GROUPS.get(found) ?? new Map()
+        caps.set(g, head)
+        SIDE_TAB_CAP_GROUPS.set(found, caps)
+      }
+    }
+  }
+  return found
+}
+
+/** Two-row numeric tables have too few rows for the generic column clusters.
+ * Repeated starts across four or more short cells provide the cell graph. */
+function detectCompactStatisticalTables(rows: RowGroup[], pageNum: number): ClusterTableResult[] {
+  const found: ClusterTableResult[] = []
+  // 붙어 있는 조각(한 낱말이 두 아이템으로 갈린 "Glucos|e Solution")은 한 칸 — 원본은 parts 에
+  const parts = new Map<ClusterItem, ClusterItem[]>()
+  const cellsOf = (row: RowGroup): ClusterItem[] => {
+    const out: ClusterItem[] = []
+    for (const it of [...row.items].sort((a, b) => a.x - b.x)) {
+      const last = out[out.length - 1]
+      if (last && it.x - (last.x + last.w) <= Math.max(0.5, it.fontSize * 0.05) && !it.hasSpaceBefore) {
+        const joined = { ...last, text: last.text + it.text, w: it.x + it.w - last.x }
+        parts.set(joined, [...(parts.get(last) ?? [last]), it])
+        out[out.length - 1] = joined
+      } else out.push(it)
+    }
+    return out
+  }
+  for (let r = 0; r < rows.length - 1; r++) {
+    const header = cellsOf(rows[r])
+    const values = cellsOf(rows[r + 1])
+    if (header.length < 4 || header.length > 12 || values.length !== header.length ||
+        (/^\d+[.)]$/.test(header[0].text.trim()) && /^\d+[.)]$/.test(values[0].text.trim())) ||
+        header.some(c => !c.text.trim() || c.text.length > 32) ||
+        values.some(c => !c.text.trim() || c.text.length > 16) ||
+        rows[r].y - rows[r + 1].y > Math.max(25, header[0].fontSize * 3)) continue
+    // 값 절반 이상이 수치이거나, 머리행이 값과 다른 한 글꼴이고 칸 왼끝이 모두 맞는 표 (머리 굵게 · 값 보통)
+    const numeric = values.filter(c => /\d/.test(c.text) && !/\p{L}/u.test(c.text)).length >= Math.ceil(values.length / 2)
+    const styledHeader = header.every(c => c.fontName === header[0].fontName) &&
+      values.every(c => c.fontName === values[0].fontName) && header[0].fontName !== values[0].fontName &&
+      values.every((c, i) => Math.abs(c.x - header[i].x) <= 2)
+    if (!numeric && !styledHeader) continue
+    let aligned = true
+    for (let c = 0; c < header.length; c++) {
+      const gap = c + 1 < header.length ? header[c + 1].x - header[c].x : Infinity
+      if (gap < Math.max(4, header[c].fontSize * 0.4) ||
+          Math.abs(values[c].x - header[c].x) > Math.max(14, gap * 0.3)) { aligned = false; break }
+    }
+    if (!aligned) continue
+    const all = [...header, ...values]
+    const minX = Math.min(...all.map(c => c.x)), minY = Math.min(...all.map(c => c.y))
+    const maxX = Math.max(...all.map(c => c.x + c.w))
+    const maxY = Math.max(...all.map(c => c.y + (c.h || c.fontSize)))
+    found.push({
+      table: { rows: 2, cols: header.length, hasHeader: true, cells: [header, values].map(row =>
+        row.map(c => ({ text: c.text, colSpan: 1, rowSpan: 1 }))) },
+      bbox: { page: pageNum, x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+      usedItems: new Set(all.flatMap(c => parts.get(c) ?? [c])),
+    })
+    r++
+  }
+  return found
+}
+
+/**
+ * 줄을 칸 조각으로 — 아이템 둘이면 그대로 두 칸, 셋 이상이면 1.2em 넘는 틈에서만 가른다("1) 사업 방식 | 학부생들의 유대감과 결 MT 를 진행함" 이
+ * 아이템 다섯). 조각 글은 아이템 사이 틈이 0.2em 넘거나 공백 힌트가 있으면 띄운다. 가른 줄은 왼쪽 칸이 이름표처럼 짧아야(20자 안) 두 칸이다 —
+ * 두 단 본문 줄("ing merged model ‘SFT v3+v4’ retains the high | for GSM8K is 58.83, …")도 단 사이 틈으로 두 조각이 된다(ODL 189)
+ */
+function twoColumnCells(row: RowGroup): Array<{ x: number; y: number; fontSize: number; text: string }> {
+  const items = [...row.items].sort((a, b) => a.x - b.x)
+  if (items.length <= 2) return items.map(c => ({ x: c.x, y: c.y, fontSize: c.fontSize, text: c.text }))
+  const out: Array<{ x: number; y: number; fontSize: number; text: string; end: number }> = []
+  for (const c of items) {
+    const last = out.at(-1), gap = last ? c.x - last.end : Infinity
+    if (last && gap <= c.fontSize * 1.2) { last.text += (gap > c.fontSize * 0.2 || c.hasSpaceBefore ? " " : "") + c.text; last.end = Math.max(last.end, c.x + c.w) }
+    else out.push({ x: c.x, y: c.y, fontSize: c.fontSize, text: c.text, end: c.x + c.w })
+  }
+  // "❍ 기 간 : 연중"·"- 생계급여\t: 1,716가구" 처럼 띄운 쌍점으로 잇는 줄은 이름표·값 칸이 아니라 한 줄 글이다(균등배분 이름표 틈에서 갈리기도 한다)
+  if (out.length === 2 && (out[0].text.length > 20 || out.some(c => /^\s*[:：]|[:：]\s*$|\s[:：]\s/.test(c.text)))) return []
+  return out.map(({ end: _end, ...cell }) => cell)
+}
+
+/** Recover compact, borderless tables from repeated cell starts, even when
+ * the inter-column whitespace is narrower than the generic gap threshold. */
+function detectAlignedTwoColumnTables(rows: RowGroup[], pageNum: number): ClusterTableResult[] {
+  const found: ClusterTableResult[] = []
+  let i = 0
+  while (i < rows.length - 2) {
+    const first = twoColumnCells(rows[i])
+    if (first.length !== 2 || first.some(c => !c.text.trim() || c.text.length > 48) ||
+        first[1].x - first[0].x < 45 || first[1].x - first[0].x > 260 ||
+        /[.!?]$/.test(first[0].text)) { i++; continue }
+    const body: Array<{ rows: RowGroup[]; left: string; right: string[] }> = []
+    let j = i
+    for (; j < rows.length; j++) {
+      const cells = twoColumnCells(rows[j])
+      const previous = body.at(-1)
+      if (previous && previous.rows.at(-1)!.y - rows[j].y > Math.max(24, first[0].fontSize * 2.8)) break
+      // 값 칸이 꺾인 줄 — 오른쪽 열에 맞춰 선 한 조각은 앞 행 값에 잇는다(LibreOffice 테두리 없는 표 "…함께하며 ⏎ 이야기를 나누는 자리를 마련")
+      if (previous && cells.length === 1 && Math.abs(cells[0].x - first[1].x) <= 5 && cells[0].text.trim()) {
+        previous.rows.push(rows[j]); previous.right.push(cells[0].text); continue
+      }
+      if (cells.length !== 2 || cells.some(c => !c.text.trim() || c.text.length > 48) ||
+          Math.abs(cells[0].x - first[0].x) > 5 || Math.abs(cells[1].x - first[1].x) > 5) break
+      body.push({ rows: [rows[j]], left: cells[0].text, right: [cells[1].text] })
+    }
+    // 값 열 절반 넘게 글자·숫자가 없으면(신구조문 대비표 "------ 제4항----" 줄표) 값 칸이 아니다
+    if (body.length < 3 || body.filter(b => !/[\p{L}\p{N}]/u.test(b.right.join(""))).length * 2 >= body.length) { i++; continue }
+    const top = rows[i - 1]
+    const title = top?.items.length === 1 && Math.abs(top.items[0].x - first[0].x) <= 5 &&
+      top.items[0].text.length <= 65 && top.y - first[0].y <= Math.max(24, first[0].fontSize * 2.8)
+      ? top : undefined
+    const tableRows = [...(title ? [title] : []), ...body.flatMap(b => b.rows)]
+    const cells: IRCell[][] = [
+      ...(title ? [[{ text: title.items[0].text, colSpan: 2, rowSpan: 1 }, { text: "", colSpan: 1, rowSpan: 1 }]] : []),
+      ...body.map(b => [{ text: b.left, colSpan: 1, rowSpan: 1 }, { text: b.right.join(" "), colSpan: 1, rowSpan: 1 }]),
+    ]
+    const usedItems = new Set(tableRows.flatMap(row => row.items))
+    const all = [...usedItems]
+    const minX = Math.min(...all.map(c => c.x)), minY = Math.min(...all.map(c => c.y))
+    const maxX = Math.max(...all.map(c => c.x + c.w))
+    const maxY = Math.max(...all.map(c => c.y + (c.h || c.fontSize)))
+    found.push({ table: { rows: cells.length, cols: 2, cells, hasHeader: Boolean(title) },
+      bbox: { page: pageNum, x: minX, y: minY, width: maxX - minX, height: maxY - minY }, usedItems })
+    i = j
+  }
+  return found
+}
+
+/** A ruled-looking form may omit all vertical strokes and leave its second
+ * data column blank. Its two-cell header and repeated short first-column
+ * values still establish a real grid. */
+function detectSparseTwoColumnTables(rows: RowGroup[], pageNum: number): ClusterTableResult[] {
+  const found: ClusterTableResult[] = []
+  for (let i = 0; i < rows.length - 3; i++) {
+    const header = [...rows[i].items].sort((a, b) => a.x - b.x)
+    if (header.length !== 2 || header.some(c => !/[A-Za-z가-힣]/.test(c.text) || c.text.length > 80) ||
+        header[1].x - (header[0].x + header[0].w) < 5 ||
+        /[.!?]$/.test(header[0].text)) continue
+    const data: RowGroup[] = []
+    for (let j = i + 1; j < rows.length; j++) {
+      const row = rows[j]
+      const cell = row.items[0]
+      if (row.items.length !== 1 || cell.text.length > 20 || !cell.text.trim() ||
+          Math.abs(cell.x - header[0].x) > 4 ||
+          rows[j - 1].y - row.y > Math.max(24, cell.fontSize * 2.8)) break
+      data.push(row)
+    }
+    if (data.length < 3) continue
+    const tableRows = [rows[i], ...data]
+    const cells: IRCell[][] = [header.map(c => ({ text: c.text, colSpan: 1, rowSpan: 1 }))]
+    for (const row of data) cells.push([{ text: row.items[0].text, colSpan: 1, rowSpan: 1 }, { text: "", colSpan: 1, rowSpan: 1 }])
+    const usedItems = new Set(tableRows.flatMap(row => row.items))
+    const all = [...usedItems]
+    const minX = Math.min(...all.map(c => c.x)), minY = Math.min(...all.map(c => c.y))
+    const maxX = Math.max(...all.map(c => c.x + c.w))
+    const maxY = Math.max(...all.map(c => c.y + (c.h || c.fontSize)))
+    found.push({ table: { rows: cells.length, cols: 2, cells, hasHeader: true },
+      bbox: { page: pageNum, x: minX, y: minY, width: maxX - minX, height: maxY - minY }, usedItems })
+    i += data.length
+  }
+  return found
+}
+
+// ─── 2단 조판 본문 판별 ─────────────────────────────────
+
+/**
+ * 감지된 "표"가 실은 2단 조판 본문(국회 속기록·고전 관보류)인지 판별.
+ *
+ * 2단 본문에서는 문단 끝의 짧은 줄 쌍("한 것이올시다." | "다.")이 헤더 조건을
+ * 우연히 만족해 페이지 본문 전체가 2열 표로 흡수된다. 진짜 표와 가르는 신호:
+ * 양쪽 "열" 모두 긴 문장 조각(라벨 열 부재) + 숫자 희박 + 마커 희박 +
+ * 좌우 단 폭 대칭 + 각 단의 오른쪽 끝이 justify로 정렬.
+ * (코퍼스 42건 전수 시뮬레이션에서 속기록 4페이지만 발화, 오발화 0 검증)
+ */
+function isTwoColumnProse(r: ClusterTableResult): boolean {
+  const t = r.table
+  // OCR 군집은 단 틈 글 판정(findTwoColumnProseCutX) 없이 받는다 — 오른쪽 단에 그림 글("진행방향"·"파장")이 끼면 그 판정이
+  // 무너져 두 단 강의 자료가 "왼쪽 글 | 빈칸 | 빈칸 | 오른쪽 글" 표가 됐다. 대신 두 실질 열 평균 15자 이상·6행 이상
+  const ocr = [...r.usedItems].every(it => it.fontName === "ocr")
+  if (t.rows < (ocr ? 6 : 8)) return false
+
+  // 실질 열: 채움률 30%+ 인 열이 정확히 2개 (유령 열은 무시)
+  const dense: number[] = []
+  for (let c = 0; c < t.cols; c++) {
+    const filled = t.cells.filter(row => row[c]?.text.trim()).length
+    if (filled / t.rows >= 0.3) dense.push(c)
+  }
+  if (dense.length !== 2) return false
+
+  // 두 실질 열 모두 평균 셀 길이가 길어야 함 (진짜 표엔 짧은 라벨/숫자 열 존재)
+  for (const c of dense) {
+    // OCR 한 글자 셀은 길이 평균에서 뺀다 — 포스터 장식 원을 "0" 으로 읽은 noise 가 단마다 끼어 평균을 깎았다(ODL 141, two-column.ts ocrGlyph 와 같은 noise)
+    const lens = t.cells.map(row => row[c]?.text.replace(/\s+/g, "").length ?? 0).filter(n => n > (ocr ? 1 : 0))
+    const avg = lens.reduce((s, v) => s + v, 0) / (lens.length || 1)
+    if (avg < (ocr ? 15 : 12)) return false
+  }
+
+  return ocr || findTwoColumnProseCutX([...r.usedItems]) !== null
+}
+
+/**
+ * 아이템 집합이 좌우 2단 조판 본문인지 — 줄-투표로 중앙 빈 띠를 찾고
+ * 양쪽이 모두 prose(긴 줄 + 숫자·마커 희박 + justify 정렬 + 폭 대칭)인지 검사.
+ * 2단 본문이면 단 사이 컷 x좌표를, 아니면 null을 반환.
+ * page-blocks에서 레거시 컬럼 감지 가드 + 강제 단 분리에 쓰인다.
+ */
+export function findTwoColumnProseCutX(items: ClusterItem[]): number | null {
+  const lines = groupByBaseline(items)
+  if (lines.length < 8) return null
+
+  let minX = Infinity
+  let maxX = -Infinity
+  for (const i of items) {
+    if (i.x < minX) minX = i.x
+    if (i.x + i.w > maxX) maxX = i.x + i.w
+  }
+  // 비유한/과대 span 가드 — 손상 PDF의 오염된 좌표(±Infinity, 1e9 등)가 스캔 루프를
+  // 폭주시키는 것 차단 (fuzz: bflip에서 페이지당 수십억 회 반복 실측)
+  if (!Number.isFinite(maxX - minX)) return null
+  if (maxX - minX < 100) return null
+
+  // 중앙부(30~70%)를 2pt 격자로 스캔: 각 x를 덮는 줄 수가 최소인 지점 = 단 사이 빈 띠.
+  // 프로젝션 최대 갭 방식과 달리 전폭 제목 몇 줄이 있어도 빈 띠를 찾는다.
+  // 후보 수 상한 400 — 정상 판형(span<2000pt)은 2pt 그대로, 오염 좌표만 성긴 샘플링
+  const lo = minX + (maxX - minX) * 0.3
+  const hi = minX + (maxX - minX) * 0.7
+  const step = Math.max(2, (hi - lo) / 400)
+  let cutX = 0
+  let bestCover = Infinity
+  for (let x = lo; x <= hi; x += step) {
+    let cover = 0
+    for (const line of lines) {
+      if (line.items.some(i => i.x < x && i.x + i.w > x)) cover++
+    }
+    if (cover < bestCover) { bestCover = cover; cutX = x }
+  }
+  // 빈 띠를 15% 넘는 줄이 가로지르면 2단 아님
+  if (bestCover / lines.length > 0.15) return null
+
+  // 줄 다수(55%+)가 컷 양쪽에 모두 텍스트를 가져야 함 (한쪽 들여쓰기 문서 배제).
+  // 55%: 상단 1/3이 전폭 목차인 속기록 1면(57%)까지 포함하는 값 — 코퍼스 전수에서
+  // 타 문서 오발화 0 확인
+  // 단별 통계는 양쪽에 글이 있는 줄로만 — 한쪽에만 글이 있는 줄(2단 위 목차·제목 띠)이 섞이면 왼 단 양쪽 정렬 비율이
+  // 기준 아래로 떨어져 줄 단위로 섞여 읽힌다 (국회 회의록 OCR 실측)
+  const left: ClusterItem[] = []
+  const right: ClusterItem[] = []
+  let twoSide = 0
+  for (const line of lines) {
+    const L: ClusterItem[] = [], R: ClusterItem[] = []
+    for (const i of line.items) {
+      if (i.x + i.w <= cutX) L.push(i)
+      else if (i.x >= cutX) R.push(i)
+    }
+    if (L.length && R.length) { twoSide++; left.push(...L); right.push(...R) }
+  }
+  if (twoSide / lines.length < 0.55) return null
+  if (left.length < 5 || right.length < 5) return null
+
+  // 숫자·기호 위주(예산/통계표) 제외
+  const allText = items.map(i => i.text).join("").replace(/\s+/g, "")
+  const digits = (allText.match(/[\d,.%△—-]/g) || []).length
+  if (allText.length === 0 || digits / allText.length > 0.15) return null
+
+  // 각 단: 줄 텍스트 길이 + 마커 밀도 + 폭 + 오른쪽 끝 justify 비율
+  const stats = [left, right].map(side => {
+    let sMinX = Infinity
+    let sMaxR = -Infinity
+    let fsSum = 0
+    const rowEnds = new Map<number, number>()
+    const rowLens = new Map<number, number>()
+    const rowFirst = new Map<number, ClusterItem>()
+    for (const i of side) {
+      if (i.x < sMinX) sMinX = i.x
+      const rgt = i.x + i.w
+      if (rgt > sMaxR) sMaxR = rgt
+      fsSum += i.fontSize
+      const key = Math.round(i.y / 4)
+      rowEnds.set(key, Math.max(rowEnds.get(key) ?? -Infinity, rgt))
+      rowLens.set(key, (rowLens.get(key) ?? 0) + i.text.replace(/\s+/g, "").length)
+      const f = rowFirst.get(key)
+      if (!f || i.x < f.x) rowFirst.set(key, i)
+    }
+    const ends = [...rowEnds.values()].sort((a, b) => a - b)
+    const p85 = ends[Math.floor(ends.length * 0.85)] ?? sMaxR
+    const fs = fsSum / side.length
+    const justified = ends.filter(e => Math.abs(e - p85) <= fs).length / ends.length
+    const lens = [...rowLens.values()]
+    const avgLen = lens.reduce((s, v) => s + v, 0) / (lens.length || 1)
+    const markers = [...rowFirst.values()].filter(i => /^[•▪◦‣∙·\-–—□■◇◆▶※*]/.test(i.text)).length
+    return { width: sMaxR - sMinX, justified, avgLen, markerRatio: markers / (rowFirst.size || 1) }
+  })
+
+  // 양쪽 모두 긴 문장 줄 (진짜 표엔 짧은 라벨/숫자 열 존재)
+  if (stats.some(s => s.avgLen < 12)) return null
+  // 불릿/마커 구조(SWOT 4분면·불릿 리스트) 제외
+  if (stats.some(s => s.markerRatio > 0.1)) return null
+  const widthSym = Math.min(stats[0].width, stats[1].width) / Math.max(stats[0].width, stats[1].width)
+  if (widthSym < 0.6) return null
+  // 본문 단은 마지막 문단 줄을 제외한 대부분 행이 오른쪽 끝까지 채워진다
+  if (Math.min(stats[0].justified, stats[1].justified) < 0.55) return null
+  return cutX
 }
 
 // ─── 균등배분 사전 병합 ──────────────────────────────────
@@ -181,7 +715,35 @@ function mergeEvenSpacedClusters(
       i++
     }
   }
-  return { merged, originMap }
+  // 넓게 벌린 균등배분 — 같은 칸 폭에 글자가 적으면 틈이 글자 3배를 넘는다(목차 "총   무   과" 는 위아래 "기획예산실" 과 같은 폭, hampyeong
+  // OCR). 다른 행에서 합친 균등배분 낱말과 양끝이 맞고 틈이 고르면(최대/최소 1.3 이하) 합친다
+  const spans = [...originMap.keys()].map(m => [m.x, m.x + m.w])
+  if (!spans.length) return { merged, originMap }
+  const out: ClusterItem[] = []
+  for (const row of groupByBaseline(merged)) {
+    const sorted = [...row.items].sort((a, b) => a.x - b.x)
+    let i = 0
+    while (i < sorted.length) {
+      let e = i
+      while (e < sorted.length && /^[가-힣]$/.test(sorted[e].text) && (e === i || !sorted[e].hasSpaceBefore)) e++
+      if (e === i) { out.push(sorted[i++]); continue }
+      const run = sorted.slice(i, e), first = run[0], last = run[run.length - 1]
+      const gaps = run.slice(1).map((r, k) => r.x - (run[k].x + run[k].w))
+      const tol = first.fontSize * 0.5
+      if (run.length >= 3 && Math.min(...gaps) > 0 && Math.max(...gaps) <= Math.min(...gaps) * 1.3 &&
+          spans.some(([a, b]) => Math.abs(a - first.x) <= tol && Math.abs(b - (last.x + last.w)) <= tol)) {
+        const item: ClusterItem = {
+          text: run.map(r => r.text).join(""), x: first.x, y: first.y,
+          w: (last.x + last.w) - first.x, h: first.h,
+          fontSize: first.fontSize, fontName: first.fontName,
+        }
+        originMap.set(item, run)
+        out.push(item)
+      } else out.push(...run)
+      i = e
+    }
+  }
+  return { merged: out, originMap }
 }
 
 /** 병합된 ClusterItem의 usedItems를 원본 아이템으로 확장 */
@@ -240,12 +802,16 @@ function detectHeaderRow(rows: RowGroup[]): HeaderResult | null {
     const columns: ColCluster[] = sorted.map(item => ({ x: item.x, count: 0 }))
 
     // 후속 행 검증: 헤더 이후 MIN_ROWS+ 행이 2+ 열에 매칭
-    let matchCount = 0
-    for (let j = ri + 1; j < rows.length && matchCount < MIN_ROWS + 2; j++) {
+    // 맞은 행이 모두 열 틈(1.5em) 없는 줄이면 낱말 아이템이 폭을 덮은 본문이다 — 고시안 머리 "○○고시 제 호" 아래 본문이 3열 표가 됐다
+    let matchCount = 0, gapped = 0
+    for (let j = ri + 1; j < rows.length && (matchCount < MIN_ROWS + 2 || !gapped); j++) {
       const matched = countMatchedColumnsRange(rows[j], columns, sorted)
-      if (matched >= MIN_COLS) matchCount++
+      if (matched < MIN_COLS) continue
+      matchCount++
+      const line = [...rows[j].items].sort((a, b) => a.x - b.x)
+      if (line.some((it, k) => k > 0 && it.x - (line[k - 1].x + line[k - 1].w) >= Math.max(it.fontSize, line[k - 1].fontSize) * 1.5)) gapped++
     }
-    if (matchCount < MIN_ROWS) continue
+    if (matchCount < MIN_ROWS || !gapped) continue
 
     return { columns, headerIdx: ri }
   }
@@ -267,8 +833,8 @@ function mergeOverlappingRows(rows: RowGroup[]): RowGroup[] {
     const a = rowBand(prev)
     const b = rowBand(curr)
     const overlap = Math.min(a.top, b.top) - Math.max(a.bottom, b.bottom)
-    const prevIsFrag = isFragmentRow(prev) && a.height <= b.height * 0.8 && overlap >= a.height * 0.5
-    const currIsFrag = isFragmentRow(curr) && b.height <= a.height * 0.8 && overlap >= b.height * 0.5
+    const prevIsFrag = isFragmentRow(prev, curr) && a.height <= b.height * 0.8 && overlap >= a.height * 0.5
+    const currIsFrag = isFragmentRow(curr, prev) && b.height <= a.height * 0.8 && overlap >= b.height * 0.5
     if (prevIsFrag || currIsFrag) {
       // 본문 줄(흡수하는 쪽)의 y를 대표값으로 유지
       const baseY = prevIsFrag ? curr.y : prev.y
@@ -280,9 +846,34 @@ function mergeOverlappingRows(rows: RowGroup[]): RowGroup[] {
   return result
 }
 
-/** 첨자 후보 행: 아이템 ≤3개, 모두 짧은 텍스트(≤8자) */
-function isFragmentRow(row: RowGroup): boolean {
-  return row.items.length <= 3 && row.items.every(i => i.text.length <= 8)
+/** 첨자 후보 행: 모두 짧은 텍스트(≤8자)이고 아이템 ≤3개 — 넘으면 라틴 글자·수식 기호 없는 첨자가 아이템마다 옆 행 글자 앞뒤에 붙어야
+ *  한다(연도 위첨자 "(’10)10.2만건 → (’25)17.1만건" 이 한 줄에 넷 — 넓은 간격의 넷 칸 행이 되어 본문 쪽이 통째로 4열 표가 됐다) */
+function isFragmentRow(row: RowGroup, host: RowGroup): boolean {
+  if (!row.items.every(i => i.text.length <= 8)) return false
+  if (row.items.length <= 3) return true
+  if (row.items.length > 16 || !row.items.every(i => PREFIX_SCRIPT.test(i.text.trim()))) return false
+  // 아이템 여럿으로 찍힌 위첨자 덩어리("2023.7|월|~|12|월", 사이 0.7em 안)는 덩어리 끝만 다음 글자 앞에 붙는다 — 끝이 붙으면 덩어리째 (text-line isAttachedScripts 와 같은 뜻)
+  const sorted = [...row.items].sort((a, b) => a.x - b.x)
+  for (let k = 0, start = 0; k < sorted.length; k++) {
+    const next = sorted[k + 1]
+    if (next && next.x - (sorted[k].x + sorted[k].w) <= sorted[k].fontSize * 0.7) continue
+    const run = sorted.slice(start, k + 1)
+    const end = run[run.length - 1]
+    // 덩어리는 붙는 글자보다 작고 고른 크기여야 한다(text-line scriptRunFits)
+    const runOk = run.length > 1 && host.items.some(h => {
+      const before = h.x - (end.x + end.w)
+      return before <= h.fontSize * 0.6 && before >= -h.fontSize * 0.1 && scriptRunFits(run, h)
+    })
+    if (!runOk && !run.every(i => host.items.some(h => scriptAttached(i, h)))) return false
+    start = k + 1
+  }
+  return true
+}
+
+/** 첨자 조각이 본문 글자 뒤에 맞붙었거나(틈 −0.1em ~ 0.35em) 앞에 빈칸 하나 안(0.6em)으로 붙었나 */
+function scriptAttached(i: { x: number; w: number }, h: { x: number; w: number; fontSize: number }): boolean {
+  const after = i.x - (h.x + h.w), before = h.x - (i.x + i.w)
+  return (after <= h.fontSize * 0.35 && after >= -h.fontSize * 0.1) || (before <= h.fontSize * 0.6 && before >= -h.fontSize * 0.1)
 }
 
 /** 행 아이템들의 수직 범위 (bottom=min y, top=max y+h) */
@@ -314,7 +905,8 @@ function mergeMultiLineRows(rows: RowGroup[], columns: ColCluster[]): RowGroup[]
 
     // 병합 조건: Y갭이 작고 + 아이템 수가 적음 (연속 행 = 1~2개 아이템)
     // 아이템이 많은 행(3+)은 독립적인 데이터 행 → 병합하지 않음
-    if (yGap < avgFontSize * 1.8 && curr.items.length <= 2 && (matchedCols < MIN_COLS || curr.items.length === 1)) {
+    if (yGap < avgFontSize * 1.8 && curr.items.length <= 2 && (matchedCols < MIN_COLS || curr.items.length === 1) &&
+      !startsNewRecord(prev, curr, columns)) {
       result[result.length - 1] = {
         y: prev.y,
         items: [...prev.items, ...curr.items],
@@ -324,6 +916,26 @@ function mergeMultiLineRows(rows: RowGroup[], columns: ColCluster[]): RowGroup[]
     }
   }
   return result
+}
+
+/**
+ * 칸 안에서 꺾인 연속 줄이 아니라 새 레코드의 첫 줄인지 — 아이템이 자기 열을 넘어 다음 열까지 뻗고, 위 행의 같은 열 칸이 이미
+ * 차 있으면 연속 줄일 수 없다(꺾인 줄은 자기 칸 안에 머문다). 영수증의 품목 두 줄 묶음(품명 줄 + 바코드·단가·금액 줄)에서
+ * 다음 품명 줄이 앞 품목 바코드 행에 붙던 것(#141). 위 행이 두 열 이상 찬 데이터 행일 때만 — 위 행이 한 칸뿐인 글줄이면 산문이 꺾여 이어진
+ * 것이다(ODL 039 두 단 본문·141 카드 글이 줄마다 행으로 남아 산문 표 판정을 비껴갔다)
+ */
+function startsNewRecord(prev: RowGroup, curr: RowGroup, columns: ColCluster[]): boolean {
+  const colOf = (x: number) => {
+    let ci = -1
+    for (let c = 0; c < columns.length; c++) if (columns[c].x <= x + COL_CLUSTER_TOL) ci = c
+    return ci
+  }
+  if (new Set(prev.items.map(p => colOf(p.x))).size < 2) return false
+  return curr.items.some(it => {
+    const ci = colOf(it.x)
+    if (ci < 0 || ci + 1 >= columns.length || it.x + it.w <= columns[ci + 1].x + COL_CLUSTER_TOL) return false
+    return prev.items.some(p => colOf(p.x) === ci)
+  })
 }
 
 // ─── 기본 유틸 ──────────────────────────────────────────
@@ -407,10 +1019,10 @@ function findTableRegionsByHeader(
 
   for (const row of allRows) {
     const matchedCols = countMatchedColumnsRange(row, columns, headerItems)
-    if (matchedCols >= MIN_COLS) {
+    if (matchedCols >= MIN_COLS && !isWordLine(row)) {
       currentRegion.push(row)
       missStreak = 0
-    } else if (currentRegion.length > 0 && (row.items.length <= 2 || missStreak === 0)) {
+    } else if (currentRegion.length > 0 && (row.items.length <= 2 || missStreak === 0) && !isProseLine(row, columns)) {
       // 단일 비매칭은 허용 (multi-line 셀 or 단일 아이템)
       currentRegion.push(row)
       missStreak++
@@ -443,6 +1055,40 @@ function findTableRegionsByHeader(
   return regions
 }
 
+/** 표 사이 문단 줄 — 한 줄 글이 열 시작점을 둘 이상 가로지른다(여러 줄 칸의 이어진 줄은 제 열 안에 머문다) */
+function isProseLine(row: RowGroup, columns: ColCluster[]): boolean {
+  const text = row.items.map(item => item.text).join(" ").trim()
+  if (text.length < 40) return false
+  // 문장 증거 — 머리행 이름 나열(H6 ARC HellaSwag …)은 한 아이템이라도 문단이 아니다
+  const words = text.split(/\s+/)
+  const sentence = /[.!?:]$|다\.?$/.test(text) || words.filter(word => /^[a-z]/.test(word)).length >= words.length * 0.5
+  if (!sentence) return false
+  const left = Math.min(...row.items.map(item => item.x))
+  const right = Math.max(...row.items.map(item => item.x + item.w))
+  return columns.filter(col => col.x > left + COL_CLUSTER_TOL && col.x < right - COL_CLUSTER_TOL).length >= 2
+}
+
+/** 낱말 줄 판정 — 아이템 수 하한 · 틈 상한(글자 크기 배수, 고정폭 빈칸 하나 0.5em) · 틈끼리 차 상한 · 붙은 조각으로 볼 틈 */
+const WORD_LINE_MIN_ITEMS = 4
+const WORD_GAP_MAX_EM = 0.75
+const WORD_GAP_SPREAD_EM = 0.05
+const WORD_GAP_JOINED_EM = 0.05
+
+/**
+ * 낱말마다 아이템으로 찍힌 고정폭 글줄 — HWP 3.x 한컴 PDF 는 고정폭 글꼴 낱말을 하나하나 따로 찍어, 산문 줄의 낱말 시작이 열 x 에
+ * 우연히 걸린다(열 허용 30pt). 아이템 넷 이상 사이 틈이 모두 같은 빈칸 하나 폭(붙은 조각 "q"·"ueries." 의 0 틈은 뺌)인 줄은 칸 사이
+ * 틈이 없는 글줄이다. 비례 글꼴 표 머리("Saccharometer DI Water Glucose Solution")는 낱말 틈과 열 틈이 달라 걸리지 않는다
+ */
+function isWordLine(row: RowGroup): boolean {
+  if (row.items.length < WORD_LINE_MIN_ITEMS) return false
+  const sorted = [...row.items].sort((a, b) => a.x - b.x)
+  const fs = sorted[0].fontSize
+  const gaps = sorted.slice(1).map((it, i) => it.x - (sorted[i].x + sorted[i].w)).filter(g => g > fs * WORD_GAP_JOINED_EM)
+  if (gaps.length < WORD_LINE_MIN_ITEMS - 1) return false
+  const lo = Math.min(...gaps), hi = Math.max(...gaps)
+  return hi < fs * WORD_GAP_MAX_EM && hi - lo <= fs * WORD_GAP_SPREAD_EM
+}
+
 /** 연속된 테이블 행 영역 찾기 */
 function findTableRegions(allRows: RowGroup[], columns: ColCluster[]): { rows: RowGroup[] }[] {
   const regions: { rows: RowGroup[] }[] = []
@@ -450,9 +1096,9 @@ function findTableRegions(allRows: RowGroup[], columns: ColCluster[]): { rows: R
 
   for (const row of allRows) {
     const matchedCols = countMatchedColumns(row, columns)
-    if (matchedCols >= MIN_COLS) {
+    if (matchedCols >= MIN_COLS && !isWordLine(row)) {
       currentRegion.push(row)
-    } else if (row.items.length === 1) {
+    } else if (row.items.length === 1 && !isProseLine(row, columns)) {
       if (currentRegion.length > 0) {
         currentRegion.push(row)
       }
@@ -525,10 +1171,26 @@ function countMatchedColumnsRange(
  * 이 방식은 열 폭이 행마다 달라도 정확하게 분리.
  */
 function assignRowItems(
-  items: ClusterItem[], columns: ColCluster[], numCols: number,
+  items: ClusterItem[], columns: ColCluster[], numCols: number, headerFace?: string,
 ): { col: number; items: ClusterItem[] }[] {
   if (items.length === 0) return []
   const sorted = [...items].sort((a, b) => a.x - b.x)
+
+  // 머리행: 붙은 조각(한 낱말이 갈린 "Glucos|e Solution")을 묶은 무리의 왼끝이 모두 서로 다른 열 앵커와 맞으면 앵커대로 —
+  // 머리 글이 좁은 틈(4pt)으로 붙어 있어도 열 시작점이 칸을 가른다
+  const runs: ClusterItem[][] = []
+  for (const it of sorted) {
+    const last = runs[runs.length - 1]
+    const prev = last?.[last.length - 1]
+    if (prev && it.x - (prev.x + prev.w) <= Math.max(0.5, it.fontSize * 0.05) && !it.hasSpaceBefore) last.push(it)
+    else runs.push([it])
+  }
+  const tight = runs.slice(1).some((run, k) => run[0].x - Math.max(...runs[k].map(i => i.x + i.w)) < 12)
+  const shortRuns = runs.every(run => run.reduce((n, i) => n + i.text.length, 0) <= 30)
+  if (headerFace && sorted.every(i => i.fontName === headerFace) && runs.length >= 2 && tight && shortRuns) {
+    const anchor = runs.map(run => columns.findIndex(c => Math.abs(c.x - run[0].x) <= 2))
+    if (anchor.every(ci => ci >= 0) && new Set(anchor).size === runs.length) return runs.map((run, k) => ({ col: anchor[k], items: run }))
+  }
 
   // 헤더 열 중심 좌표
   const colCenters = columns.map(c => c.x)
@@ -588,6 +1250,24 @@ function assignRowItems(
     assignedGroups.add(gi)
     usedCols.add(ci)
   }
+  // 탐욕 배정이 그룹의 좌우 순서를 뒤집으면(머리 열 사이에 든 글머리 ◎ 가 오른쪽 열을 먼저 차지해 부서명이 왼쪽 열로 밀림 — OCR 목차
+  // "◎ 기획예산실 19" → "기획예산실 ◎ 19", hampyeong) 순서를 지키는 배정 중 거리 합이 가장 작은 것으로 바꾼다
+  // groups 는 x 순이다
+  const colOf = groups.map(g => result.find(a => a.items === g)?.col ?? -1)
+  if (groups.length <= numCols && colOf.some((c, g) => g > 0 && c < colOf[g - 1])) {
+    const G = groups.length, cost = (g: number, c: number) => Math.abs(groupCenters[g] - colCenters[c])
+    // best[g][c] — 앞 g+1 그룹을 배정하고 g 번째를 c 열에 둔 최소 거리 합
+    const best = groups.map(() => new Array<number>(numCols).fill(Infinity)), from = groups.map(() => new Array<number>(numCols).fill(-1))
+    for (let c = 0; c < numCols; c++) best[0][c] = cost(0, c)
+    for (let g = 1; g < G; g++) for (let c = g; c < numCols; c++) for (let p = g - 1; p < c; p++) {
+      const v = best[g - 1][p] + cost(g, c)
+      if (v < best[g][c]) { best[g][c] = v; from[g][c] = p }
+    }
+    let c = best[G - 1].indexOf(Math.min(...best[G - 1]))
+    const cols: number[] = []
+    for (let g = G - 1; g >= 0; g--) { cols[g] = c; c = from[g][c] }
+    return groups.map((items, g) => ({ col: cols[g], items }))
+  }
   // 남은 그룹 (numGroups > numCols인 경우 — 가장 가까운 열에 추가)
   for (let gi = 0; gi < groups.length; gi++) {
     if (assignedGroups.has(gi)) continue
@@ -607,11 +1287,18 @@ function buildClusterTable(
   rows: RowGroup[],
   columns: ColCluster[],
   pageNum: number,
+  lex?: WrapLexicon,
 ): ClusterTableResult | null {
-  const numCols = columns.length
   const numRows = rows.length
+  if (numRows < MIN_ROWS || columns.length < MIN_COLS) return null
 
-  if (numRows < MIN_ROWS || numCols < MIN_COLS) return null
+  const headFaces = new Set(rows[0]?.items.map(i => i.fontName))
+  const headerFace = headFaces.size === 1 && rows.slice(1).every(row => row.items.every(i => !headFaces.has(i.fontName)))
+    ? [...headFaces][0] : undefined
+  const assigned = rows.map((row, r) => assignRowItems(row.items, columns, columns.length, r === 0 ? headerFace : undefined))
+  const cuts = supportedOcrColumnCuts(assigned)
+  const starts = columns.map((_, c) => c + [...cuts.keys()].filter(k => k < c).length)
+  const numCols = columns.length + cuts.size
 
   const cells: IRCell[][] = Array.from(
     { length: numRows },
@@ -619,7 +1306,10 @@ function buildClusterTable(
   )
 
   const usedItems = new Set<ClusterItem>()
+  // 칸 글줄 — 칸 글은 다 모은 뒤 열 글줄들의 왼끝·오른끝을 칸 안쪽으로 보고 잇는다(joinClusterCellLines). 후처리 1 이 이어지는 행을 붙일 때도 같은 판정
+  const lines: ClusterCellLine[][][] = cells.map(row => row.map(() => []))
 
+  const origins = new Map<ClusterItem, ClusterItem>()
   for (let r = 0; r < numRows; r++) {
     const row = rows[r]
     // 단일 아이템 행 → 전체 행 병합 (colSpan)
@@ -630,14 +1320,39 @@ function buildClusterTable(
     }
 
     // 행별 갭 분석 기반 열 배정
-    const assignments = assignRowItems(row.items, columns, numCols)
-    for (const { col, items } of assignments) {
-      const text = items.map(i => i.text).join(" ")
-      const existing = cells[r][col].text
-      cells[r][col].text = existing ? existing + " " + text : text
-      for (const item of items) usedItems.add(item)
+    const assignments = assigned[r].flatMap(({ col, items }) => {
+      const target = starts[col], cut = cuts.get(col)
+      if (cut === undefined) return [{ col: target, items, span: 1 }]
+      const gapAt = (it: ClusterItem) => ocrTextGaps(it).find(g => g.left < cut && g.right > cut && (r === 0 || isOcrNumericSplit(it.text, g.at)))
+      // 경계를 가로지르는 원문에 빈 구간이 없으면 그 행의 병합 칸으로 보존한다.
+      const groupedNumber = OCR_GROUPED_NUMBER.test([...items].sort((a, b) => a.x - b.x).map(it => it.text.trim()).join(" "))
+      if (groupedNumber || !isOcrNumericPair(items) && items.some(it => it.x < cut && it.x + it.w > cut && !gapAt(it))) return [{ col: target, items, span: 2 }]
+      const parts: ClusterItem[][] = [[], []]
+      for (const it of items) {
+        const g = gapAt(it)
+        if (!g) { parts[it.x + it.w / 2 < cut ? 0 : 1].push(it); continue }
+        const fragments = [
+          { ...it, text: it.text.slice(0, g.at).trimEnd(), w: g.left - it.x },
+          { ...it, text: it.text.slice(g.at).trimStart(), x: g.right, w: it.x + it.w - g.right },
+        ]
+        fragments.forEach((fragment, side) => { origins.set(fragment, it); parts[side].push(fragment) })
+      }
+      return parts.flatMap((part, side) => part.length ? [{ col: target + side, items: part, span: 1 }] : [])
+    })
+    for (const { col, items, span } of assignments) {
+      cells[r][col].colSpan = span
+      const cell = lines[r][col]
+      if (cell.length) cell[cell.length - 1].spaceAfter = true // 한 행 같은 열에 무리가 여럿이면 종전대로 띄운다
+      cell.push(...clusterCellLines(items))
+      for (const item of items) usedItems.add(origins.get(item) ?? item)
     }
   }
+  const boxes = Array.from({ length: numCols }, (_, c) => {
+    const col = lines.flatMap(row => row[c])
+    return { x1: Math.min(...col.map(l => l.left)), x2: Math.max(...col.map(l => l.right)) }
+  })
+  const textOf = (r: number, c: number) => joinClusterCellLines(lines[r][c], boxes[c], lex)
+  for (let r = 0; r < numRows; r++) for (let c = 0; c < numCols; c++) if (lines[r][c].length) cells[r][c].text = textOf(r, c)
 
   // 검증: 빈 행이 너무 많으면 테이블 아님
   let emptyRows = 0
@@ -663,10 +1378,13 @@ function buildClusterTable(
     if (/^[○●▶\-·]/.test(contentText)) continue
     for (let pr = r - 1; pr >= 0; pr--) {
       if (cells[pr].some(c => c.text.trim())) {
+        // 병합 행의 가려진 칸에 쓰면 렌더에서 글이 사라진다 — 제 행으로 둔다
+        // ("없음" 행 뒤 "3) 행정규제 : …"·"일부개정령안" 뒤 본문 첫 줄이 마크다운에서 빠지던 것, 제약산업 시행규칙 개정령안)
+        if (cells[pr].some(c => c.colSpan > 1)) break
         for (let c = 0; c < numCols; c++) {
-          const prev = cells[pr][c].text.trim()
-          const curr = cells[r][c].text.trim()
-          if (curr) cells[pr][c].text = prev ? prev + " " + curr : curr
+          if (!cells[r][c].text.trim()) continue
+          lines[pr][c].push(...lines[r][c])
+          cells[pr][c].text = textOf(pr, c)
         }
         for (let c = 0; c < numCols; c++) cells[r][c].text = ""
         break

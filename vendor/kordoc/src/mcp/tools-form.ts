@@ -1,0 +1,534 @@
+/** kordoc MCP 도구 — 서식·편집 — parse_form·fill_form·place_seal·add_memo·patch_document·redact_document */
+
+import { z } from "zod"
+import { readFile, mkdir, stat, realpath } from "fs/promises"
+import { extname, dirname } from "path"
+import { parse, detectFormat, detectZipFormat, detectOle2Format, blocksToMarkdown, extractFormFields, fillFormFields, markdownToHwpx, fillHwpx, patchHwpx, patchHwp, hwpToHwpx, BUILTIN_TEMPLATES, resolveBuiltinTemplate, readBuiltinTemplate } from "../index.js"
+import { fillWithUniqueGuard, type FillInput, type FillValue } from "../form/match.js"
+import { KordocError } from "../utils.js"
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { IMAGE_EXTENSIONS, FIELDS_FILE_EXTENSIONS, safePath, safeOutputPath, writeOutputFile, describeError, capResponseText, readValidatedFile, isSameFile } from "./shared.js"
+
+/** fields + formats 를 FillInput 맵으로 결합 (formats의 라벨은 fields와 동일 표기 기준) */
+export function buildFillInputs(fields: Record<string, FillValue>, formats?: Record<string, string>): Record<string, FillInput> {
+  const out: Record<string, FillInput> = {}
+  for (const [k, v] of Object.entries(fields)) {
+    const format = formats?.[k]
+    out[k] = format ? { value: v, format } : v
+  }
+  return out
+}
+
+/** fill_form fields_file — {라벨: 값 | 값[]} JSON. 개인정보가 담기므로 값은 오류 문구에도 싣지 않는다 */
+async function readFieldsFile(path: string): Promise<Record<string, FillValue>> {
+  const { buffer } = await readValidatedFile(path, 10 * 1024 * 1024, FIELDS_FILE_EXTENSIONS)
+  let data: unknown
+  try {
+    // Windows 메모장·PowerShell 이 붙이는 UTF-8 BOM 은 JSON.parse 가 거부한다 (CLI -j 와 같음)
+    data = JSON.parse(new TextDecoder().decode(buffer).replace(/^\uFEFF/, ""))
+  } catch {
+    throw new KordocError("fields_file 이 올바른 JSON 이 아닙니다")
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new KordocError("fields_file 은 {라벨: 값} JSON 객체여야 합니다")
+  for (const [label, value] of Object.entries(data)) {
+    if (typeof value !== "string" && !(Array.isArray(value) && value.every(v => typeof v === "string"))) {
+      throw new KordocError(`fields_file 의 "${label}" 값은 문자열 또는 문자열 배열이어야 합니다`)
+    }
+  }
+  return data as Record<string, FillValue>
+}
+
+/** 같은 파일인가 — 경로가 같거나(정규화 후) 대소문자 무시 파일시스템·하드링크로 같은 inode */
+export function registerFormTools(server: McpServer): void {
+  // ─── 도구: parse_form ───────────────────────────────
+
+  server.tool(
+    "parse_form",
+    "한국 서식 문서에서 레이블-값 쌍을 구조화된 JSON으로 추출합니다. 양식/서식 문서에 최적화.",
+    {
+      file_path: z.string().min(1).describe("서식 문서 파일의 절대 경로"),
+    },
+    async ({ file_path }) => {
+      try {
+        const { buffer } = await readValidatedFile(file_path)
+        // 서식 입력란(빈 후행 열)이 필드로 잡히도록 보존 (#47)
+        const result = await parse(buffer, { keepTrailingEmptyCols: true, layoutTables: "keep" })
+
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `파싱 실패: ${result.error}` }],
+            isError: true,
+          }
+        }
+
+        const form = extractFormFields(result.blocks)
+        return {
+          content: [{ type: "text", text: JSON.stringify(form, null, 2) }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  /** 매칭 실패가 있으면 다음 행동 안내 — "매칭 실패"만 받은 에이전트가 칸을 비우거나 체크리스트로 미루지 않게 */
+  const unmatchedHint = (unmatched: string[]): string => unmatched.length === 0 ? ""
+    : "\n매칭 실패 항목은 비워 두지 말고 채우세요: parse_form 으로 서식의 칸 이름을 확인해 그 이름 그대로 다시 fill_form 하거나, "
+      + "parse_document(keep_layout_tables: true) 마크다운의 해당 칸에 값을 써서 patch_document 로 넣으세요."
+
+  // ─── 도구: fill_form ───────────────────────────────
+
+  server.tool(
+    "fill_form",
+    "한국 서식 문서의 빈칸을 채워서 새 문서로 출력합니다. hwpx-preserve를 사용하면 원본 서식(테두리, 폰트, 병합 등)을 100% 유지합니다 — HWP 5.x 서식은 서식 그대로 HWPX 로 바꿔 채워 HWPX 로 냅니다. 누름틀(CLICK_HERE) 필드는 이름으로 정확 매칭되어 우선 채워집니다. file_path 대신 template으로 내장 정부 표준 기안문 서식을 쓸 수 있습니다 — gian(일반기안문, 별지 제1호서식: 행정기관명·수신자·경유·제목·본문·붙임·발신명의·기안자·검토자·결재권자 등 23필드) / gian-simple(간이기안문, 별지 제2호서식: 내부결재용 13필드).",
+    {
+      file_path: z.string().min(1).optional().describe("서식 템플릿 문서의 절대 경로 (HWP, HWPX, PDF, XLSX, DOCX). template 사용 시 생략"),
+      template: z.enum(["gian", "gian-simple", "일반기안문", "간이기안문"]).optional().describe("내장 정부 표준 서식 이름 — file_path 대신 사용. gian=일반기안문(별지 제1호서식), gian-simple=간이기안문(별지 제2호서식)"),
+      fields: z.record(z.string(), z.string()).optional().describe("채울 필드 맵 (라벨 → 값). 예: {\"성명\": \"홍길동\", \"전화번호\": \"010-1234-5678\"}. 개인정보는 fields_file 로"),
+      fields_file: z.string().min(1).optional().describe("채울 필드 JSON 파일의 절대 경로 — fields 대신. {\"성명\": \"홍길동\"} 모양(반복 양식은 값 배열). 값이 도구 인자로 대화에 남지 않고, 응답도 값 대신 글자 수만 낸다(mask_values: false 로 끔)"),
+      formats: z.record(z.string(), z.string()).optional().describe("필드별 값 서식 (라벨 → 포맷). 정준값 하나로 서식마다 다른 모양을 채울 때: date:yy.mm.dd / phone:hyphen·dot·digits / rrn:hyphen·masked / mask:###-## / 자유 패턴(yyyy년 m월 d일, ###-####-####)"),
+      require_unique: z.boolean().optional().describe("한 키가 서식의 2곳 이상에 매칭되면 채우지 않고 거부 — 반복 라벨 양식에서 남의 블록 오염 방지 (배열 값은 예외)"),
+      mask_values: z.boolean().optional().describe("응답에 값 대신 글자수만 표시 — 개인정보 채움 시 값이 대화 로그에 남지 않게 (fields_file 이면 기본 켬)"),
+      output_format: z.enum(["markdown", "hwpx", "hwpx-preserve"]).default("hwpx-preserve").describe("출력 포맷: hwpx-preserve (원본 스타일 보존, HWPX·HWP 5.x — HWP 는 서식 그대로 HWPX 로 바꿔 채움), hwpx (새 HWPX 생성), markdown"),
+      output_path: z.string().optional().describe("출력 파일 저장 경로 (선택). 지정 시 파일로 저장, 미지정 시 텍스트로 반환"),
+    },
+    async ({ file_path, template, fields: fieldArgs, fields_file, formats, require_unique, mask_values: maskArg, output_format, output_path }) => {
+      try {
+        if (!fieldArgs === !fields_file) {
+          return {
+            content: [{ type: "text", text: "fields 또는 fields_file 중 하나만 지정해주세요" }],
+            isError: true,
+          }
+        }
+        const fields = fieldArgs ?? await readFieldsFile(fields_file!)
+        const mask_values = maskArg ?? !!fields_file
+        // 출력 경로 사전 검증 (포맷별 확장자 allowlist) — 채우기 전에 실패시킨다
+        const outExts = output_format === "markdown" ? new Set([".md", ".markdown", ".txt"]) : new Set([".hwpx"])
+        const outPath = output_path ? safeOutputPath(output_path, outExts) : undefined
+
+        // 입력 소스 — 내장 템플릿(template) 또는 파일 경로(file_path) 중 하나
+        let buffer: ArrayBuffer
+        if (template) {
+          const t = resolveBuiltinTemplate(template)
+          if (!t) {
+            return {
+              content: [{ type: "text", text: `알 수 없는 내장 템플릿: ${template} (사용 가능: ${BUILTIN_TEMPLATES.map(x => `${x.id}(${x.aliases[0]})`).join(", ")})` }],
+              isError: true,
+            }
+          }
+          buffer = readBuiltinTemplate(t)
+        } else if (file_path) {
+          buffer = (await readValidatedFile(file_path)).buffer
+        } else {
+          return {
+            content: [{ type: "text", text: "file_path 또는 template 중 하나를 지정해주세요" }],
+            isError: true,
+          }
+        }
+
+        // ─── hwpx-preserve: 원본 ZIP 직접 수정 (스타일 보존) ───
+        if (output_format === "hwpx-preserve") {
+          // ZIP 은 내부 구조로 세분화한 포맷을 보고한다 — PPTX 를 "hwpx" 로 안내하던 오해 방지 (#80).
+          // 다른 포맷으로 확인될 때만 거부하고, 판별 불가(손상 ZIP 등)는 종전대로 HWPX 로 시도
+          let format: string = detectFormat(buffer)
+          if (format === "hwpx") { const z = await detectZipFormat(buffer); if (z !== "unknown") format = z }
+          else if (format === "hwp") { const o = detectOle2Format(buffer); if (o !== "unknown") format = o }
+          // HWP 5.x 서식은 서식 그대로 HWPX 로 바꿔 채운다 — 누름틀·표 칸이 그대로 옮겨진다
+          const fromHwp = format === "hwp"
+          if (fromHwp) {
+            try {
+              const hwpx = await hwpToHwpx(new Uint8Array(buffer))
+              buffer = hwpx.buffer.slice(hwpx.byteOffset, hwpx.byteOffset + hwpx.byteLength) as ArrayBuffer
+            } catch (err) {
+              return {
+                content: [{ type: "text", text: `HWP 서식을 HWPX 로 바꾸지 못해 원본 서식 채우기를 할 수 없습니다 (${describeError(err)}). hwpx 또는 markdown을 사용하세요.` }],
+                isError: true,
+              }
+            }
+          } else if (format !== "hwpx") {
+            return {
+              content: [{ type: "text", text: `hwpx-preserve는 HWPX·HWP 5.x 파일만 지원합니다 (감지된 포맷: ${format}). hwpx 또는 markdown을 사용하세요.` }],
+              isError: true,
+            }
+          }
+
+          const inputs = buildFillInputs(fields, formats)
+          const hwpxResult = require_unique
+            ? await fillWithUniqueGuard(inputs, (vals, blocked) => fillHwpx(buffer, vals, blocked))
+            : { ...(await fillHwpx(buffer, inputs)), rejected: [] as string[] }
+          // 마스킹 verify — 채운 결과를 재파싱해 값이 실제 문서에 있는지만 확인 (값 미노출)
+          let verifyLine: string | null = null
+          if (mask_values && hwpxResult.filled.length > 0) {
+            const reparsed = await parse(Buffer.from(hwpxResult.buffer), { layoutTables: "keep" })
+            // 마크다운 이스케이프(\*,\|,\~ 등)·개행/연속공백 정규화 후 비교 — rrn:masked
+            // ('900315-1******')의 * 이스케이프로 생기던 결정적 false negative 방지.
+            // 빈 값은 includes('')===true 로 항상 통과하던 것을 FILLED 에서 제외한다.
+            const norm = (s: string): string => s.replace(/\\([\\`*_{}[\]()#+.!|~>-])/g, "$1").replace(/\s+/g, " ")
+            const normMd = reparsed.success ? norm(reparsed.markdown) : ""
+            const okCount = reparsed.success
+              ? hwpxResult.filled.filter(f => f.value !== "" && normMd.includes(norm(f.value))).length
+              : 0
+            verifyLine = `검증(마스킹): ${okCount}/${hwpxResult.filled.length} FILLED — 재파싱 대조, 값 미노출`
+          }
+          const summary = [
+            `채워진 필드: ${hwpxResult.filled.length}개 (원본 스타일 보존${fromHwp ? " — HWP 를 서식 그대로 HWPX 로 바꿔 채움" : ""})`,
+            hwpxResult.rejected.length > 0 ? `모호 라벨 거부(2곳+ 매칭): ${hwpxResult.rejected.join(", ")}` : null,
+            hwpxResult.unmatched.length > 0 ? `매칭 실패: ${hwpxResult.unmatched.join(", ")}` : null,
+            verifyLine,
+          ].filter(Boolean).join(" | ") + unmatchedHint(hwpxResult.unmatched)
+
+          const filledList = hwpxResult.filled
+            .map(f => `  - ${f.label}: ${mask_values ? `[${[...f.value].length}자]` : f.value}`).join("\n")
+
+          if (outPath) {
+            await mkdir(dirname(outPath), { recursive: true })
+            await writeOutputFile(outPath, Buffer.from(hwpxResult.buffer))
+            return {
+              content: [{ type: "text", text: `[${summary}]\n\n채워진 필드:\n${filledList}\n\nHWPX 파일 저장 (원본 서식 유지): ${outPath}` }],
+            }
+          }
+
+          return {
+            content: [{ type: "text", text: `[${summary}]\n\n채워진 필드:\n${filledList}\n\n⚠️ output_path를 지정하면 원본 서식이 유지된 HWPX 파일로 저장됩니다.` }],
+          }
+        }
+
+        // ─── 일반 경로: parse → fill → output ─── (양식 입력란 보존, #47)
+        const result = await parse(buffer, { keepTrailingEmptyCols: true, layoutTables: "keep" })
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `파싱 실패: ${result.error}` }],
+            isError: true,
+          }
+        }
+
+        const formInfo = extractFormFields(result.blocks)
+        const irInputs = buildFillInputs(fields, formats)
+        const fillResult = require_unique
+          ? await fillWithUniqueGuard(irInputs, (vals, blocked) => fillFormFields(result.blocks, vals, blocked))
+          : { ...fillFormFields(result.blocks, irInputs), rejected: [] as string[] }
+
+        if (fillResult.filled.length === 0 && formInfo.fields.length === 0) {
+          return {
+            content: [{ type: "text", text: `서식 필드를 찾을 수 없습니다. 일반 문서이거나 서식 패턴이 감지되지 않았습니다.` }],
+            isError: true,
+          }
+        }
+
+        const markdown = blocksToMarkdown(fillResult.blocks)
+        // mask_values 시 채운 값(주민번호·연락처 등)이 응답(대화 로그)에 노출되지 않게
+        // 본문 미리보기를 안내 문구로 대체 (sfill-8). 값은 output_path 파일에만 기록된다.
+        const previewMd = mask_values
+          ? "⚠️ mask_values 활성 — 개인정보 노출 방지를 위해 본문을 응답에 포함하지 않습니다. output_path 로 파일 저장 후 확인하세요."
+          : markdown
+        const summary = [
+          `채워진 필드: ${fillResult.filled.length}개`,
+          fillResult.rejected.length > 0 ? `모호 라벨 거부(2곳+ 매칭): ${fillResult.rejected.join(", ")}` : null,
+          fillResult.unmatched.length > 0 ? `매칭 실패: ${fillResult.unmatched.join(", ")}` : null,
+          formInfo.fields.length > 0 ? `서식 필드: ${formInfo.fields.length}개 (확신도 ${(formInfo.confidence * 100).toFixed(0)}%)` : null,
+        ].filter(Boolean).join(" | ") + unmatchedHint(fillResult.unmatched)
+
+        if (output_format === "hwpx") {
+          const hwpxBuffer = await markdownToHwpx(markdown)
+          if (outPath) {
+            await mkdir(dirname(outPath), { recursive: true })
+            await writeOutputFile(outPath, Buffer.from(hwpxBuffer))
+            return {
+              content: [{ type: "text", text: `[${summary}]\n\nHWPX 파일 저장: ${outPath}` }],
+            }
+          }
+          return {
+            content: [{ type: "text", text: `[${summary}]\n\n⚠️ output_path를 지정하면 HWPX 파일로 저장됩니다. 미리보기:\n\n${previewMd}` }],
+          }
+        }
+
+        // markdown
+        if (outPath) {
+          await mkdir(dirname(outPath), { recursive: true })
+          await writeOutputFile(outPath, markdown, "utf-8")
+          return {
+            content: [{ type: "text", text: `[${summary}]\n\n마크다운 파일 저장: ${outPath}\n\n${previewMd}` }],
+          }
+        }
+        return {
+          content: [{ type: "text", text: `[${summary}]\n\n${previewMd}` }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // ─── 도구: place_seal ─────────────────────────────
+
+  server.tool(
+    "place_seal",
+    "도장/서명 이미지를 앵커 문구(\"(인)\"·\"서명 또는 인\" 등) 위에 부유(글 앞) 배치합니다. 표/페이지를 키우지 않습니다 (HWPX·HWP 5.x — HWP 는 서식 그대로 HWPX 로 바꿔 찍어 HWPX 로 냅니다).",
+    {
+      file_path: z.string().min(1).describe("대상 HWPX·HWP 문서의 절대 경로"),
+      image_path: z.string().min(1).describe("도장/서명 이미지 절대 경로 (투명 배경 PNG 권장)"),
+      anchor: z.string().default("(인)").describe("앵커 문구 — 이 문구 기준으로 배치"),
+      occurrence: z.number().int().min(0).default(0).describe("같은 앵커가 여럿일 때 0-based 선택"),
+      size_mm: z.number().positive().optional().describe("도장 한 변 크기 mm (기본: 줄높이×1.6, 7~18 클램프)"),
+      mode: z.enum(["overlap", "right", "auto"]).default("auto").describe("overlap=문구 위 겹침, right=문구 오른쪽 옆, auto=공간 있으면 right"),
+      dx_mm: z.number().optional().describe("x 미세조정 mm"),
+      dy_mm: z.number().optional().describe("y 미세조정 mm"),
+      output_path: z.string().min(1).describe("출력 HWPX 저장 경로"),
+    },
+    async ({ file_path, image_path, anchor, occurrence, size_mm, mode, dx_mm, dy_mm, output_path }) => {
+      try {
+        const outPath = safeOutputPath(output_path, new Set([".hwpx"]))
+        let { buffer } = await readValidatedFile(file_path)
+        let format: string = detectFormat(buffer)
+        if (format === "hwp" && detectOle2Format(buffer) === "hwp") {
+          // HWP 5.x 는 서식 그대로 HWPX 로 바꿔 찍는다
+          const hwpx = await hwpToHwpx(new Uint8Array(buffer))
+          buffer = hwpx.buffer.slice(hwpx.byteOffset, hwpx.byteOffset + hwpx.byteLength) as ArrayBuffer
+          format = "hwpx"
+        }
+        if (format !== "hwpx") {
+          return {
+            content: [{ type: "text", text: `place_seal 은 HWPX·HWP 5.x 파일만 지원합니다 (감지된 포맷: ${format}).` }],
+            isError: true,
+          }
+        }
+        // 이미지 경로도 문서와 동일하게 검증 (realpath + 확장자 allowlist)
+        const imgResolved = safePath(image_path, IMAGE_EXTENSIONS)
+        const imgSize = (await stat(imgResolved)).size
+        if (imgSize > 500 * 1024 * 1024) {
+          return { content: [{ type: "text", text: `도장 이미지가 너무 큽니다 (${(imgSize / 1024 / 1024).toFixed(0)}MB) — 500MB 이하여야 합니다.` }], isError: true }
+        }
+        const image = new Uint8Array(await readFile(imgResolved))
+        const ext = extname(imgResolved).slice(1).toLowerCase() as "png" | "jpg" | "jpeg" | "bmp" | "gif"
+        const { placeSealHwpx } = await import("../form/seal.js")
+        const result = await placeSealHwpx(buffer, [{
+          anchor, occurrence, image, ext,
+          sizeMm: size_mm, mode, dxMm: dx_mm, dyMm: dy_mm,
+        }])
+        await mkdir(dirname(outPath), { recursive: true })
+        await writeOutputFile(outPath, Buffer.from(result.buffer))
+        const p0 = result.placed[0]
+        const warnLines = (p0.warnings ?? []).map(w => `\n⚠️ ${w}`).join("")
+        return {
+          content: [{
+            type: "text",
+            text: `도장 배치 완료: "${p0.anchor}" #${p0.occurrence} → ${p0.mode} (x ${p0.posXMm}mm, y ${p0.posYMm}mm, ${p0.sizeMm}mm각, ${p0.entry})\n저장: ${outPath}${warnLines}\n표/페이지 불확장(글 앞 부유) — 한컴에서 위치 확인 후 dx_mm/dy_mm 로 미세조정 가능합니다.`,
+          }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `도장 배치 실패: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    },
+  )
+
+  // ─── 도구: add_memo ───────────────────────────────
+
+  server.tool(
+    "add_memo",
+    "앵커 문구에 메모(한글 \"메모 넣기\")를 답니다 — 본문 글·서식은 그대로 두고 메모 필드만 끼웁니다 (#180, HWPX·HWP 5.x — HWP 는 서식 그대로 HWPX 로 바꿔 달아 HWPX 로 냅니다). 기존 메모는 parse_document 결과 머리 줄·memos 옵션으로 읽습니다.",
+    {
+      file_path: z.string().min(1).describe("대상 HWPX·HWP 문서의 절대 경로"),
+      anchor: z.string().min(1).describe("메모를 붙일 본문 글 (한 문단 안 — 마크다운에 보이는 꼴)"),
+      text: z.string().min(1).describe("메모 글 (줄바꿈은 메모 안 문단)"),
+      author: z.string().optional().describe("작성자 (기본 \"kordoc\")"),
+      occurrence: z.number().int().min(0).default(0).describe("같은 앵커가 여럿일 때 0-based 선택"),
+      output_path: z.string().min(1).describe("출력 HWPX 저장 경로"),
+    },
+    async ({ file_path, anchor, text, author, occurrence, output_path }) => {
+      try {
+        const outPath = safeOutputPath(output_path, new Set([".hwpx"]))
+        let { buffer } = await readValidatedFile(file_path)
+        let format: string = detectFormat(buffer)
+        if (format === "hwp" && detectOle2Format(buffer) === "hwp") {
+          // HWP 5.x 는 서식 그대로 HWPX 로 바꿔 메모를 단다
+          const hwpx = await hwpToHwpx(new Uint8Array(buffer))
+          buffer = hwpx.buffer.slice(hwpx.byteOffset, hwpx.byteOffset + hwpx.byteLength) as ArrayBuffer
+          format = "hwpx"
+        }
+        if (format !== "hwpx") {
+          return { content: [{ type: "text", text: `add_memo 는 HWPX·HWP 5.x 파일만 지원합니다 (감지된 포맷: ${format}).` }], isError: true }
+        }
+        const { addMemoHwpx } = await import("../form/memo.js")
+        const result = await addMemoHwpx(buffer, [{ anchor, text, author, occurrence }])
+        await mkdir(dirname(outPath), { recursive: true })
+        await writeOutputFile(outPath, Buffer.from(result.buffer))
+        const p0 = result.placed[0]
+        return { content: [{ type: "text", text: `메모 ${p0.number} 달기 완료: "${p0.anchor}" #${p0.occurrence}\n저장: ${outPath}` }] }
+      } catch (err) {
+        return { content: [{ type: "text", text: `메모 달기 실패: ${describeError(err)}` }], isError: true }
+      }
+    },
+  )
+
+  // ─── 도구: patch_document ────────────────────────────
+
+  server.tool(
+    "patch_document",
+    "원본 HWPX/HWP의 서식(글꼴·표·도장칸·로고·결재란·이미지)을 그대로 두고, 편집된 마크다운대로 글을 바꿔 새 문서로 출력합니다. 두 가지 용도: (1) 문구 수정·빈칸 채우기, (2) ★서식 베끼기 — \"이 문서 서식대로/똑같은 양식으로/이거 참고해서 ○○ 문서 써줘\"처럼 견본의 분위기를 그대로 재현해 새 공문서를 쓰는 요청. 절차: parse_document(견본, keep_layout_tables: true) → 받은 마크다운의 골격(표지·결재란 표, 제목, □·ㅇ·- 부호와 들여쓰기, 강조 표지 **, 표 표기)을 유지한 채 내용만 새로 쓰기 → 이 도구(file_path=견본, output_path=새 파일) → render_document 로 확인. HWPX 견본은 문단을 자유롭게 늘리고 줄여도 됩니다: 새 줄은 같은 항목 부호(□·ㅇ·-·※·1.·가.)를 단 견본 문단을 복제해 같은 들여쓰기·글꼴·굵기로 들어가고, 지운 줄은 문단째 빠집니다. 표는 견본 표를 그대로 두고 칸 글만 바꾸며 행은 추가·삭제(<table> 표기면 그 HTML 꼴 유지, GFM 으로 바꾸지 말 것). 견본에 없는 요소를 새로 만들거나 kordoc 기본 서식으로 다시 짜는 generate_document 는 서식 베끼기에 쓰지 마세요. HWP(5.x) 견본은 제자리 수정에서 문단 추가·삭제가 안 됩니다 — 줄 수가 바뀌면 원본을 서식 그대로 HWPX 로 바꿔 반영한 대체본(<출력>.rewrite.hwpx)을 받습니다(HWP 결과가 꼭 필요하면 줄 수를 견본에 맞추세요). 좌표가 어긋난 자리(틀 표·제목 상자·강제 줄바꿈 문단 등)는 원문 글을 찾아 그 자리만 고치고, 그래도 제자리 반영 못 한 편집이 있으면 편집 내용을 다 담은 대체본(원본 서식으로 새로 쓴 <출력>.rewrite.hwpx)을 함께 만듭니다 — 서식을 맞추려고 칸을 비우거나 내용을 빼지 말고 넣을 내용을 그대로 쓰세요.",
+    {
+      file_path: z.string().min(1).describe("원본 문서의 절대 경로 (HWPX 또는 HWP 5.x)"),
+      edited_markdown: z.string().min(1).describe("parse_document(keep_layout_tables: true) 출력 마크다운을 편집한 전체 마크다운. 문단 사이는 빈 줄, 줄마다 견본과 같은 항목 부호로 시작(부호가 서식 견본을 고른다). HWPX 는 문단 추가·삭제 반영(HWP 는 대체본에), 블록 순서 바꾸기는 미지원. 견본의 이미지 줄·<img> 는 그대로 둘 것"),
+      output_path: z.string().min(1).describe("출력 파일 저장 절대 경로 (원본과 같은 확장자: .hwpx 또는 .hwp)"),
+      structure: z.boolean().optional().describe("문단 추가·삭제 반영 (HWPX, 기본 true). false 면 추가·삭제를 건너뛰고 미적용으로 보고 — 글 수정만 하고 문서 골격을 절대 바꾸지 않을 때"),
+    },
+    async ({ file_path, edited_markdown, output_path, structure }) => {
+      try {
+        const out = safeOutputPath(output_path, new Set([".hwpx", ".hwp"]))
+        const { buffer } = await readValidatedFile(file_path)
+        // ZIP(hwpx/xlsx/docx/pptx)·OLE2(hwp/xls) 모두 내부 구조로 세분화한 포맷으로 판정·안내 (#80).
+        // 다른 포맷으로 확인될 때만 거부 — 판별 불가(손상 컨테이너 등)는 종전대로 HWPX/HWP 패처가 판단한다
+        let format: string = detectFormat(buffer)
+        if (format === "hwpx") { const z = await detectZipFormat(buffer); if (z !== "unknown") format = z }
+        else if (format === "hwp") { const o = detectOle2Format(buffer); if (o !== "unknown") format = o }
+        const isHwpx = format === "hwpx"
+        if (!isHwpx && format !== "hwp") {
+          return {
+            content: [{ type: "text", text: `patch_document는 HWPX 또는 HWP 5.x만 지원합니다 (감지된 포맷: ${format}).` }],
+            isError: true,
+          }
+        }
+
+        const original = new Uint8Array(buffer)
+        const result = isHwpx
+          ? await patchHwpx(original, edited_markdown, structure === false ? { structure: false } : undefined)
+          : await patchHwp(original, edited_markdown)
+
+        // 제자리 반영 못 한 편집이 있으면 편집 내용을 다 담은 대체본(원본 서식 새로쓰기)을 같이 만든다 — 미적용만 돌려주면
+        // 받는 쪽이 칸을 비우거나 체크리스트로 미룬다
+        const { needsRewrite, rewriteEdited, rewritePath } = await import("../roundtrip/rewrite-fallback.js")
+        const rewrite = needsRewrite(result) ? await rewriteEdited(original, isHwpx, edited_markdown, result.success) : null
+        const rwOut = rewrite ? safeOutputPath(rewritePath(out), new Set([".hwpx"])) : undefined
+        if (rewrite && rwOut) {
+          await mkdir(dirname(rwOut), { recursive: true })
+          await writeOutputFile(rwOut, Buffer.from(rewrite.data))
+        }
+        const rewriteLine = rewrite && rwOut
+          ? `대체본(편집 내용 전부 반영, ${{ patch: "원본 HWP 를 서식 그대로 HWPX 로 바꿔 그 자리에 반영", template: "원본을 견본으로 글꼴·문단·표 서식·쪽 설정 유지", plain: "kordoc 기본 서식" }[rewrite.how]}) → ${rwOut}\n`
+            + "제자리 수정본과 대체본을 render_document 로 비교해 사용자에게 맞는 쪽을 주세요. 칸을 비워 두거나 내용을 빼고 따로 체크리스트로 넘기지 마세요."
+          : null
+
+        if (!result.success || !result.data) {
+          if (rewriteLine) return { content: [{ type: "text", text: `원본 제자리 수정은 못 했습니다(${result.error ?? "알 수 없는 오류"}).\n${rewriteLine}` }] }
+          return {
+            content: [{ type: "text", text: `패치 실패: ${result.error ?? "알 수 없는 오류"}` }],
+            isError: true,
+          }
+        }
+
+        await mkdir(dirname(out), { recursive: true })
+        await writeOutputFile(out, Buffer.from(result.data))
+
+        const v = result.verification?.stats
+        const lossless = v ? (v.modified === 0 && v.added === 0 && v.removed === 0) : undefined
+        const lines = [
+          `✓ ${result.applied}개 변경 적용 (${isHwpx ? "HWPX" : "HWP"}, 원본 서식 보존) → ${out}`,
+          lossless === true ? "검증: 편집 내용과 재파싱 결과 완전 일치" :
+            lossless === false ? `검증 잔차: 수정 ${v!.modified} · 추가 ${v!.added} · 삭제 ${v!.removed} (반영 안 된 편집 있음)` : null,
+          result.skipped.length > 0
+            ? `미적용·부분 적용 ${result.skipped.length}건:\n` + result.skipped.map(s => `  - ${s.partial ? "(부분 적용) " : ""}${s.reason}${s.after ?? s.before ? ` — ${s.after ?? s.before}` : ""}`).join("\n")
+            : null,
+          ...(result.warnings ?? []),
+          rewriteLine,
+        ].filter(Boolean)
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        }
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `오류: ${describeError(err)}` }],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // ─── 도구: redact_document ───────────────────────────
+
+  server.tool(
+    "redact_document",
+    "문서의 개인정보(주민·외국인등록번호·전화·이메일·카드·계좌·사업자등록번호·여권·운전면허, rules 로 인명·주소 opt-in)를 탐지해 서식 보존 마스킹합니다. HWPX/HWP는 원본 서식 그대로 같은 길이로 가린 파일 — 본문·표·중첩표·머리말/꼬리말·각주·글상자·필드·미리보기(텍스트·이미지)·문서 정보(제목·작성자)까지 가리고, 저장 전 결과 파일을 다시 훑어 남은 PII를 보고합니다. 그 외 포맷(PDF·DOCX·XLSX 등)은 원본을 건드리지 않고 마스킹된 마크다운만 출력합니다. 자동 검출 보조 도구 — 결과 리포트를 사람이 최종 확인해야 하며 이미지 속 글자는 탐지하지 못합니다. 마스킹 후 render_document로 눈으로 확인하는 것을 권장합니다.",
+    {
+      file_path: z.string().min(1).describe("대상 문서의 절대 경로"),
+      rules: z.array(z.enum(["rrn", "phone", "email", "card", "account", "brn", "passport", "driver", "crn", "ip", "name", "address"])).optional()
+        .describe("적용 룰 (기본: rrn·phone·email·card·account·brn·passport·driver — crn(법인등록번호)·ip·name(인명, 문맥 게이트)·address(주소)는 opt-in)"),
+      mask_char: z.string().min(1).max(1).optional().describe("마스크 문자 1글자 (기본: ●)"),
+      output_path: z.string().min(1).optional().describe("출력 경로 (HWPX/HWP는 같은 확장자, 그 외는 .md) — dry_run이 아니면 필수"),
+      dry_run: z.boolean().default(false).describe("탐지 리포트만 반환, 파일 미생성"),
+    },
+    async ({ file_path, rules, mask_char, output_path, dry_run }) => {
+      try {
+        const { buffer, resolved } = await readValidatedFile(file_path)
+        // ZIP·OLE 내부 구조까지 세분화 — PPTX·XLS 를 hwpx·hwp 로 보고 확장자를 잘못 요구하지 않게 (#80)
+        let format: string = detectFormat(buffer)
+        if (format === "hwpx") { const z = await detectZipFormat(buffer); if (z !== "unknown") format = z }
+        else if (format === "hwp") { const o = detectOle2Format(buffer); if (o !== "unknown") format = o }
+        const patchable = format === "hwpx" || format === "hwp"
+        if (!dry_run && !output_path) {
+          return { content: [{ type: "text", text: "output_path가 필요합니다 (탐지만 원하면 dry_run: true)." }], isError: true }
+        }
+        const outPath = !dry_run
+          ? safeOutputPath(output_path!, new Set(patchable ? [format === "hwp" ? ".hwp" : ".hwpx"] : [".md", ".markdown", ".txt"]))
+          : undefined
+        if (outPath && await isSameFile(outPath, resolved)) {
+          return { content: [{ type: "text", text: "output_path가 입력 파일과 같습니다 — 원본을 덮어쓰지 않습니다. 다른 경로를 지정하세요." }], isError: true }
+        }
+        const { redactDocument } = await import("../redact-doc.js")
+        const r = await redactDocument(buffer, { rules, maskChar: mask_char, filePath: file_path, dryRun: dry_run })
+        // HWPX/HWP 는 파일 안 위치 기준, 그 외는 본문 마크다운 기준. 명단 수천 행이면 응답이 넘치므로 자른다
+        const MAX_LINES = 50
+        const listed = r.fileHits.length > 0
+          ? r.fileHits.map(h => `  - [${h.rule}] ${h.masked} (${h.where} @ ${h.part})`)
+          : r.markdownHits.map(h => `  - [${h.rule}] ${h.masked}`)
+        const byRule = new Map<string, number>()
+        for (const h of r.fileHits.length > 0 ? r.fileHits : r.markdownHits) byRule.set(h.rule, (byRule.get(h.rule) ?? 0) + 1)
+        const grouped = new Map<string, number>()
+        for (const l of listed) grouped.set(l, (grouped.get(l) ?? 0) + 1)
+        const groupedLines = [...grouped].map(([l, n]) => n > 1 ? `${l} ×${n}` : l)
+        const lines = [
+          `탐지: ${[...byRule.values()].reduce((a, b) => a + b, 0)}건 (${[...byRule.entries()].map(([k, v]) => `${k} ${v}`).join(", ") || "없음"})`,
+          ...groupedLines.slice(0, MAX_LINES),
+          ...(groupedLines.length > MAX_LINES ? [`  … 외 ${groupedLines.length - MAX_LINES}줄`] : []),
+        ]
+        // HWPX/HWP 는 결과 바이트가 원본과 다르면 저장 (탐지 0건이어도 미할당 영역을 비웠으면 저장),
+        // 그 외 포맷은 본문에서 찾은 게 있을 때 마스킹된 마크다운을 저장
+        const save = r.data ? r.changed : r.markdownHits.length > 0
+        if (!dry_run && save) {
+          await mkdir(dirname(outPath!), { recursive: true })
+          if (r.data) {
+            await writeOutputFile(outPath!, Buffer.from(r.data))
+            lines.push(`저장: ${outPath} (원본 서식 보존)`)
+          } else {
+            await writeOutputFile(outPath!, r.markdown, "utf-8")
+            lines.push(`저장: ${outPath} (${r.format} 원본은 수정하지 않음 — 마스킹된 마크다운)`)
+          }
+        } else if (!dry_run) {
+          lines.push(listed.length > 0 ? "❌ 파일에서 가린 곳이 없어 출력 파일을 만들지 않았습니다." : "탐지 0건 — 출력 파일을 만들지 않았습니다.")
+        }
+        const failed = r.residual.length > 0 || r.unscanned.length > 0
+        if (r.residual.length > 0) {
+          lines.push(`❌ 마스킹 후 재검사에서 PII ${r.residual.length}건이 남아 있습니다 — 출력 파일을 공개하지 말고 수동 확인하세요:`)
+          for (const h of r.residual.slice(0, MAX_LINES)) lines.push(`  - [${h.rule}] ${h.masked} (${h.where} @ ${h.part})`)
+          if (r.residual.length > MAX_LINES) lines.push(`  … 외 ${r.residual.length - MAX_LINES}건`)
+        }
+        if (r.unscanned.length > 0) lines.push(`❌ 글자를 검사하지 못한 곳이 있습니다 — 출력 파일을 공개하지 말고 수동 확인하세요: ${r.unscanned.join(", ")}`)
+        if (!failed && r.data && save) lines.push("재검사: 결과 파일 전체(본문·머리말·각주·미리보기·메타데이터·미할당 영역)와 다시 읽은 본문에서 남은 PII 0건")
+        for (const w of r.warnings) lines.push(`⚠️ ${w}`)
+        if (r.data && save) lines.push("render_document로 마스킹 결과를 눈으로 확인하세요.")
+        lines.push("주의: 자동 검출은 보조 수단입니다. 이미지 속 텍스트·표기 변형·이름·주소는 놓칠 수 있으니 최종 공개 전 사람 검토가 필요합니다.")
+        return { content: [{ type: "text", text: capResponseText(lines.join("\n")) }], ...(failed ? { isError: true } : {}) }
+      } catch (err) {
+        return { content: [{ type: "text", text: `마스킹 실패: ${describeError(err)}` }], isError: true }
+      }
+    },
+  )
+}

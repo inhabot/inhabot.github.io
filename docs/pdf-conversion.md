@@ -1,6 +1,6 @@
 # PDF conversion
 
-The PDF to Markdown tab runs the vendored kordoc PDF parser in a browser worker. That parser uses `pdfjs-dist` and includes algorithms derived from OpenDataLoader PDF for reading order and table detection. It does not run the official OpenDataLoader Java or Node.js package, which cannot execute on GitHub Pages. See [NOTICE](../NOTICE) for attribution.
+The PDF to Markdown tab runs the vendored kordoc PDF parser in a browser worker. Kordoc 4.24.83 uses its bundled Hayro WebAssembly PDF engine and includes algorithms derived from OpenDataLoader PDF for reading order and table detection. It does not run the official OpenDataLoader Java or Node.js package, which cannot execute on GitHub Pages. See [NOTICE](../NOTICE) for attribution.
 
 The Markdown to PDF tab renders Markdown as printable HTML in the browser. The user chooses **Save as PDF** in the browser's print dialog. It does not create a PDF file silently or upload the Markdown to a server.
 

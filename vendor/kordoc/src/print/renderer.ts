@@ -16,7 +16,7 @@ import { existsSync } from "fs"
 import MarkdownIt from "markdown-it"
 import type { IRBlock } from "../types.js"
 import { blocksToMarkdown } from "../table/builder.js"
-import { KordocError } from "../utils.js"
+import { KordocError, escapeHtml } from "../utils.js"
 
 // ─── 타입 ─────────────────────────────────────────
 
@@ -95,6 +95,17 @@ const md = new MarkdownIt({
   breaks: false,
 })
 
+// Markdown can come from documents. Keep only the small HTML vocabulary emitted by
+// blocksToMarkdown for merged/nested tables and underlining; render other raw tags as text.
+// Image cells may point into the CLI's per-document folder images/<document>/ (#98).
+// htmlCellLinks emits <a href> with a safe scheme in HTML table cells (src/html-cell-links.ts).
+const SAFE_RAW_TAG = /^(?:<\/?(?:table|thead|tbody|tfoot|tr|th|td|u)>|<br\s*\/?>|<(?:th|td)(?: (?:colspan|rowspan)="[1-9]\d*"){1,2}>|<img src="(?:images\/(?:[^"'<>\/\s]+\/)?)?image_\d+\.(?:png|jpe?g|gif|webp|bmp)" alt="image">|<a href="(?:https?:|mailto:|tel:|#)[^"<>\s]*">|<\/a>)$/i
+function sanitizeRawHtml(raw: string): string {
+  return raw.replace(/<[^>]*>|</g, tag => SAFE_RAW_TAG.test(tag) ? tag : escapeHtml(tag))
+}
+md.renderer.rules.html_block = (tokens, idx) => sanitizeRawHtml(tokens[idx].content)
+md.renderer.rules.html_inline = (tokens, idx) => sanitizeRawHtml(tokens[idx].content)
+
 /**
  * Markdown 또는 IRBlock[] → HTML 문자열.
  * 외부 PDF 엔진(weasyprint, wkhtmltopdf 등)과 결합 가능.
@@ -128,6 +139,7 @@ export function renderHtml(
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <style>${css}${watermarkCss}</style>
 </head>
 <body>
@@ -137,16 +149,45 @@ ${body}
 </html>`
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
+// ─── PDF 생성 ─────────────────────────────────
+
+/**
+ * 인쇄용 Chromium 을 띄워 잠근 페이지를 준다 — print(htmlToPdf)·render(renderHtmlToPdf) 두 기동 지점 공용.
+ * 페이지 글은 문서에서 온 글이라 정적 조판만 필요하다: JS 를 끄고 data:·about: 밖의 요청(원격 http·로컬 file:)은
+ * 전부 막는다. v4.14.4 까지는 문서가 병합 셀·마크다운 이미지로 심은 <img onerror>·<script>·![](http://…) 가
+ * 헤드리스 Chrome 에서 실행되고 밖으로 요청했다 — KORDOC_OFFLINE(assertNetworkAllowed)은 Node fetch 만 막아
+ * Chromium 요청은 샜다. 기동 timeout 90초: CI(Node 22)가 부하 중 기본 30초 안에 WS 엔드포인트를 못 받아
+ * 실패했다(같은 커밋 재실행은 통과한 플레이크)
+ */
+/**
+ * Chromium 샌드박스 인자 — 기본은 샌드박스를 켠다(신뢰할 수 없는 문서의 그림·글꼴을 디코딩하므로 렌더러 탈출을 막는다).
+ * root 로 도는 Linux(컨테이너)는 Chromium 이 샌드박스 기동을 거부해 끄고, 그 밖엔 KORDOC_CHROMIUM_NO_SANDBOX=1 로만 끈다
+ */
+export function chromiumSandboxArgs(env: NodeJS.ProcessEnv = process.env, isRootLinux = process.platform === "linux" && process.getuid?.() === 0): string[] {
+  return env.KORDOC_CHROMIUM_NO_SANDBOX === "1" || isRootLinux ? ["--no-sandbox", "--disable-setuid-sandbox"] : []
 }
 
-// ─── PDF 생성 ─────────────────────────────────
+export async function launchLockedPage(puppeteer: typeof import("puppeteer-core"), executablePath: string) {
+  const browser = await puppeteer.default.launch({
+    executablePath,
+    headless: true,
+    timeout: 90_000,
+    args: chromiumSandboxArgs(),
+  })
+  try {
+    const page = await browser.newPage()
+    await page.setJavaScriptEnabled(false)
+    await page.setRequestInterception(true)
+    page.on("request", (req) => {
+      if (/^(?:data|about):/i.test(req.url())) void req.continue()
+      else void req.abort()
+    })
+    return { browser, page }
+  } catch (err) {
+    await browser.close()
+    throw err
+  }
+}
 
 /**
  * puppeteer-core로 HTML → PDF 변환.
@@ -170,15 +211,12 @@ async function htmlToPdf(html: string, options?: PrintOptions): Promise<Buffer> 
     )
   }
 
-  const browser = await puppeteer.default.launch({
-    executablePath,
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  })
-
+  const { browser, page } = await launchLockedPage(puppeteer, executablePath)
   try {
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: "networkidle0" })
+    // puppeteer 25 부터 setContent 의 waitUntil 에서 networkidle0 이 빠짐. 같은 의미
+    // (연결 0개가 500ms 유지)를 waitForNetworkIdle 로.
+    await page.setContent(html, { waitUntil: "load" })
+    await page.waitForNetworkIdle({ idleTime: 500, concurrency: 0 })
 
     const margin = options?.margin
     const pdf = await page.pdf({
@@ -210,7 +248,7 @@ function toCss(v: string | number): string {
 }
 
 /** Windows/Mac/Linux의 일반적 Chrome 경로 자동 감지 */
-function findChromiumPath(): string | null {
+export function findChromiumPath(): string | null {
   // 사용자가 명시 안 했으면 OS 표준 경로 시도
   // Windows
   const win = [

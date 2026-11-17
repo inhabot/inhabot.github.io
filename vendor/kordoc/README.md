@@ -3,582 +3,183 @@
 **모두 파싱해버리겠다.**
 
 [![npm version](https://img.shields.io/npm/v/kordoc.svg)](https://www.npmjs.com/package/kordoc)
-[![license](https://img.shields.io/npm/l/kordoc.svg)](https://github.com/chrisryugj/kordoc/blob/main/LICENSE)
+[![npm downloads](https://img.shields.io/npm/dm/kordoc.svg)](https://www.npmjs.com/package/kordoc)
+[![GitHub stars](https://img.shields.io/github/stars/chrisryugj/kordoc?style=flat)](https://github.com/chrisryugj/kordoc/stargazers)
+[![license](https://img.shields.io/npm/l/kordoc.svg)](LICENSE)
+[![MCP Registry](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.modelcontextprotocol.io%2Fv0%2Fservers%3Fsearch%3Dio.github.chrisryugj%2Fkordoc%26version%3Dlatest&query=%24.servers%5B0%5D.server.version&label=MCP%20Registry&color=blue)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.chrisryugj/kordoc)
 
 > *대한민국에서 둘째가라면 서러울 문서지옥. 거기서 7년 버틴 공무원이 만들었습니다.*
 
-HWP 3.x/5.x, HWPX, HWPML, PDF, XLS, XLSX, DOCX — 관공서에서 쏟아지는 모든 문서를 파싱하고, 비교하고, 분석하고, 생성합니다.
+한국 공문서를 AI가 읽고 쓸 수 있게 합니다. HWP 3.x·5.x, HWPX, HWPML, PDF, XLS·XLSX, DOCX, PPTX, 이미지(PNG·JPG·WebP·TIFF·GIF·BMP·AVIF·HEIC·PCX)를 Markdown과 구조화 데이터로 바꾸고, Markdown에서 HWPX·HWP 공문서를 만듭니다. 라이브러리·CLI·MCP 서버로 씁니다.
 
-[English](./README-EN.md)
+[English](README-EN.md) · [상세 사용법](docs/usage.md) · [벤치마크](docs/benchmarks.md) · [변경 이력](CHANGELOG.md)
 
-![kordoc 데모](./demo.gif)
+![같은 법령 별표를 HWP·HWPX·PDF·스캔 이미지로 넣은 kordoc 실제 출력](docs/readme-hero.gif)
 
----
+<sub>같은 법령 별표 한 건을 HWP·HWPX·PDF·스캔 이미지로 넣은 실제 출력입니다. 네 경우 모두 병합 칸(`rowspan`·`colspan`)을 같은 짜임의 표로 읽습니다. 스캔 이미지는 OCR이 자동으로 켜집니다.</sub>
 
-## ⚡ 30초 설치 (AI 에이전트 연동)
+- 📊 **PDF 공개 벤치 종합 0.965**: opendataloader-bench 200문서, 공개 리더보드(2026-09-29 기록) 12개 파서보다 높은 점수(4.24.50 측정). [측정 조건](docs/benchmarks.md#pdf--markdown--opendataloader-bench)
+- 🇰🇷 **한국 공문서 표 구조 100%**: 원본 HWPX 2,424문서의 보이는 표 **10,342개 전부 구조 일치**. [검증 결과](#검증-결과)
+- 🧩 **Claude 플러그인 디렉터리 게시**: 설치 **1,700건 이상**(2026. 11. 14. 집계). 공식 MCP 레지스트리에도 등록돼 있습니다.
 
-**macOS / Linux / Windows 공용**. Node.js 18+ 만 있으면 됩니다.
+쓸모 있었다면 GitHub ⭐ 하나 눌러주세요. 다른 사람이 이 도구를 찾는 데 도움이 됩니다.
 
-```bash
-npx -y kordoc setup
-```
+영상: [공개 벤치 측정 과정](https://youtu.be/9kRbwiTRQLs)(2026-09-27 판, 1분 31초) · [양식 일괄 채우기 시연](https://youtu.be/Q13GmgDcIw0)
 
-대화형 마법사가:
-1. 사용 중인 AI 클라이언트 번호 선택 (Claude Desktop / Cursor / Claude Code / Windsurf / VS Code / Gemini CLI / Zed / Antigravity — 설치된 건 `[감지됨]` 표시)
-2. 설정 파일 자동 패치 → 클라이언트 재시작
-
-Windows 도 자동으로 `cmd /c npx` 래핑. 수동 JSON 편집 불필요. 재시작하면 8개 문서 파싱 도구 (`parse_document`, `parse_table`, `fill_form` 등) 활성화.
-
-> **CLI 로만 쓸 거면** 설치 없이 `npx kordoc <파일>` 바로 사용. 아래 [CLI](#cli) 섹션 참고.
-
-> **`MODULE_NOT_FOUND` / `Cannot find module ...\dist\cli.js` 가 뜨면**: 과거에 깨진 글로벌 설치가 남아있는 상태입니다. 아래로 해결:
-> ```powershell
-> npm uninstall -g kordoc
-> npx -y kordoc@latest setup
-> ```
-
-> **Windows PowerShell 에서 `npx.ps1 파일을 로드할 수 없습니다 · PSSecurityException` 이 뜨면**: PowerShell 기본 보안 정책이 서명 없는 `.ps1` 을 차단하는 표준 동작입니다 (kordoc 무관). 아래 중 하나 쓰시면 됩니다.
->
-> **방법 1 — 명령 프롬프트(cmd) 창에서 실행** (가장 안전)
-> 윈도우 키 → `cmd` 검색 → Enter → 검은 창에서 그대로:
-> ```
-> npx -y kordoc setup
-> ```
->
-> **방법 2 — PowerShell 실행 정책 한 번만 완화**
-> 관리자 권한 PowerShell:
-> ```powershell
-> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-> ```
-> 이후 PowerShell 재시작 → `npx -y kordoc setup` 그대로 됨.
-
----
-
-## 💡 kordoc으로 무엇을 할 수 있나요?
-
-단순한 텍스트 추출을 넘어, **공문서 처리를 위한 모든 과정**을 자동화합니다.
-
-*   **📄 어떤 문서든 마크다운으로**: `HWP3` (구버전), `HWP`(5.x), `HWPX`, `HWPML`, `PDF`, `XLS`, `XLSX`, `DOCX` 파일을 즉시 `Markdown`으로 변환합니다. AI(LLM)가 문서를 읽고 분석하기 가장 좋은 상태로 만들어줍니다.
-*   **📊 복잡한 표(Table) 완벽 재현**: 선이 없는 PDF나 복잡하게 병합된 HWP 표도 구조를 분석하여 정확한 마크다운 테이블로 복원합니다.
-*   **🔍 신구대조표 자동 생성**: 두 문서의 차이점을 분석하여 무엇이 바뀌었는지 한눈에 보여줍니다. (HWP와 HWPX 간의 비교도 가능!)
-*   **📝 마크다운을 다시 HWPX로**: AI가 작성한 내용을 다시 보고서 양식(`HWPX`)으로 되돌려줍니다. 이제 복사-붙여넣기 노가다에서 해방되세요.
-*   **🔄 서식 보존 무손실 라운드트립 (v3.0)**: 변환된 마크다운을 편집해서 `patchHwpx`(HWPX) / `patchHwp`(HWP 5.x 바이너리)에 넘기면, **원본 서식을 1바이트도 건드리지 않고** 바뀐 문단/표 셀의 텍스트만 원본 안에서 교체합니다. AI가 공문 내용을 고치고 서식 그대로 돌려받는 워크플로가 가능해집니다.
-*   **✏️ 양식 자동 채우기**: 공문서 양식 템플릿(신청서, 보고서)에 값을 넣으면 자동으로 빈칸을 채웁니다. 원본 서식(글꼴, 크기, 정렬)을 100% 보존합니다.
-*   **🤖 AI 에이전트 연동 (MCP)**: `Claude`, `Cursor`와 같은 도구에서 직접 `kordoc`을 호출해 문서를 읽고 코딩할 수 있습니다.
-
----
-
-## v3.2.0 변경사항
-
-- **🏛️ 공문서 모드 `markdownToHwpx(md, { gongmun })`** — 마크다운을 한국 행정 공문서 표준 서식의 HWPX로 렌더링. 행정안전부 「행정업무운영편람」·시행규칙 근거.
-  - **항목부호 8단계 자동화** — 중첩 리스트 깊이 → `1. 가. 1) 가) (1) (가) ① ㉮` (마크다운 마커 종류 무시, 깊이로 강제). 가나다 소진 시 단모음 연속(거·너·더), 상위 항목 진행 시 하위 카운터 리셋, 단일 형제 부호 생략.
-  - **둘째 줄 내어쓰기 정렬** — OWPML `<hc:intent>`(음수 hanging) + `<hc:left>`(단계별 누적)로 둘째 줄이 내용 첫 글자에 정렬. *(실제 한컴 공문서 paraPr 구조와 동일하게 검증)*
-  - **공식 여백** 위20/아래10/좌20/우20mm·머리말꼬리말0, **본문 15pt 명조(함초롬바탕)** 기본 + 맑은 고딕 옵션.
-  - **문서종류 프리셋** `official`(기안문)·`report`(보고서, □○-ㆍ 불릿)·`plan`·`notice`·`minutes`.
-
-  ```ts
-  import { markdownToHwpx } from "kordoc"
-
-  const md = "1. 첫째 항목\n  - 둘째 항목\n    - 셋째 항목"
-  const hwpx = await markdownToHwpx(md, { gongmun: { preset: "보고서" } })
-  // → 1. / 가. / 1) 항목부호 + 내어쓰기 + 공식 여백 자동 적용
-  ```
-
-  CLI: `kordoc generate doc.md -o out.hwpx --preset 보고서` (별칭 `gen`, `--font`/`--pt`/`--line-spacing`/`--plain`). 표준 레퍼런스: `docs/gongmunseo-reference.md`, 작성 스킬: `.claude/skills/gongmunseo/`.
-
-## v3.1.0 변경사항
-
-- **🖊️ 에디터 통합 API `HwpxSession`** — 블록 클릭-편집형 에디터를 위한 증분 패치 세션. `openHwpxDocument(bytes)`로 열고, `session.patchBlocks(edits)`로 블록 인덱스 기반 직접 편집 (문단 텍스트 / 표 셀). **n회 연속 증분 패치 ≡ 일괄 `patchHwpx`** 바이트 동일 동등성을 CI 게이트로 보장합니다.
-
-  ```ts
-  import { openHwpxDocument } from "kordoc"
-
-  const session = await openHwpxDocument(new Uint8Array(buf))
-  session.capability(3)            // "text" | "cell-text" | "locked" — 편집 전 잠금 판정
-  const res = await session.patchBlocks([
-    { blockIndex: 3, newText: "개최 완료" },
-    { blockIndex: 5, cells: [{ row: 1, col: 2, text: "홍길동" }] },
-  ])
-  // session.bytes — 서식 그대로, 텍스트만 바뀐 HWPX (증분 누적)
-  ```
-
-- **📋 양식 필드 스키마 `extractFormSchema(blocks)`** — 양식 인식에 타입 추론을 더해 폼 UI 자동 생성 지원. 필드 타입 7종(`text`/`date`/`phone`/`email`/`amount`/`checkbox`/`idnum`) + `required`(필수 표시 감지) + `empty`(채움 대상 판정).
-- **`fillHwpx` splice 전환** — 수정 범위 외 섹션 XML을 원본 바이트 그대로 보존하도록 전면 재작성 (동작·결과는 v3.0과 패리티).
-- **CJS 빌드 수정** — `require("kordoc")` 시 `import.meta` SyntaxError 나던 버그 수정.
-
-## v3.0.1 변경사항
-
-- **🔄 HWP 5.x 바이너리 서식 보존 패치** — `patchHwp(원본HWP, 편집된마크다운)` 신규 API. HWPX 패치(`patchHwpx`)의 HWP 5.x(OLE2 바이너리) 대응으로, 변경된 문단/표 셀의 PARA_TEXT만 레코드 안에서 치환합니다 (PARA_HEADER 글자수·CHAR_SHAPE·LINE_SEG 연쇄 갱신).
-  - **섹터 레벨 컨테이너 수술**: CFB 전체 재조립 없이 대상 스트림의 섹터/FAT 체인/디렉토리 엔트리만 갱신 — 수정 외 영역은 원본과 바이트 동일 (실측: 133섹터 중 5섹터만 변경)
-  - 안전 게이트: 레코드 재직렬화 바이트 동일성 검증, 순수 텍스트 문단만 수정, 암호화/배포용/DRM 거부, 미지원 편집은 `skipped[]`로 graceful skip
-  - CLI `kordoc patch`가 .hwp/.hwpx를 매직바이트로 자동 분기
-- **CI**: Node 18 ESM `__dirname` 미정의로 테스트 매트릭스가 실패하던 문제 수정
-
-## v3.0.0 변경사항
-
-- **🔄 서식 보존 무손실 라운드트립** — `patchHwpx(원본HWPX, 편집된마크다운)` 신규 API. 변경된 문단/셀의 텍스트만 원본 XML 안에서 in-place 치환하고 나머지 ZIP 엔트리는 바이트 그대로 보존. 미지원 편집(블록 추가/삭제, 표 구조 변경)은 원본을 건드리지 않고 `skipped[]`로 정직하게 보고하며, 패치 후 자동 재파싱 검증 리포트(`verification`)를 제공합니다.
-
-  ```ts
-  import { parse, patchHwpx } from "kordoc"
-
-  const r = await parse(buf)                       // HWPX → 마크다운
-  const edited = r.markdown.replace("개최 예정", "개최 완료") // LLM이 편집했다고 가정
-  const res = await patchHwpx(new Uint8Array(buf), edited)
-  // res.data — 서식 그대로, 텍스트만 바뀐 HWPX 바이트
-  // res.applied / res.skipped / res.verification — 적용·미지원·검증 리포트
-  ```
-
-- **🎯 "99.9% 정확도" 파서 대도약** — 실측 공문서 코퍼스 324건(정부 보도자료 + 서울시 결재문서 + 2014~2016 옛 문서) 자기참조 채점 기준:
-
-  | 지표 | v2.9.1 | v3.0.0 |
-  |------|--------|--------|
-  | HWPX 텍스트 재현율 | 99.699% | **99.998%** |
-  | HWPX 표 구조 정확일치 | 99.875% | **100%** (1,421표 · 중첩표 343 포함) |
-  | PDF coverage | 97.013% | **99.16%** |
-  | HWP5↔HWPX 쌍 유사도 | — | **99.94%** |
-
-  중첩표 구조 보존(`IRCell.blocks`), 한컴 PUA 매핑, HWP5 이미지 추출(0→90건), 자동번호 카운터, 머리말/각주 정밀 처리 등. 채점기·코퍼스 수집기·게이트는 `bench/`에 포함 — `node bench/score.mjs`로 재현 가능.
-
-## v2.9.0 변경사항
-
-- **📊 PDF 텍스트 품질 신호 + OCR 필요 판정** — PDF는 텍스트층이 있어도 ToUnicode/CMap 이 깨져 한글이 깨진 글리프로 떨어지거나 NUL 등 제어문자가 섞이는 경우가 많습니다. `parsePdf` 결과에 페이지별 품질 신호(`pageQuality`)와 문서 요약(`qualitySummary`)을 추가 — `needsOcr`/`ocrReason` 으로 OCR 큐 자동 라우팅이 가능. kordoc 은 OCR 을 기본 탑재하지 않고 **신호만** 노출합니다. 전국 지자체 주요업무계획 PDF 190건(45,399쪽) 대량 처리 중 도출. (아래 [PDF 텍스트 품질 신호](#pdf-텍스트-품질-신호-v290) 참고)
-
-## v2.8.0 변경사항
-
-- **🎨 `markdownToHwpx` 테마 옵션** (#31) — 헤딩/본문/인용/표 헤더 셀의 텍스트 색상과 표 헤더 굵기를 옵션으로 지정 가능. 새 export 타입 `HwpxTheme`, `MarkdownToHwpxOptions`. 옵션 미지정 시 기존과 동일하게 검정으로 출력(baseline 백워드 호환).
-
-<details>
-<summary>v2.7.2 변경사항</summary>
-
-- **🐛 HWPX 양식 채우기 빈 셀 버그픽스** (#29, #30) — 한컴오피스에서 HWP→HWPX 로 변환한 양식의 빈 값 셀(`<hp:run>` 이 `<hp:t>` 자식 없이 self-closing)에 값이 삽입되지 않으면서 결과에는 성공으로 보고되던 false-positive 수정. `setRunText` 가 `<hp:t>` 없는 run 에 새로 생성해 텍스트 삽입. 기여: @amnotyoung
-
-</details>
-
-<details>
-<summary>v2.7.1 변경사항</summary>
-
-- **🕰️ HWP 3.0 (구버전) 파서 추가** — 1996~2002년 한컴이 쓰던 단일 binary 포맷 (`"HWP Document File V3.00"` 시그니처) 텍스트 추출. 기존 kordoc 이 거부하던 구버전 판결문/공문서 등이 검색 인덱싱 가능. 상용조합형(johab) → 유니코드 + 5,893개 한자/기호 lookup. 표 cell / 머리말 / 각주 의 nested paragraph 재귀 추출. [@edwardkim/rhwp](https://github.com/edwardkim/rhwp) 의 Rust 구현을 TypeScript 로 포팅.
-
-</details>
-
-<details>
-<summary>v2.5.0 변경사항</summary>
-
-- **🏛️ macOS 한컴오피스 호환 HWPX 생성** (#4) — `markdownToHwpx()` 가 만든 HWPX 가 macOS 한컴에서 "파일이 깨졌다"며 거부되던 문제 해결. 테이블 XML 을 최소 스켈레톤에서 완전 스펙 형태로 재작성 — `<hp:tbl>` 필수 속성 10종 + `<hp:sz>`/`<hp:pos>`/`<hp:outMargin>`/`<hp:inMargin>`, `<hp:tc>` 안에 `<hp:subList>` 래퍼 + `<hp:cellAddr>`/`<hp:cellSpan>`/`<hp:cellSz>`/`<hp:cellMargin>`, paragraph 래핑. `Preview/PrvText.txt` 추가 + `borderFill` id=1(SOLID 0.12mm) 추가.
-- **🔓 HWP 5.x 배포용 문서 COM fallback** (#25) — `.hwp` 바이너리에서 "이 문서는 상위 버전의 배포용 문서입니다..." 경고 플레이스홀더만 나오는 케이스에서, Windows + 한컴오피스 환경이면 자동으로 `HWPFrame.HwpObject` COM API 로 재시도. v2.4.0 의 HWPX DRM fallback 인프라를 `.hwp` 에도 확장.
-
-</details>
-
-<details>
-<summary>v2.4.0 변경사항</summary>
-
-- **🔓 HWPX DRM 배포용 문서 자동 추출** — 공공기관 배포용 DRM이 걸린 HWPX 파일을 한컴 오피스 COM API로 자동 텍스트 추출. `manifest.xml`에서 암호화 감지 → `HWPFrame.HwpObject`의 `GetPageText`로 페이지별 추출 → Markdown 변환. Windows + 한컴 오피스 설치 환경에서 별도 설정 없이 동작.
-
-</details>
-
-<details>
-<summary>v2.3.0 변경사항</summary>
-
-- **📄 HWPML 2.x 파서 추가** — XML 기반 한컴 문서(`.hwp` XML 방식) 파싱 지원. `npx kordoc <file.hwp>`에서 `지원하지 않는 파일 형식` 오류가 나던 XML 기반 공문서를 이제 Markdown으로 변환할 수 있습니다. HWP 5.x 바이너리와 자동 구분(XML 시그니처 감지).
-- **🧩 중첩 테이블 마커** — HWPX/HWP5에서 셀 내부 중첩 테이블이 있던 위치에 `[중첩 테이블 #N]` 마커 삽입. 큰 중첩 테이블(≥3행 + ≥2열)은 별도 블록으로 분리, 작은 것은 셀 내 평탄화. HWP5는 기존에 내용이 완전히 손실되던 것을 마커로 복구.
-- **🖼️ HWPX 이미지 추출 버그 수정** — `binaryItemIDRef`가 확장자 없이(`"image1"`) 저장된 HWPX에서 이미지 추출이 실패하던 문제 해결. ZIP 내 파일명 regex 매칭으로 복원.
-- **📄 PDF 머리글/바닥글 감지 개선** — 텍스트 반복 패턴 + y좌표 클러스터링 하이브리드. 페이지마다 달라지는 동적 머리글(챕터명 등)도 위치 기반으로 감지. 감지 영역 10% → 12%로 확장.
-
-</details>
-
-<details>
-<summary>v2.2.4 변경사항</summary>
-
-- **📝 양식 자동 채우기 (Form Filler)** — 공문서 양식 템플릿에 값을 자동으로 채워넣습니다. 라벨-값 셀 패턴, 체크박스(`□`→`☑`), 괄호 빈칸(`일반(  )통`→`일반(3)통`), 어노테이션(`(한자：)`→`(한자：金)`) 지원.
-- **🏛️ HWPX 원본 서식 보존 모드** — `fillHwpx()`로 HWPX XML을 직접 조작하여 글꼴, 크기, 정렬 등 원본 서식 100% 유지한 채 값만 교체.
-- **📊 병합 셀 HTML 테이블 출력** — `colspan`/`rowspan`이 있는 복잡한 표를 GFM 대신 HTML `<table>`로 출력하여 구조 보존.
-- **🔧 markdownToHwpx 서식 강화** — 역변환 시 heading/bold/italic/table 등 서식 지원 대폭 개선.
-- **🤖 MCP fill_form 도구** — AI 에이전트가 양식을 직접 채울 수 있는 새 MCP 도구 추가 (총 8개).
-
-</details>
-
-<details>
-<summary>v2.2.1 변경사항</summary>
-
-- **🔧 마크다운 렌더링 개선** — GFM 특수문자(`~`) 이스케이프로 취소선 오해석 방지, 테이블 셀 내 `|` 문자 이스케이프, 중첩 테이블 텍스트 구분자 `|` → `/` 변경으로 GFM 파서 충돌 방지.
-- **📝 문단 간격 정상화** — paragraph 블록 사이 빈 줄 삽입으로 마크다운에서 별도 문단으로 렌더링.
-
-</details>
-
-<details>
-<summary>v2.2.0 변경사항</summary>
-
-- **🛡️ 보안 강화 7건** — XLSX/DOCX Billion Laughs(XXE) 방지, Watch SSRF 리다이렉트·10진수IP·symlink 차단, HWP5 lenient decompression bomb 방지, CFB FAT 섹터 상한, buildTableDirect 메모리 폭주 방지.
-- **💥 Crash 방지** — `Math.min/max(...spread)` 스택 오버플로 수정 (15개소), Watch 동시 처리 제한(MAX_CONCURRENT=3).
-- **🐛 정확성 개선** — Levenshtein 동일 길이 유사도 1.0 버그 수정, MCP `parse_metadata` XLSX/DOCX 오분류 수정, PDF 폰트 크기 통계 메모리 최적화(40MB→~50엔트리).
-- **📦 품질** — CLI JSON Uint8Array base64 변환, `isPathTraversal` 합법적 파일명 오탐 수정.
-
-</details>
-
-<details>
-<summary>v2.1.0 변경사항</summary>
-
-- **📄 대형 HWPX 정부문서 파싱** — `<p>><run>><tbl>` 구조의 중첩 테이블 파싱 누락 수정.
-- **📰 PDF 2단 레이아웃 감지** — 다단 논문·보고서의 컬럼 구조를 감지하여 읽기 순서대로 추출.
-- **🛡️ 입력 검증 강화** — 폰트 크기 NaN/음수 가드, colSpan/rowSpan NaN 가드.
-
-</details>
-
-<details>
-<summary>v2.0 변경사항</summary>
-
-- **🔓 배포용(열람 제한) HWP 파싱 지원** — 관공서에서 배포용으로 잠근 HWP 파일도 이제 파싱됩니다. AES-128 ECB 복호화, 순수 JS 구현. [rhwp](https://github.com/edwardkim/rhwp)(MIT) 알고리즘 포팅.
-- **손상된 HWP 파일 복구** — 표준 CFB 모듈이 거부하는 파일을 직접 FAT/디렉토리 파싱으로 복구. rhwp LenientCfbReader 포팅.
-- **HWP5 각주/미주/하이퍼링크 추출** — 각주 본문 텍스트 연결, 하이퍼링크 URL 추출 및 XSS 살균.
-- **HWPX 표 병합 밀림 수정** — colspan/rowspan 그리드 계산 버그 수정.
-- **보안 강화** — CFB 섹터 크기 검증, sanitizeHref 3중 경로 일관 적용.
-
-</details>
-
-<details>
-<summary>v1.8.0 변경사항</summary>
-
-- **XLSX 파서 추가** — Excel 스프레드시트 파싱. 공유 문자열, 병합 셀, 다중 시트 지원. 시트별 heading + table 블록 생성.
-- **DOCX 파서 추가** — Word 문서 파싱. 스타일 기반 heading, 번호 매기기(리스트), 각주, 하이퍼링크, 이미지 추출, vMerge/gridSpan 테이블 병합.
-- **파싱 품질 대폭 개선** — PDF/HWPX/HWP5/XLSX 전 포맷 품질 점수 73→93점.
-- **프로덕션 리뷰 17건 수정** — CLI `--no-header-footer` 플래그 반전 버그, MCP XLSX/DOCX 확장자 허용, ZIP bomb 보호 공유 유틸화, href XSS 살균 강화, PDF timeout 타이머 정리, HWP5 BinData O(n) 최적화, cluster indexOf O(n²)→O(n), SSRF IPv6 차단 등.
-
-</details>
-
-<details>
-<summary>v1.7.x 변경사항</summary>
-
-- **이미지 추출 (HWP/HWPX)** — ZIP 엔트리와 HWP5 BinData 스트림에서 바이너리 이미지 추출.
-- **부분 파싱 (Graceful Degradation)** — 개별 페이지 실패가 전체 파싱을 중단하지 않음.
-- **진행률 콜백** — `onProgress` 콜백. CLI에서 `[3/15 pages]` 형태 표시.
-- **파일 경로 직접 입력** — `parse("path/to/file.hwp")` 문자열 오버로드.
-- **PDF 머리글/바닥글 필터링** — `removeHeaderFooter` 옵션.
-- **보안 강화** — ZIP bomb 추적, SSRF 방지, XSS 방어, 널바이트 감지, PDF 타임아웃.
-- **pdfjs-dist v5 호환** — constructPath 연산자 형식 변경 대응.
-
-</details>
-
-<details>
-<summary>v1.6.1 수정사항</summary>
-
-- **HWP5 테이블 셀 오프셋 수정** — LIST_HEADER 파싱 시 2바이트 오프셋 밀림으로 rowAddr를 colSpan으로 잘못 읽던 치명적 버그 수정. 3열 테이블이 6열로 뻥튀기되던 문제 해결. colAddr/rowAddr 기반 직접 배치로 병합 테이블 정확도 향상.
-- **HWP5 TAB 제어문자 수정** — TAB(0x0009) 인라인 컨트롤의 14바이트 확장 데이터 스킵 누락으로 `࣐Ā` 쓰레기 문자가 출력되던 버그 수정.
-
-</details>
-
-<details>
-<summary>v1.6.0 기능</summary>
-
-- **클러스터 기반 테이블 감지 (PDF)** — 선 없는 PDF에서 텍스트 정렬 패턴으로 테이블 구조 추론. baseline 그룹핑 + X좌표 클러스터링으로 2열 이상 테이블 감지. 선 기반 감지가 실패한 경우의 중간 계층 fallback.
-- **한국어 특수 테이블 감지** — `구분/항목/종류/기준` 등 한국 공문서 key-value 패턴을 자동으로 2열 테이블로 변환.
-- **한국어 어절 끊김 복원** — PDF 셀 내 한글 문자별 렌더링으로 인한 미세 갭 처리 개선. 셀 줄바꿈 병합 임계값 8자로 확장, 1글자 조사 자동 연결.
-- **빈 테이블 필터링** — 장식용 선에서 생긴 빈 테이블 자동 제거.
-
-</details>
-
-<details>
-<summary>v1.5.0 기능</summary>
-
-- **선 기반 테이블 감지 (PDF)** — OpenDataLoader 핵심 알고리즘 포팅. PDF 그래픽 명령에서 수평/수직 선을 추출하고, 교차점으로 그리드 구성, bbox overlap으로 텍스트→셀 매핑. colspan/rowspan 자동 감지. 선 없는 PDF는 기존 휴리스틱 fallback.
-- **IRBlock v2** — 6가지 블록 타입: `heading`, `paragraph`, `table`, `list`, `image`, `separator`. 새 필드: `bbox`, `style`, `pageNumber`, `level`, `href`, `footnoteText`.
-- **ParseResult v2** — `outline` (문서 구조), `warnings` (스킵된 요소, 숨김 텍스트) 필드 추가.
-- **PDF 개선** — XY-Cut 읽기 순서, 폰트 크기 기반 헤딩 감지, hidden text 필터링 (프롬프트 인젝션 방어), 모든 블록에 바운딩 박스.
-- **HWP5 개선** — CHAR_SHAPE 파싱, 스타일 기반 헤딩 감지, OLE/이미지 스킵 경고.
-- **HWPX 개선** — header.xml 스타일 파싱, 하이퍼링크/각주 추출.
-- **리스트 감지** — 테이블 뒤 번호 문단을 ordered list 블록으로 자동 변환.
-- **MCP 서버** — parse_document 응답에 `outline`, `warnings` 포함.
-
-</details>
-
-<details>
-<summary>v1.4.x 기능</summary>
-
-- **문서 비교 (Diff)** — IR 레벨 블록 비교로 신구대조표 생성. HWP↔HWPX 크로스 포맷 지원.
-- **양식 인식** — 공문서 테이블에서 label-value 쌍 자동 추출. 성명, 소속, 전화번호 등.
-- **구조화 파싱** — `IRBlock[]`과 `DocumentMetadata`에 직접 접근. 마크다운 넘어선 데이터 활용.
-- **페이지 범위** — `parse(buffer, { pages: "1-3" })` — 필요한 페이지만 빠르게.
-- **Markdown → HWPX** — 역변환. AI가 생성한 내용을 바로 공문서로.
-- **OCR 연동** — 이미지 기반 PDF도 텍스트 추출 (Tesseract, Claude Vision 등 프로바이더 직접 제공).
-- **Watch 모드** — `kordoc watch ./수신함 -d ./변환결과 --webhook https://...`
-- **MCP 7개 도구** — parse_document, detect_format, parse_metadata, parse_pages, parse_table, compare_documents, parse_form
-- **에러 코드** — `"ENCRYPTED"`, `"ZIP_BOMB"`, `"IMAGE_BASED_PDF"` 등 구조화된 에러 핸들링
-
-</details>
-
----
+**목차**: [설치](#설치) · [빠른 시작](#빠른-시작) · [주요 기능](#주요-기능) · [검증 결과](#검증-결과) · [최근 업데이트](#최근-업데이트) · [자주 묻는 질문](#자주-묻는-질문) · [문서·보안](#문서보안)
 
 ## 설치
 
+Node.js **20 이상** · macOS / Linux / Windows
+
 ```bash
 npm install kordoc
-
-# PDF 파싱이 필요하면 (선택)
-npm install pdfjs-dist
 ```
+
+CLI는 설치 없이 `npx kordoc`으로 실행합니다. PDF 글은 패키지에 든 wasm 엔진으로 읽습니다. OCR·그림 형식 변환·QR 읽기 의존성은 기본으로 설치되며, `--omit=optional`로 빼면 해당 기능이 제한됩니다.
+
+### AI 에이전트에 연결
+
+| 쓰는 곳 | 방법 |
+| --- | --- |
+| Claude Desktop·Claude Code·Cursor·Codex 등 | `npx -y kordoc setup`: 설치된 클라이언트를 찾아 MCP를 등록합니다 |
+| VS Code·Cursor | 아래 단추로 등록합니다 |
+| Claude Code 플러그인 | `/plugin marketplace add chrisryugj/kordoc` 뒤 `/plugin install kordoc@kordoc` |
+| Claude 앱 | 플러그인 디렉터리에서 kordoc을 찾아 설치합니다 |
+| 그 밖의 MCP 클라이언트 | 공식 MCP 레지스트리 [`io.github.chrisryugj/kordoc`](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.chrisryugj/kordoc) 또는 [수동 등록](docs/usage.md) |
+
+[![VS Code에 설치](https://img.shields.io/badge/VS_Code-kordoc_설치-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=kordoc&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22kordoc%22%2C%22mcp%22%5D%7D) [![Cursor에 설치](https://img.shields.io/badge/Cursor-kordoc_설치-000000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.com/en/install-mcp?name=kordoc&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImtvcmRvYyIsIm1jcCJdfQ%3D%3D)
+
+클라이언트를 다시 시작하면 파싱·비교·생성·검수·렌더 등 **22개 도구**를 씁니다. 등록이 안 되면 [수동 MCP 등록과 설치 문제 해결](docs/usage.md)을 보세요.
 
 ## 빠른 시작
 
-### 문서 파싱
-
-```typescript
-import { parse } from "kordoc"
-import { readFileSync } from "fs"
-
-const buffer = readFileSync("사업계획서.hwpx")
-const result = await parse(buffer.buffer)
-
-if (result.success) {
-  console.log(result.markdown)       // 마크다운 텍스트
-  console.log(result.blocks)         // IRBlock[] 구조화 데이터
-  console.log(result.metadata)       // { title, author, createdAt, ... }
-}
-```
-
-### 문서 비교 (신구대조표)
-
-```typescript
-import { compare } from "kordoc"
-
-const diff = await compare(구버전Buffer, 신버전Buffer)
-// diff.stats → { added: 3, removed: 1, modified: 5, unchanged: 42 }
-// diff.diffs → BlockDiff[] (테이블은 셀 단위 diff 포함)
-```
-
-HWP vs HWPX 크로스 포맷 비교도 가능합니다.
-
-### 양식 필드 추출
-
-```typescript
-import { parse, extractFormFields } from "kordoc"
-
-const result = await parse(buffer)
-if (result.success) {
-  const form = extractFormFields(result.blocks)
-  // form.fields → [{ label: "성명", value: "홍길동", row: 0, col: 0 }, ...]
-  // form.confidence → 0.85
-}
-```
-
-### 양식 자동 채우기
-
-```typescript
-import { fillForm } from "kordoc"
-import { readFileSync, writeFileSync } from "fs"
-
-const template = readFileSync("신청서.hwpx")
-
-// HWPX 원본 서식 보존 모드 — 글꼴, 크기, 정렬 100% 유지
-const result = await fillForm(template.buffer, {
-  성명: "홍길동",
-  주민등록번호: "900101-1234567",
-  주소: "서울특별시 광진구 능동로 120",
-}, { format: "hwpx-preserve" })
-
-writeFileSync("신청서_작성완료.hwpx", Buffer.from(result.buffer!))
-// result.filled → [{ label: "성명", value: "홍길동" }, ...]
-// result.unmatched → 매칭 실패한 키 목록
-```
-
-### HWPX 생성 (역변환)
-
-```typescript
-import { markdownToHwpx } from "kordoc"
-
-const hwpxBuffer = await markdownToHwpx("# 제목\n\n본문 텍스트\n\n| 이름 | 직급 |\n| --- | --- |\n| 홍길동 | 과장 |")
-writeFileSync("출력.hwpx", Buffer.from(hwpxBuffer))
-
-// 공문서 모드 — 항목부호 8단계 + 내어쓰기 + 공식 여백/명조 자동
-const gongmun = await markdownToHwpx("1. 추진배경\n  - 세부 항목\n2. 추진계획", {
-  gongmun: { preset: "보고서" },  // official | report | plan | notice | minutes
-})
-```
-
-CLI로도: `kordoc generate 보고서.md -o 보고서.hwpx --preset 보고서`
-
-### 페이지 범위 지정
-
-```typescript
-const result = await parse(buffer, { pages: "1-3" })      // 1~3 페이지만
-const result = await parse(buffer, { pages: [1, 5, 10] })  // 특정 페이지
-```
-
-### OCR (이미지 PDF)
-
-```typescript
-const result = await parse(buffer, {
-  ocr: async (pageImage, pageNumber, mimeType) => {
-    return await myOcrService.recognize(pageImage)
-  }
-})
-```
-
-### PDF 텍스트 품질 신호 (v2.9.0+)
-
-PDF는 텍스트층이 있어도 ToUnicode/CMap이 깨졌거나 NUL 등 제어문자가 섞이는 경우가 많다. `parsePdf` 결과는 페이지별 품질 신호를 함께 반환한다.
-
-```typescript
-const r = await parsePdf(buffer)
-if (r.success && r.qualitySummary?.needsOcr) {
-  // OCR 큐로 라우팅 (kordoc은 OCR을 기본 탑재하지 않음)
-  await routeToOcr(buffer, r.qualitySummary.ocrCandidatePages)
-}
-
-// 페이지 단위 신호
-for (const p of r.pageQuality ?? []) {
-  if (p.needsOcr) console.log(`p${p.page} 검토 필요: ${p.ocrReason}`)
-}
-```
-
-신호 키: `textChars`, `hangulRatio`, `controlCharRatio`, `replacementCharRatio`, `puaRatio` / `needsOcr` (페이지·문서 단위) / `ocrReason` (`low_text` | `high_pua` | `high_control` | `high_replacement`).
-
-## CLI
+### CLI
 
 ```bash
-npx kordoc 사업계획서.hwpx                          # 터미널 출력
-npx kordoc 보고서.hwp -o 보고서.md                  # 파일 저장
-npx kordoc *.pdf -d ./변환결과/                     # 일괄 변환
-npx kordoc 검토서.hwpx --format json               # JSON (blocks + metadata 포함)
-npx kordoc 보고서.hwpx --pages 1-3                  # 페이지 범위
-npx kordoc fill 신청서.hwpx -f '성명=홍길동,주소=서울' -o 결과.hwpx  # 양식 채우기
-npx kordoc fill 신청서.hwpx -j values.json -o 결과.hwpx             # JSON 파일로 채우기
-npx kordoc fill 신청서.hwpx --dry-run                               # 필드 목록만 확인
-npx kordoc watch ./수신함 -d ./변환결과              # 폴더 감시 모드
-npx kordoc watch ./문서 --webhook https://api/hook  # 웹훅 알림
+npx kordoc 문서.hwpx -o 문서.md
+npx kordoc *.pdf --jobs 4 -d ./결과
+npx kordoc 문서.pdf --format json --pages 1-3
+npx kordoc 스캔본.pdf --ocr -o 스캔본.md
+npx kordoc generate 보고서.md --preset 보고서 -o 보고서.hwpx
+npx kordoc to-hwpx 문서.hwp -o 문서.hwpx
+npx kordoc to-hwpx ./옛문서   # 폴더째(하위 폴더까지): 각 파일 옆에 .hwpx, 이미 있으면 건너뜀
+npx kordoc 문서.pdf -o 문서.hwpx   # PDF·DOCX 등도 읽은 내용으로 HWPX (그림 포함)
+npx kordoc pack build 보고서1.hwpx 보고서2.hwpx 보고서3.hwpx --name 광양시 -o 광양시.kpack   # 기관팩 (docs/agency-pack.md)
+npx kordoc generate 새보고서.md --pack 광양시.kpack -o 새보고서.hwpx
+npx kordoc fill --template gian -j 값.json -o 기안문.hwpx
+npx kordoc lint 보고서.hwpx --gate --preset 보고서
 ```
 
-## MCP 서버 (Claude / Cursor / Windsurf)
+`--jobs`는 파일 단위 병렬 변환이며 메모리 사용도 늘어납니다. [병렬 변환 안내](docs/parallel-batch.md)
 
-**자동 설치 (추천)**:
-
-```bash
-npx -y kordoc setup
-```
-
-대화형으로 AI 클라이언트를 감지해 설정 파일을 자동 패치. Windows 에서 `cmd /c npx` 래핑도 자동. 상세는 위 [30초 설치](#-30초-설치-ai-에이전트-연동) 섹션.
-
-**수동 등록 (macOS / Linux)**:
-
-```json
-{
-  "mcpServers": {
-    "kordoc": {
-      "command": "npx",
-      "args": ["-y", "kordoc", "mcp"]
-    }
-  }
-}
-```
-
-**수동 등록 (Windows — Claude Desktop 이 `.cmd` 를 못 찾을 때)**:
-
-```json
-{
-  "mcpServers": {
-    "kordoc": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "kordoc", "mcp"]
-    }
-  }
-}
-```
-
-**8개 도구:**
-
-| 도구 | 설명 |
-|------|------|
-| `parse_document` | HWP/HWPX/PDF/XLSX/DOCX → 마크다운 (메타데이터 포함) |
-| `detect_format` | 매직 바이트로 포맷 감지 |
-| `parse_metadata` | 메타데이터만 빠르게 추출 |
-| `parse_pages` | 특정 페이지 범위만 파싱 |
-| `parse_table` | N번째 테이블만 추출 |
-| `compare_documents` | 두 문서 비교 (크로스 포맷) |
-| `parse_form` | 양식 필드를 JSON으로 추출 |
-| `fill_form` | 양식 템플릿에 값 채우기 (HWPX 원본 서식 보존) |
-
-## API
-
-### 핵심 함수
-
-| 함수 | 설명 |
-|------|------|
-| `parse(buffer, options?)` | 포맷 자동 감지 → Markdown + IRBlock[] |
-| `parseHwpx(buffer, options?)` | HWPX 전용 |
-| `parseHwp(buffer, options?)` | HWP 5.x 전용 |
-| `parseHwp3(buffer, options?)` | HWP 3.x (1996~2002 구버전) 전용 |
-| `parsePdf(buffer, options?)` | PDF 전용 |
-| `parseXlsx(buffer, options?)` | XLSX 전용 |
-| `parseXls(buffer, options?)` | XLS (Excel 97~2003, BIFF8) 전용 |
-| `parseDocx(buffer, options?)` | DOCX 전용 |
-| `parseHwpml(buffer, options?)` | HWPML (XML 기반 HWP) 전용 |
-| `detectFormat(buffer)` | `"hwpx" \| "hwp" \| "hwp3" \| "hwpml" \| "pdf" \| "xlsx" \| "xls" \| "docx" \| "unknown"` |
-
-### 고급 함수
-
-| 함수 | 설명 |
-|------|------|
-| `compare(bufferA, bufferB, options?)` | IR 레벨 문서 비교 |
-| `extractFormFields(blocks)` | IRBlock[]에서 양식 필드 인식 |
-| `extractFormSchema(blocks)` | 양식 필드 인식 + 타입/필수/빈값 추론 (v3.1) |
-| `fillForm(buffer, values, options?)` | 양식 템플릿에 값 채우기 (markdown/hwpx/hwpx-preserve) |
-| `fillFormFields(blocks, values)` | IRBlock[] 기반 필드 값 교체 |
-| `fillHwpx(buffer, values)` | HWPX XML 직접 조작 (원본 서식 보존) |
-| `patchHwpx(original, editedMarkdown, options?)` | 편집 마크다운 → 원본 HWPX 서식 보존 in-place 패치 (v3.0) |
-| `patchHwp(original, editedMarkdown, options?)` | 편집 마크다운 → 원본 HWP 5.x 바이너리 서식 보존 패치 (v3.0.1) |
-| `openHwpxDocument(bytes, options?)` | 에디터용 블록 단위 증분 패치 세션 `HwpxSession` (v3.1) |
-| `patchHwpxBlocks(bytes, edits, options?)` | 세션 없이 블록 편집 1회 패치 (v3.1) |
-| `markdownToHwpx(markdown, options?)` | Markdown → HWPX 역변환 (테마 옵션 지원) |
-| `markdownToPdf(markdown, options?)` | Markdown → PDF 생성 (Print Renderer) |
-| `blocksToPdf(blocks, options?)` | IRBlock[] → PDF 생성 |
-| `renderHtml(blocks, options?)` | IRBlock[] → 인쇄용 HTML |
-| `blocksToMarkdown(blocks)` | IRBlock[] → Markdown 문자열 |
-
-### 타입
+### JavaScript / TypeScript
 
 ```typescript
-import type {
-  ParseResult, ParseSuccess, ParseFailure, FileType,
-  IRBlock, IRBlockType, IRTable, IRCell, CellContext,
-  DocumentMetadata, ParseOptions, ErrorCode, OutlineItem,
-  DiffResult, BlockDiff, CellDiff, DiffChangeType,
-  FormField, FormResult, FillResult, HwpxFillResult, FillOutputFormat, FillFormOutput,
-  PatchOptions, PatchResult, PatchSkip,
-  HwpxTheme, MarkdownToHwpxOptions,
-  PrintPreset, PrintOptions, PageMargin,
-  OcrProvider, WatchOptions,
-} from "kordoc"
+import { parse, markdownToHwpx } from "kordoc"
+import { writeFile } from "node:fs/promises"
+
+const result = await parse("문서.hwpx")
+if (result.success) {
+  console.log(result.markdown)
+  // result.blocks: 구조화 데이터, result.metadata: 문서 정보
+}
+
+const hwpx = await markdownToHwpx("# 추진계획\n\n본문", {
+  gongmun: { preset: "보고서" },
+})
+await writeFile("보고서.hwpx", Buffer.from(hwpx))
 ```
 
-## 지원 포맷
+[파싱 옵션·API·양식·렌더 예제](docs/usage.md#-빠른-시작) · Python·Java에서는 [Python SDK](sdk/python/README.md)·[Java SDK](sdk/java/README.md)
 
-| 포맷 | 엔진 | 특징 |
-|------|------|------|
-| **HWPX** (한컴 2020+) | ZIP + XML DOM | 매니페스트, 중첩 테이블, 병합 셀, 손상 ZIP 복구 |
-| **HWP 5.x** (한컴 레거시) | OLE2 + CFB | 배포용 복호화, 손상 CFB 복구, 각주/하이퍼링크, 21종 제어문자, 이미지 추출 |
-| **HWP 3.x** (1996~2002) | 단일 binary | 상용조합형→유니코드, 5,893자 한자/기호 lookup, nested paragraph 추출 |
-| **HWPML 2.x** (XML 기반 HWP) | XML DOM | HeadingType 기반 헤딩 감지, 병합 셀, DoS 방어 |
-| **PDF** | pdfjs-dist | 선 기반 테이블, XY-Cut 읽기 순서, 헤딩 감지, OCR, 텍스트 품질 신호 |
-| **XLSX** (Excel) | ZIP + XML DOM | 공유 문자열, 병합 셀, 다중 시트, 수식 표시 |
-| **XLS** (Excel 97~2003) | OLE2 + BIFF8 | Workbook 스트림, SST 공유 문자열, 셀/시트 추출 |
-| **DOCX** (Word) | ZIP + XML DOM | 스타일 heading, 번호 매기기, 각주, 이미지 추출 |
+## 주요 기능
 
-## 보안
+- **읽기**: 문서 → Markdown·IR·쪽별 본문·RAG 청크, 로컬 OCR(손글씨 인식 포함), 그림 속 QR 값(`--qr-codes`), 그림 형식 통일(`--image-format png|webp`)
+- **비교·편집**: 블록·셀 단위 비교, HWPX·HWP 서식 보존 패치, 견본 서식 그대로 새 내용 쓰기
+- **작성**: Markdown → HWPX·HWP(HWP는 `npm install @rhwp/core` 뒤 `-o 문서.hwp`), 공문서 프리셋·부서 서식 견본(`--template`)·보고서 PDF 모양 따르기(`--layout`), 목차 쪽 번호, 표·수식·차트
+- **변환**: HWP 5.x → HWPX 서식 그대로(글꼴·문단 모양·표·그림·도형·수식·머리말·각주·차트, 배포용·변경 추적 문서 포함). PDF·DOCX 등은 `-o 문서.hwpx`로 읽은 내용을 HWPX로
+- **[기관팩](docs/agency-pack.md)**: 우리 기관 문서 몇 건으로 서식 묶음(`.kpack`)을 만들어 그 서식대로 새 문서 작성
+- **양식**: 필드·누름틀 채우기, 표준 기안문 2종, 도장 날인
+- **검수**: 표기법·공공언어, 구성·AI 문체 게이트, 예산 산출근거 검산, 열린 문서 블록 단위 검수(`lint-blocks`)
+- **보기·보안**: HWPX·HWP 미리보기·영역 추출, 개인정보 마스킹
 
-프로덕션급 보안 강화: ZIP bomb 방지, XXE/Billion Laughs 방지, 압축 폭탄 방지, 경로 순회 차단, MCP 에러 정제, 파일 크기 제한(500MB). 자세한 내용은 [SECURITY.md](./SECURITY.md) 참조.
+서식 보존 패치용 Markdown은 `--keep-layout-tables`로 추출합니다. 적용하지 못한 편집은 건너뛴 사유로 보고합니다. [서식 보존 편집](docs/usage.md#서식-보존-편집) · [CLI 전체](docs/usage.md#-cli)
+
+## 검증 결과
+
+고정 코퍼스와 참조 기준으로 측정한 결과입니다. 측정판: 기본 4.22.14(2026-10-19) · 렌더 배치·별표 4.24.24(2026-10-30) · HWP → HWPX 변환 4.24.29(2026-10-31) · OCR 4.24.32(2026-11-01) · PDF 표 4.24.35(2026-11-01) · PDF 글·opendataloader-bench 기본값과 OCR 켬 4.24.50(2026-11-07) · KoOCR-Bench 4.24.68.
+
+| 대상 | 규모 | 결과 |
+| --- | --- | --- |
+| HWPX | 2,424문서 · 10,342표 | 표 구조 일치 **10,342/10,342 · 100%** |
+| HWP 5.x ↔ HWPX | 1,130쌍 · 4,315표 | 짝 문서의 표 구조 일치 **100%** |
+| HWP 5.x → HWPX<br>변환 | 한글 저장 짝 264쌍 (속성 대조 232쌍) | 속성 일치 **99.21%** · 완전 일치 **69/232** · 글 **264/264** · 한글 화면 대조 80문서 |
+| PDF 글 | 744쌍 | 글자 재현율 **99.887%** · 정확도 **99.685%** · 읽기 순서 **99.398%** · 어절 F1 **99.131%** |
+| PDF 표 | 708쌍 · 2,331표 | 표 탐지 **99.83%** · 구조 일치 **98.24%** · 칸 F1 **0.9919** |
+| HWPX 재조판 | 다중줄 25,187문단 (12개 폴더) | 모든 줄 시작 일치 **24,941/25,187 · 99.02%** |
+| PDF 중첩표 (텍스트층) | 29문서 · 101표 | 구조·칸 내용 **101/101 · 100%** |
+| 법령 별표 | 272건 · 346표 | HWP **346/346**, PDF **343/346 · 99.13%** |
+| PDF 전체 | 1,911문서 중 1,729건 채점 | 글 커버리지 **99.80%** |
+| OCR | 53문서 · 102쪽 · 65표 | CER **0.0237** · 글자 재현율 **99.33%** · 표 구조 일치 **33/65** |
+| KoOCR-Bench v2.0c (외부) | 공개 877쪽 (표·글·손글씨·순서) | 종합 기본값 **0.906** · 표 **0.916** · 손글씨 **0.921** · 순서 **0.914** · 제목 재현율 0.930 |
+| opendataloader-bench | PDF 200문서 | 종합 기본값 **0.965** · `ocr: true` **0.967** · OCR 끔 0.939 (4.22.14) |
+| HWPX 렌더 배치 | 한컴 PDF 짝 1,565문서(쪽 수 일치 1,508) · 글 조각 111,480 · 그림 4,300 | 글 위치(±1.5pt) **106,904 · 95.9%** · 그림 위치(±2pt) **4,213 · 98.0%** |
+
+표 구조 점수와 셀 내용·화면 재현은 별도 지표입니다. 중첩표 100%는 위 101표에 한정하며 전체 PDF·조판의 완전 일치를 뜻하지 않습니다. 채점 범위·제외 기준·옵션별 수치·재현 방법은 [벤치마크 상세](docs/benchmarks.md)에 있습니다.
+
+## 최근 업데이트
+
+최신 배포: **[4.24.83](https://github.com/chrisryugj/kordoc/releases/tag/v4.24.83)** · 2026-11-17
+
+| 버전 | 바뀐 점 | 실측 변화 |
+| --- | --- | --- |
+| 4.24.83 | 첫 열이 「1)」「2)」 번호뿐인 테두리 없는 표가 각주 목록으로 판정돼 글로 풀리던 문제를 고쳤습니다(#214). 쪽 아래 번호 줄은 본문에 그 번호를 가리키는 작은 글씨 참조가 있을 때만 각주 목록으로 봅니다 | 점수 벤치 5,465문서·PDF 글 744·PDF 표 730·별표 544·ODL 200·OCR 56·견고성 54 문서별 변화 **0** · KoOCR 877쪽 출력 그대로(0.90657) · 채점 코드 무변 |
+| 4.24.82 | PDF 글층을 패키지에 든 wasm 엔진(hayro)으로 읽습니다. PDF를 읽으려고 따로 설치할 것이 없고(`pdfjs-dist` 빠짐), 큰 문서를 더 빨리, 메모리를 덜 쓰며 읽습니다. OCR 판정 3건(격자 표를 건너 묶인 표 후보·두 단 본문·분수 막대)도 고쳤습니다(#213, @VerifiedIdiot) | 자체 벤치 문서별 하락 **0** (점수 5,465·PDF 글 744·PDF 표 730·별표 544·ODL 200·OCR 56) · ODL 1문서 nid 0.99441 → **0.99684** · KoOCR 0.90653 → **0.90657** · 큰 문서 13개 144\~157초 → **95\~98초**, 최대 메모리 1.95\~2.20GB → **1.15\~1.24GB** |
+| 4.24.81 | 「> 50% 이상」처럼 `>`로 시작하거나 `---`만 있는 일반 문단이 Markdown 렌더·HWPX 왕복에서 인용문·가로줄로 바뀌어 글자가 사라지던 문제를 고쳤습니다(#212). `patchHwpx`도 그런 문단을 고칩니다 | 점수 벤치 5,465문서·PDF 글 744·PDF 표 730·별표 544·formats 146·roundtrip 75·ODL 200 문서별 변화 **0** · 채점 코드 무변 |
+| 4.24.80 | HWP(5.0)로 저장합니다: `generate -o 문서.hwp`·MCP `output_path` `.hwp`·`hwpxToHwp`. 선택 의존성 `@rhwp/core`를 쓰며 기본 설치 크기는 그대로입니다 | 생성 견본 11종(공문서 프리셋 9종·2단+수식, 표·그림 포함) 쪽 수 그대로 · 손실 보고 **0건** · 파서 무변 |
+| 4.24.79 | PDF 글: 띄운 쪽 번호("- 10 -"), 한자 뒤 줄 머리 조사, 날짜 뒤 요일 괄호를 바로 읽습니다. 괘선 없는 쪽 경계에서 갈린 표 행과 OCR 표의 값 행도 고쳤습니다 | PDF 글 어절 F1 99.149% → **99.159%** (19문서 상승, 결재문서 0.981 → **1**) · ODL 표 TEDS 98.015% → **98.053%** · 별표 PDF 재현율 99.982% → **99.983%** · KoOCR 0.90644 → **0.90653** · 문서별 하락 2(채점 산출물, CHANGELOG) |
+
+이전 버전과 상세 내용은 [변경 이력](CHANGELOG.md)에 있습니다.
+
+## 자주 묻는 질문
+
+**Q. HWP·HWPX 파일을 Markdown으로 바꾸려면?**
+`npx kordoc 문서.hwp -o 문서.md`를 실행합니다. 한컴오피스 없이 파일을 직접 읽으며, 여러 파일은 `npx kordoc *.hwpx -d ./output`으로 함께 바꿉니다.
+
+**Q. Claude·Cursor 같은 AI가 한글 문서를 읽게 하려면?**
+`npx -y kordoc setup`으로 MCP를 등록하면 AI가 파일 경로만 받아 HWP·PDF·엑셀을 읽고, 비교하고, 양식을 채웁니다.
+
+**Q. 인터넷이 막힌 폐쇄망에서도 되나요?**
+됩니다. `KORDOC_OFFLINE=1`이 외부 통신을 모두 막고, OCR도 API 키 없이 로컬 CPU에서 돕니다. [폐쇄망 설치](docs/offline-deployment.md)
+
+**Q. RAG 색인용으로 쓸 수 있나요?**
+`--format chunks`가 제목 경로를 붙인 구조 청크와 독립 표 청크를 냅니다. 표를 HTML 없이 받으려면 `--table-format gfm`(API는 `tableFormat: "gfm"`)을 씁니다. Python·Java에서는 [Python SDK](sdk/python/README.md)·[Java SDK](sdk/java/README.md)로 부릅니다.
+
+**Q. OCR 줄 좌표나 다른 모델이 필요하면?**
+`--ocr --ocr-lines --format json`이 줄별 상자·신뢰도를 내고, `--ocr-det`·`--ocr-det-long-side`로 검출 모델과 해상도를, `--ocr-rec handwriting|auto`로 손글씨 인식 모델을 고릅니다. [OCR 줄·모델 선택](docs/usage.md#ocr-줄모델-선택)
+
+## 문서·보안
+
+- [상세 사용법](docs/usage.md): 전체 CLI·MCP 도구·API·지원 포맷
+- [Java SDK](sdk/java/README.md) · [Python SDK](sdk/python/README.md): 상주 엔진 워커로 Java·Python 시스템에서 파싱 ([워커 프로토콜](docs/parse-worker-protocol.md))
+- [공문서 생성 가이드](docs/gongmunseo-engine-spec.md) · [아키텍처](docs/architecture.md)
+- [폐쇄망 설치](docs/offline-deployment.md): `KORDOC_OFFLINE=1`, MCP 접근 범위 `KORDOC_ROOT`
+- [gVisor 샌드박스](docs/sandbox.md): 파서를 gVisor 안에서 실행해 호스트 보호(Linux, `KORDOC_SANDBOX=gvisor`·`docker --runtime=runsc`)
+- [보안 정책](SECURITY.md) · [라이선스 MIT](LICENSE) · [오픈소스 고지](NOTICE)
+
+## Star History
+
+<a href="https://star-history.dera.page/#chrisryugj/kordoc&type=timeline&legend=bottom-right">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=chrisryugj/kordoc&type=timeline&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=chrisryugj/kordoc&type=timeline&legend=top-left" />
+    <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=chrisryugj/kordoc&type=timeline&legend=top-left" />
+  </picture>
+</a>
 
 ## 만든 사람
 
-대한민국 지방공무원. 광진구청에서 7년간 HWP 파일과 싸우다가 이걸 만들었습니다.
-5개 공공 프로젝트에서 수천 건의 실제 관공서 문서를 파싱하며 검증했습니다.
+대한민국 지방공무원. 광진구청에서 7년간 HWP 파일과 싸우다가 이걸 만들었습니다. 5개 공공 프로젝트에서 수천 건의 실제 관공서 문서를 파싱하며 검증했습니다.
 
-## 라이선스
-
-[MIT](./LICENSE)
-
-이 프로젝트는 아래 오픈소스를 포함합니다:
-- **rhwp** (MIT, edwardkim) — HWP5 배포용 복호화 및 lenient CFB 파싱 알고리즘
-- **OpenDataLoader PDF** (Apache 2.0, Hancom Inc.) — PDF 테이블 감지 알고리즘
-- **cfb** (Apache 2.0, SheetJS) — HWP5 OLE2 컨테이너 파싱
-- **pdfjs-dist** (Apache 2.0, Mozilla) — PDF 텍스트 추출
-- **JSZip** (MIT, Stuart Knightley 외) — ZIP 기반 포맷 파싱
-
-자세한 내용은 [NOTICE](./NOTICE) 파일을 참조하세요.
+라이선스: [MIT](LICENSE)

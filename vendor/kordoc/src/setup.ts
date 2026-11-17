@@ -8,15 +8,38 @@
 
 import { createInterface } from "node:readline/promises"
 import { readFile, writeFile, mkdir } from "node:fs/promises"
+import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
-import { resolve, dirname } from "node:path"
+import { resolve, dirname, delimiter } from "node:path"
+import { fileURLToPath } from "node:url"
 import { homedir, platform } from "node:os"
 import { stdin, stdout } from "node:process"
+import { promisify } from "node:util"
+import { getAccessRoot, isOfflineMode } from "./shared/offline.js"
+import { VERSION } from "./utils.js"
+
+/** 등록하는 npx 패키지 지정 — 지금 버전으로 고정한다. 고정하지 않으면 클라이언트를 켤 때마다 npm 최신판을 받아 실행해,
+ *  npm 계정·토큰이 탈취되면 등록한 모든 PC 에서 바로 코드가 돈다. 개발 빌드(버전 미상)만 고정 없이 */
+export function npxPackageSpec(version = VERSION): string {
+  return /^\d+\.\d+\.\d+$/.test(version) ? `kordoc@${version}` : "kordoc"
+}
 
 interface ClientConfig {
   readonly name: string
   readonly configPath: string
   readonly format: "mcpServers" | "servers" | "context_servers"
+  readonly setupMethod?: "codex"
+}
+
+const execFileAsync = promisify(execFile)
+
+/** PATH에 있는 실행 파일을 확인한다. Windows에서는 PATHEXT 확장자도 고려한다. */
+function commandExists(command: string): boolean {
+  const pathEntries = (process.env["PATH"] ?? "").split(delimiter).filter(Boolean)
+  const extensions = platform() === "win32"
+    ? (process.env["PATHEXT"] ?? ".EXE;.CMD;.BAT;.COM").split(";")
+    : [""]
+  return pathEntries.some((entry) => extensions.some((ext) => existsSync(resolve(entry, `${command}${ext}`))))
 }
 
 function detectClients(): readonly ClientConfig[] {
@@ -47,6 +70,7 @@ function detectClients(): readonly ClientConfig[] {
   if (zedPath) clients.push({ name: "Zed", configPath: zedPath, format: "context_servers" })
 
   clients.push({ name: "Antigravity", configPath: resolve(home, ".gemini/antigravity/mcp_config.json"), format: "mcpServers" })
+  clients.push({ name: "Codex", configPath: resolve(home, ".codex/config.toml"), format: "mcpServers", setupMethod: "codex" })
 
   return clients
 }
@@ -68,18 +92,56 @@ async function writeJsonFile(path: string, data: Record<string, unknown>): Promi
  * `kordoc` 은 `npx kordoc mcp` 로 MCP 서버 실행, 또는 `kordoc-mcp` bin 직접 실행.
  * npx 래핑이 범용적이므로 `npx -y kordoc mcp` 로 통일.
  */
-function buildServerEntry(): Record<string, unknown> {
-  if (platform() === "win32") {
-    return { command: "cmd", args: ["/c", "npx", "-y", "kordoc", "mcp"] }
+/**
+ * 폐쇄망(KORDOC_OFFLINE)에서는 `npx -y` 가 레지스트리에 접근하므로 설치된 dist 를
+ * node 로 직접 실행한다. 이 파일과 형제인 mcp.js 가 곧 설치본의 MCP 엔트리.
+ */
+function localMcpCommand(): { command: string; args: string[] } | null {
+  if (!isOfflineMode()) return null
+  try {
+    const mcpPath = fileURLToPath(new URL("./mcp.js", import.meta.url))
+    if (!existsSync(mcpPath)) return null
+    return { command: process.execPath, args: [mcpPath] }
+  } catch {
+    return null
   }
-  return { command: "npx", args: ["-y", "kordoc", "mcp"] }
+}
+
+/** 등록된 MCP 서버 프로세스에도 폐쇄망 제한을 물려준다 (설정 파일이 곧 감사 근거) */
+function buildServerEnv(): Record<string, string> | undefined {
+  if (!isOfflineMode()) return undefined
+  const root = getAccessRoot()
+  return { KORDOC_OFFLINE: "1", ...(root ? { KORDOC_ROOT: root } : {}) }
+}
+
+function buildServerEntry(): Record<string, unknown> {
+  const env = buildServerEnv()
+  const local = localMcpCommand()
+  const base = local
+    ? local
+    : platform() === "win32"
+      ? { command: "cmd", args: ["/c", "npx", "-y", npxPackageSpec(), "mcp"] }
+      : { command: "npx", args: ["-y", npxPackageSpec(), "mcp"] }
+  return env ? { ...base, env } : base
 }
 
 function buildZedEntry(): Record<string, unknown> {
-  const base = platform() === "win32"
-    ? { path: "cmd", args: ["/c", "npx", "-y", "kordoc", "mcp"] }
-    : { path: "npx", args: ["-y", "kordoc", "mcp"] }
-  return { command: base }
+  const local = localMcpCommand()
+  const base = local
+    ? { path: local.command, args: local.args }
+    : platform() === "win32"
+      ? { path: "cmd", args: ["/c", "npx", "-y", npxPackageSpec(), "mcp"] }
+      : { path: "npx", args: ["-y", npxPackageSpec(), "mcp"] }
+  const env = buildServerEnv()
+  return { command: env ? { ...base, env } : base }
+}
+
+/** Codex의 TOML 설정을 직접 파싱하지 않고, 공식 CLI로 MCP 서버를 등록한다. */
+async function setupCodex(): Promise<void> {
+  const entry = buildServerEntry()
+  const command = entry["command"] as string
+  const args = entry["args"] as string[]
+  await execFileAsync("codex", ["mcp", "add", "kordoc", "--", command, ...args])
 }
 
 // ─── ANSI ─────────────────────────────────────────────────────────────
@@ -148,8 +210,10 @@ async function printComplete(): Promise<void> {
   for (const line of box) { console.log(line); await sleep(40) }
   console.log()
   console.log(`  ${c.dim}클라이언트를 재시작하면 'kordoc' MCP 서버가 활성화됩니다.${c.reset}`)
-  console.log(`  ${c.dim}8개 도구: parse_document / parse_metadata / parse_pages / parse_table${c.reset}`)
-  console.log(`  ${c.dim}         detect_format / compare_documents / parse_form / fill_form${c.reset}`)
+  console.log(`  ${c.dim}15개 도구: parse_document / parse_metadata / parse_pages / parse_table${c.reset}`)
+  console.log(`  ${c.dim}          detect_format / compare_documents / parse_form / fill_form${c.reset}`)
+  console.log(`  ${c.dim}          place_seal / patch_document / extract_profile / generate_document${c.reset}`)
+  console.log(`  ${c.dim}          render_document / redact_document / parse_chunks${c.reset}`)
   console.log()
 }
 
@@ -162,7 +226,7 @@ export async function runSetup(): Promise<void> {
     stepHeader(1, 2, "MCP 클라이언트 선택")
     const clients = detectClients()
     clients.forEach((cl, i) => {
-      const exists = existsSync(cl.configPath)
+      const exists = cl.setupMethod === "codex" ? commandExists("codex") : existsSync(cl.configPath)
       const badge = exists ? `${c.green} [감지됨]${c.reset}` : ""
       const num = `${c.cyan}${String(i + 1).padStart(2)}${c.reset}`
       console.log(`  ${num}) ${c.white}${cl.name}${c.reset}${badge}`)
@@ -195,6 +259,11 @@ export async function runSetup(): Promise<void> {
       const client = clients[idx]
       await sleep(150)
       try {
+        if (client.setupMethod === "codex") {
+          await setupCodex()
+          successLine(client.name, client.configPath)
+          continue
+        }
         const config = await readJsonFile(client.configPath)
         const key = client.format
         const serverEntry = key === "context_servers" ? buildZedEntry() : entry
