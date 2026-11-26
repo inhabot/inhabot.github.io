@@ -13,8 +13,9 @@ if (requireApiBase && !apiBase) {
 }
 
 await mkdir(publicDir, { recursive: true });
-await cp(resolve(root, "edu"), resolve(publicDir, "edu"), { recursive: true });
-await cp(resolve(root, "highshool"), resolve(publicDir, "highshool"), { recursive: true });
+for (const directory of ["edu", "highschool", "highshool"]) {
+  await cp(resolve(root, directory), resolve(publicDir, directory), { recursive: true });
+}
 await writeFile(
   resolve(publicDir, "scenarios.json"),
   `${JSON.stringify({ scenarios: getPublicScenarios() }, null, 2)}\n`,

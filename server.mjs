@@ -206,7 +206,7 @@ async function handleChat(req, res) {
 
 async function serveStatic(req, res) {
   const requestedUrl = new URL(req.url, "http://local");
-  const section = ["/edu", "/highshool"].find((prefix) =>
+  const section = ["/edu", "/highschool", "/highshool"].find((prefix) =>
     requestedUrl.pathname === prefix || requestedUrl.pathname.startsWith(`${prefix}/`)
   );
   if (section && requestedUrl.pathname === section) {
