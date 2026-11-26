@@ -250,6 +250,7 @@ tbody tr > * { border-top: 1px solid #f0edf3; }
 tbody tr:first-child > * { border-top-color: var(--line); }
 tbody tr:hover td { background: #fcfaff; }
 .score-cell { background: #f8f4fc; color: var(--dark-purple); }
+.primary-cell[rowspan] { background: #fbf8ff; }
 .score-value { display: block; font-size: clamp(16px, 2vw, 22px); letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
 .score-detail { display: block; margin-top: 3px; font-size: 12px; }
 .field-cell { color: #50465b; font-size: 14px; line-height: 1.5; }
@@ -345,6 +346,8 @@ tbody tr:hover td { background: #fcfaff; }
   .score-cell { display: flex; align-items: baseline; gap: 8px; }
   .primary-cell, .field-cell { align-content: start; }
   .field-cell { border-left: 1px solid #f0edf3; }
+  .shared-primary .primary-cell, .shared-primary .field-cell { grid-column: 1 / -1; }
+  .shared-primary .field-cell { border-left: 0; font-weight: 700; }
   .related-cell:not(.blank-cell) { background: #fcfafc; }
   .related-cell.blank-cell { display: none; }
   .school-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }

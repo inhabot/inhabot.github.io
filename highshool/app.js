@@ -132,12 +132,23 @@
     heading.append(element("strong", "score-value", group.score));
     if (group.detail) heading.append(element("span", "score-detail", group.detail));
 
+    let recommendation;
     rows.forEach(([primary, subject, related = []], index) => {
       const row = element("tr");
       row.setAttribute("role", "row");
       if (index === 0) row.append(heading);
-      const recommendation = cell("primary-cell");
-      recommendation.append(schoolLink(primary));
+
+      const sameAsPrevious = primary === rows[index - 1]?.[0];
+      const sameAsNext = primary === rows[index + 1]?.[0];
+      if (sameAsPrevious || sameAsNext) row.classList.add("shared-primary");
+      if (sameAsPrevious) {
+        recommendation.rowSpan += 1;
+      } else {
+        recommendation = cell("primary-cell");
+        recommendation.append(schoolLink(primary));
+        row.append(recommendation);
+      }
+
       const field = cell("field-cell");
       field.textContent = subject || "—";
       field.classList.toggle("blank-cell", !subject);
@@ -154,7 +165,7 @@
       } else {
         options.textContent = "—";
       }
-      row.append(recommendation, field, options);
+      row.append(field, options);
       body.append(row);
     });
     return body;
