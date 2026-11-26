@@ -10,3 +10,4 @@ logs/
 *.map
 !package-lock.json
 /public/edu/
+/public/highshool/

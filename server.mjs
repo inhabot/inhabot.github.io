@@ -206,13 +206,15 @@ async function handleChat(req, res) {
 
 async function serveStatic(req, res) {
   const requestedUrl = new URL(req.url, "http://local");
-  if (requestedUrl.pathname === "/edu") {
-    res.writeHead(302, { Location: `/edu/${requestedUrl.search}` });
+  const section = ["/edu", "/highshool"].find((prefix) =>
+    requestedUrl.pathname === prefix || requestedUrl.pathname.startsWith(`${prefix}/`)
+  );
+  if (section && requestedUrl.pathname === section) {
+    res.writeHead(302, { Location: `${section}/${requestedUrl.search}` });
     return res.end();
   }
-  const isEdu = requestedUrl.pathname.startsWith("/edu/");
-  const baseDir = isEdu ? resolve(__dirname, "edu") : publicDir;
-  const requestPath = isEdu ? requestedUrl.pathname.slice(4) : requestedUrl.pathname;
+  const baseDir = section ? join(__dirname, section.slice(1)) : publicDir;
+  const requestPath = section ? requestedUrl.pathname.slice(section.length) : requestedUrl.pathname;
   const normalizedPath = normalize(decodeURIComponent(requestPath)).replace(
     /^(\.\.[/\\])+/,
     ""
