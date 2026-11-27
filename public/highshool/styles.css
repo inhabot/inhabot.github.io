@@ -250,6 +250,7 @@ tbody tr > * { border-top: 1px solid #f0edf3; }
 tbody tr:first-child > * { border-top-color: var(--line); }
 tbody tr:hover td { background: #fcfaff; }
 .score-cell { background: #f8f4fc; color: var(--dark-purple); }
+.primary-cell[rowspan] { background: #fbf8ff; }
 .score-value { display: block; font-size: clamp(16px, 2vw, 22px); letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
 .score-detail { display: block; margin-top: 3px; font-size: 12px; }
 .field-cell { color: #50465b; font-size: 14px; line-height: 1.5; }
@@ -268,6 +269,10 @@ tbody tr:hover td { background: #fcfaff; }
 .link-arrow { display: inline-block; margin-inline-start: 4px; color: var(--purple); font-size: 12px; }
 .link-detail { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
 .school-link:hover .link-name { text-decoration: underline; text-underline-offset: 3px; }
+.row-guidance { color: #50465b; font-size: 13px; line-height: 1.6; word-break: keep-all; }
+.school-links + .row-guidance { margin-top: 8px; }
+.guidance-link { color: var(--dark-purple); font-weight: 700; text-underline-offset: 3px; }
+.row-guidance p + .guidance-link { display: inline-block; margin-top: 3px; }
 .empty { padding: 34px 16px; text-align: center; color: var(--muted); }
 .empty button { margin-top: 12px; }
 
@@ -318,7 +323,6 @@ tbody tr:hover td { background: #fcfaff; }
   .hero p { margin-top: 14px; }
   .hero-label { margin-bottom: 14px; font-size: 12px; }
   .hero-action { margin-top: 17px; }
-  .desktop-break { display: none; }
   .checklist { padding: 16px; border-radius: 13px; }
   .checklist-icon { display: none; }
   .checklist h2 { margin: 0; font-size: 17px; }
@@ -345,6 +349,8 @@ tbody tr:hover td { background: #fcfaff; }
   .score-cell { display: flex; align-items: baseline; gap: 8px; }
   .primary-cell, .field-cell { align-content: start; }
   .field-cell { border-left: 1px solid #f0edf3; }
+  .shared-primary .primary-cell, .shared-primary .field-cell { grid-column: 1 / -1; }
+  .shared-primary .field-cell { border-left: 0; font-weight: 700; }
   .related-cell:not(.blank-cell) { background: #fcfafc; }
   .related-cell.blank-cell { display: none; }
   .school-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }

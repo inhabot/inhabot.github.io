@@ -1,69 +1,89 @@
 (() => {
   const specialSchools = "https://www.hischool.go.kr/study/enforce.jsp";
   const gangwonSchools = "https://www.gwe.go.kr/main/content.do?key=m2309183000725";
+  const careerGuide = "https://www.gvhs.kr/";
 
   // [표시 이름, 홈페이지 또는 공식 안내, 지역/설명, 검색용 별칭]
   const schools = {
     scienceList: ["과학고", specialSchools, "전국 학교 목록", "과고"],
     languageList: ["외국어고", specialSchools, "전국 학교 목록", "외고"],
     semiconductorList: ["반도체고", "https://www.hifive.go.kr/school/meisterAppointField.do?menuId=010303&rootMenuId=01", "반도체 분야 학교 목록"],
-    specialized: ["특성화고", gangwonSchools, "강원 학교 목록", "직업계고"],
+    specialized: ["특성화고", careerGuide + "71eeb259-2151-4560-83e2-e0d66e82339b", "강원 학교 목록", "직업계고"],
     alternative: ["대안고", gangwonSchools, "강원 학교 목록", "대안학교"],
     science: ["강원과학고등학교", "https://kangwon-sh.gwe.hs.kr/main.do", "원주", "강원과고"],
-    language: ["강원외국어고등학교", "https://gf.gwe.hs.kr/main.do", "양구", "강원외고"],
+    language: ["강원외국어고등학교", "https://gf.gwe.hs.kr/main.do", "양구 · 일반고", "강원외고"],
     minjok: ["민족사관고등학교", "https://www.minjokgo.org/", "횡성 · 자율형 사립고", "민족사관고 민사고"],
     wontong: ["원통고등학교", "https://wontong.gwe.hs.kr/main.do?s=wontonghs", "인제 · 일반고", "원통고"],
-    cbsemi: ["충북반도체고등학교", "https://school.cbe.go.kr/cbsemi-h/", "충북 음성", "충북반도체고 반도체"],
-    sudo: ["수도전기공업고등학교", "https://sudo.sen.hs.kr/", "서울 강남 · 마이스터고", "수도공고 수도전기공고"],
-    fire: ["한국소방마이스터고등학교", "https://fire-meister.gwe.hs.kr/main.do", "영월 · 마이스터고", "소방마이스터고"],
-    energy: ["한국에너지마이스터고등학교", "https://energy.gwe.hs.kr/main.do", "삼척 · 마이스터고", "에너지마이스터고 에너지마이고"],
-    medical: ["한국의료마이스터고등학교", "https://koreamedi.gwe.hs.kr/main.do", "원주 · 마이스터고", "의료마이스터고 원주의료고"],
-    accounting: ["원주금융회계고등학교", "https://wjfa.gwe.hs.kr/main.do", "원주 · 특성화고", "원주금융회계고"],
-    aviation: ["한국항공고등학교", "https://kahs.gwe.hs.kr/main.do", "태백 · 특성화고", "한국항공고 태백기계공고"],
-    machine: ["춘천기계공업고등학교", "https://ccm.gwe.hs.kr/main.do", "춘천", "춘천기계공고"],
-    applied: ["강원생활과학고등학교", "https://gangwonps.gwe.hs.kr/main.do", "홍천", "강원생활과학고 생활과학고"],
-    mirae: ["미래고등학교", "https://mirae.gwe.hs.kr/main.do", "원주", "미래고"],
-    gangneung: ["강릉중앙고등학교", "https://gja.gwe.hs.kr/main.do", "강릉", "강릉중앙고"],
-    tax: ["한국세무금융고등학교", "https://hwangji-iih.gwe.hs.kr/main.do", "태백 · 황지정보산업고 누리집", "한국세무금융고 황지정보산업고"],
-    hansaem: ["춘천한샘고등학교", "https://hansaem.gwe.hs.kr/main.do", "춘천", "춘천한샘고"],
-    information: ["강릉정보공업고등학교", "https://git.gwe.hs.kr/main.do", "강릉", "강릉정보공고"],
-    forest: ["강원산림과학고등학교(가칭)", "https://www.gwe.go.kr/promotion/bbs/view.do?bbsSn=58223&key=m2611029338660", "인제 · 개교 추진 안내", "강원산림과학고"],
+    cbsemi: ["충북반도체고등학교", "https://www.hischool.go.kr/school/view.do?idx=2353", "충북 음성 · 고입정보포털", "충북반도체고 반도체"],
+    sudo: ["수도전기공업고등학교", "https://www.hischool.go.kr/school/view.do?idx=1533", "서울 강남 · 고입정보포털", "수도공고 수도전기공고"],
+    fire: ["한국소방마이스터고등학교", careerGuide + "c830299e-7dc9-4c7f-8121-fc743b18b423", "영월 · 마이스터고", "소방마이스터고 한국소방고 소방안전과"],
+    energy: ["한국에너지마이스터고등학교", careerGuide + "b4b1ec90-ccb9-41d7-8718-4546de3f864c", "삼척 · 마이스터고", "에너지마이스터고 에너지마이고 에너지고"],
+    medical: ["한국의료마이스터고등학교", careerGuide + "67e9e1e6-abbb-4a05-b88d-27990086b14e", "원주 · 마이스터고", "의료마이스터고 원주의료고"],
+    accounting: ["원주금융회계고등학교", careerGuide + "32ca3f05-ef05-4098-8cb4-3f591f8af8cf", "원주 · 특성화고", "원주금융회계고"],
+    aviation: ["한국항공고등학교", careerGuide + "1cad4163-5e50-41d5-ba20-5fe0631310a8", "태백 · 특성화고", "한국항공고 태백기계공고"],
+    machine: ["춘천기계공업고등학교", careerGuide + "fee33cfb-30a8-4311-bdc1-8031e08cf81a", "춘천", "춘천기계공고"],
+    applied: ["강원생활과학고등학교", careerGuide + "d2492aae-3629-4db5-a5c8-8a987ca2a9ec", "홍천", "강원생활과학고 생활과학고"],
+    mirae: ["미래고등학교", careerGuide + "edb0a5b6-9178-4f86-9f75-82c191feda12", "원주", "미래고"],
+    gangneung: ["강릉중앙고등학교", careerGuide + "1f824a12-3d22-430e-885b-e20f995ce2f4", "강릉", "강릉중앙고"],
+    tax: ["한국세무금융고등학교", careerGuide + "bc728a30-5373-4f1e-ac18-6b7d72f688c4", "태백 · 황지정보산업고", "한국세무금융고 황지정보산업고"],
+    hansaem: ["춘천한샘고등학교", careerGuide + "212fd726-7718-4d34-903a-2b6a8a406aa8", "춘천", "춘천한샘고"],
+    information: ["강릉정보공업고등학교", careerGuide + "e8c5719a-1f98-4609-b31b-1943101169e4", "강릉", "강릉정보공고"],
+    forest: ["강원산림과학고등학교(가칭)", careerGuide + "1e4e2d28-525f-4aba-aec2-80a9911d6b15", "인제 · 개교 추진 안내", "강원산림과학고"],
     sinnam: ["신남고등학교", "https://sinnam.gwe.hs.kr/main.do", "인제", "신남고"],
-    agriculture: ["홍천농업고등학교", "https://hongnong.gwe.hs.kr/main.do", "홍천", "홍천농고"],
-    yeongseo: ["영서고등학교", "https://yeongseo.gwe.hs.kr/main.do", "원주", "영서고"],
-    donghae: ["동해상업고등학교", "https://donghae.gwe.hs.kr/main.do", "동해", "동해상고"],
-    defense: ["한국국방과학고등학교", "https://k-defense.gwe.hs.kr/main.do", "철원", "국방과학고 김화공고"],
-    animation: ["강원애니고등학교", "https://anischool.gwe.hs.kr/main.do", "춘천", "강원애니고 강원에니고"],
+    agriculture: ["홍천농업고등학교", careerGuide + "8c68f630-fa61-4b90-aeea-a1931a68f1f9", "홍천", "홍천농고"],
+    yeongseo: ["영서고등학교", careerGuide + "cdff251f-50a7-45d4-9ee2-8e8eac672a25", "원주", "영서고"],
+    donghae: ["동해상업고등학교", careerGuide + "fad0ebad-5ff6-4b65-916a-b77ab40b2e8f", "동해", "동해상고"],
+    defense: ["한국국방과학고등학교", careerGuide + "587581bc-5d5a-40e8-bd04-992bedadb96a", "철원", "국방과학고 김화공고"],
+    animation: ["강원애니고등학교", careerGuide + "d2a5d3b4-664f-4af2-8a0c-9114a2adf932", "춘천", "강원애니고 강원에니고"],
     training: ["직업교육 과정 안내", "https://www.moel.go.kr/policyitrd/policyItrdView.do?policy_itrd_sn=191", "고용노동부 · 일반고 특화훈련", "직업교육원"],
     hyeoncheon: ["현천고등학교", "https://hchs.gwe.hs.kr/main.do", "횡성", "현천고"],
     jeonin: ["전인고등학교", "https://jeonin.gwe.hs.kr/main.do", "춘천", "전인고"],
     pallyeol: ["팔렬고등학교", "https://pallyeol.gwe.hs.kr/main.do", "홍천", "팔렬고"]
   };
 
-  // [추천 항목, 관심 분야, 함께 볼 학교]를 첨부 표의 순서대로 나열한다.
+  const wontongPreparation = "예비 고1 국어·영어·수학 내신 1등급을 목표로 준비";
+  const fireNote = {
+    text: "중학교 2·3학년 과학을 복습하세요. 전공 실습 비중과 기숙사의 휴대전화·태블릿 사용 제한을 확인하세요. 에너지고와는 내신 반영 방식과 생활 규정을, 문학·인문 계열 학교와는 교육과정을 비교해 보세요.",
+    link: ["소방고 기숙사 운영 규정", "https://fire-meister.gwe.hs.kr/boardCnts/list.do?boardID=57111&m=120602&s=youngwol_th"]
+  };
+  const energyNote = {
+    text: "설비·전기 전공과 실습 비중, 기숙사 생활 규정을 확인하세요. 문학·인문 과목을 더 깊이 공부하고 싶다면 다른 학교의 교육과정도 비교해 보세요.",
+    link: ["에너지고 기숙사 안내", "https://energy.gwe.hs.kr/boardCnts/list.do?boardID=26116&m=0307&s=seths"]
+  };
+
+  // [추천 항목, 관심 분야, 함께 볼 학교, 주의할 점]
   const groups = [
     { id: "math", score: "100점", detail: "수학 영재", rows: [
-      ["scienceList", "수학·과학", ["science"]]
+      ["scienceList", "미적분 문제에 스스로 도전해 볼 정도로 수학·과학을 깊이 공부하는 학생에게 추천", ["science"], {
+        link: ["강원과학고 입학전형 안내", "https://kangwon-sh.gwe.hs.kr/boardCnts/list.do?boardID=23257&m=0201&s=kangwonsh"]
+      }]
     ] },
     { id: "english", score: "100점", detail: "영어 영재", rows: [
       ["languageList", "외국어", ["language"]],
-      ["minjok", ""]
+      ["minjok", "연간 수업료·기숙사비·급식비 등 총비용 확인", [], {
+        link: ["민사고 예결산·수익자부담 자료", "https://camp.minjok.hs.kr/board/bbs562"]
+      }]
     ] },
     { id: "100-90", score: "100~90점", rows: [
-      ["wontong", "일반 교과"],
+      ["wontong", wontongPreparation],
       ["semiconductorList", "반도체", ["cbsemi"]],
       ["sudo", "전기·에너지"],
-      ["fire", "소방안전과"]
+      ["fire", "소방안전관리과", [], fireNote]
     ] },
     { id: "97-80", score: "97~80점", rows: [
-      ["wontong", "일반 교과"],
-      ["fire", "소방안전과"],
-      ["energy", "시스템설비·전기"]
+      ["wontong", wontongPreparation, [], {
+        text: "입학 전 국어·영어·수학 복습을 마치고, 특히 수학·영어에서 수업을 따라가기 어려운 단원이 없는지 점검하세요."
+      }],
+      ["fire", "소방안전관리과", [], fireNote],
+      ["energy", "시스템설비과·전기과", [], energyNote]
     ] },
     { id: "80-60", score: "80~60점", rows: [
-      ["wontong", "일반 교과"],
+      ["wontong", wontongPreparation, [], {
+        text: "수학·영어부터 점검하고 물리·화학 기초까지 이어서 공부하세요. 3년 동안 학습 공백이 쌓이지 않도록 계획을 세우고, 지역 국립대 경영학과를 고려한다면 대학별 전형과 최근 입시 결과를 확인하세요.",
+        link: ["대학별 전형 평가기준·입시 결과", "https://www.adiga.kr/uct/acd/ade/criteriaAndResultView.do?menuId=PCUCTACD2000"]
+      }],
       ["medical", "바이오의약·의료기계·의료전기전자"],
-      ["energy", "시스템설비·전기"],
+      ["energy", "시스템설비과·전기과", [], energyNote],
       ["accounting", "금융회계과"],
       ["aviation", "항공"],
       ["specialized", "자동차", ["machine", "applied", "mirae"]],
@@ -133,7 +153,7 @@
     if (group.detail) heading.append(element("span", "score-detail", group.detail));
 
     let recommendation;
-    rows.forEach(([primary, subject, related = []], index) => {
+    rows.forEach(([primary, subject, related = [], note], index) => {
       const row = element("tr");
       row.setAttribute("role", "row");
       if (index === 0) row.append(heading);
@@ -153,7 +173,7 @@
       field.textContent = subject || "—";
       field.classList.toggle("blank-cell", !subject);
       const options = cell("related-cell");
-      options.classList.toggle("blank-cell", !related.length);
+      options.classList.toggle("blank-cell", !related.length && !note);
       if (related.length) {
         const list = element("ul", "school-links");
         related.forEach((id) => {
@@ -162,8 +182,19 @@
           list.append(item);
         });
         options.append(list);
-      } else {
+      } else if (!note) {
         options.textContent = "—";
+      }
+      if (note) {
+        const guidance = element("div", "row-guidance");
+        if (note.text) guidance.append(element("p", "", note.text));
+        if (note.link) {
+          const [label, url] = note.link;
+          const link = element("a", "guidance-link", label);
+          link.href = url;
+          guidance.append(link);
+        }
+        options.append(guidance);
       }
       row.append(field, options);
       body.append(row);
