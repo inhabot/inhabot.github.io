@@ -41,45 +41,57 @@
     pallyeol: ["팔렬고등학교", "https://pallyeol.gwe.hs.kr/main.do", "홍천", "팔렬고"]
   };
 
-  const wontongPreparation = "예비 고1 국어·영어·수학 내신 1등급을 목표로 준비";
+  const wontongPreparation = "예비고1 국,영,수 내신 1등급 준비할것!";
+  const meisterQuote = "기숙학교라 규칙강함. 국영수보다는 이공계 과목을 배움. 문학소년,소녀는 오지말것,";
   const fireNote = {
-    text: "중학교 2·3학년 과학을 복습하세요. 전공 실습 비중과 기숙사의 휴대전화·태블릿 사용 제한을 확인하세요. 에너지고와는 내신 반영 방식과 생활 규정을, 문학·인문 계열 학교와는 교육과정을 비교해 보세요.",
+    quote: [
+      meisterQuote,
+      "한국소방고: 중학교 과학 2.3학년 과정 철저하게 복습할것. 핸드폰,태블릿 사용 제한됨.",
+      "소방고는 에너지고에 비해 성적이 훨 높고 규율이 강하거든..."
+    ].join("\n"),
+    context: "학교별 선발 기준과 생활 규정은 해당 학년도 안내에서 확인하세요.",
     link: ["소방고 기숙사 운영 규정", "https://fire-meister.gwe.hs.kr/boardCnts/list.do?boardID=57111&m=120602&s=youngwol_th"]
   };
   const energyNote = {
-    text: "설비·전기 전공과 실습 비중, 기숙사 생활 규정을 확인하세요. 문학·인문 과목을 더 깊이 공부하고 싶다면 다른 학교의 교육과정도 비교해 보세요.",
+    quote: meisterQuote,
     link: ["에너지고 기숙사 안내", "https://energy.gwe.hs.kr/boardCnts/list.do?boardID=26116&m=0307&s=seths"]
   };
 
   // [추천 항목, 관심 분야, 함께 볼 학교, 주의할 점]
   const groups = [
     { id: "math", score: "100점", detail: "수학 영재", rows: [
-      ["scienceList", "미적분 문제에 스스로 도전해 볼 정도로 수학·과학을 깊이 공부하는 학생에게 추천", ["science"], {
+      ["scienceList", "수학이 재미있어 미,적분정도 풀어보는 수준만 지원.,", ["science"], {
+        fieldQuote: true,
         link: ["강원과학고 입학전형 안내", "https://kangwon-sh.gwe.hs.kr/boardCnts/list.do?boardID=23257&m=0201&s=kangwonsh"]
       }]
     ] },
     { id: "english", score: "100점", detail: "영어 영재", rows: [
       ["languageList", "외국어", ["language"]],
-      ["minjok", "연간 수업료·기숙사비·급식비 등 총비용 확인", [], {
-        link: ["민사고 예결산·수익자부담 자료", "https://camp.minjok.hs.kr/board/bbs562"]
+      ["minjok", "(연 수업료 등 1억 필요할 수 있음!)", [], {
+        fieldQuote: true,
+        context: "인용문의 금액은 작성자의 추정입니다. 실제 수업료와 기타 비용은 학교 자료에서 확인하세요.",
+        link: ["민사고 예결산·수익자부담 자료", "https://www.minjok.hs.kr/board/bbs562?page=1"]
       }]
     ] },
     { id: "100-90", score: "100~90점", rows: [
-      ["wontong", wontongPreparation],
+      ["wontong", wontongPreparation, [], { fieldQuote: true }],
       ["semiconductorList", "반도체", ["cbsemi"]],
       ["sudo", "전기·에너지"],
       ["fire", "소방안전관리과", [], fireNote]
     ] },
     { id: "97-80", score: "97~80점", rows: [
       ["wontong", wontongPreparation, [], {
-        text: "입학 전 국어·영어·수학 복습을 마치고, 특히 수학·영어에서 수업을 따라가기 어려운 단원이 없는지 점검하세요."
+        fieldQuote: true,
+        quote: "원통고: 예비고일 국영수 내신 1등급준비 완료할 것, 수학,영어과목 급격한 학습지체 주의!!"
       }],
       ["fire", "소방안전관리과", [], fireNote],
       ["energy", "시스템설비과·전기과", [], energyNote]
     ] },
     { id: "80-60", score: "80~60점", rows: [
       ["wontong", wontongPreparation, [], {
-        text: "수학·영어부터 점검하고 물리·화학 기초까지 이어서 공부하세요. 3년 동안 학습 공백이 쌓이지 않도록 계획을 세우고, 지역 국립대 경영학과를 고려한다면 대학별 전형과 최근 입시 결과를 확인하세요.",
+        fieldQuote: true,
+        quote: "원통고: 현 성적으로 입학 할 경우 수,영,물리,화학 순으로 수업시간 잠 자게 될수 있음.  3년 학습지체 주의! 상위 34% 까지만 지방 국립대 경영학과정도 도전 가능함.",
+        context: "인용문의 34%는 작성자 의견입니다. 대학별 전형 기준과 전년도 결과는 대입정보포털에서 확인하세요.",
         link: ["대학별 전형 평가기준·입시 결과", "https://www.adiga.kr/uct/acd/ade/criteriaAndResultView.do?menuId=PCUCTACD2000"]
       }],
       ["medical", "바이오의약·의료기계·의료전기전자"],
@@ -142,6 +154,12 @@
     return node;
   }
 
+  function authorQuote(text) {
+    const quote = element("blockquote", "author-quote", text);
+    quote.setAttribute("aria-label", "작성자 의견");
+    return quote;
+  }
+
   function createGroup(group, rows) {
     const body = element("tbody");
     body.setAttribute("role", "rowgroup");
@@ -170,10 +188,12 @@
       }
 
       const field = cell("field-cell");
-      field.textContent = subject || "—";
+      if (note?.fieldQuote) field.append(authorQuote(subject));
+      else field.textContent = subject || "—";
       field.classList.toggle("blank-cell", !subject);
       const options = cell("related-cell");
-      options.classList.toggle("blank-cell", !related.length && !note);
+      const hasGuidance = Boolean(note?.quote || note?.context || note?.link);
+      options.classList.toggle("blank-cell", !related.length && !hasGuidance);
       if (related.length) {
         const list = element("ul", "school-links");
         related.forEach((id) => {
@@ -182,12 +202,13 @@
           list.append(item);
         });
         options.append(list);
-      } else if (!note) {
+      } else if (!hasGuidance) {
         options.textContent = "—";
       }
-      if (note) {
+      if (hasGuidance) {
         const guidance = element("div", "row-guidance");
-        if (note.text) guidance.append(element("p", "", note.text));
+        if (note.quote) guidance.append(authorQuote(note.quote));
+        if (note.context) guidance.append(element("p", "", note.context));
         if (note.link) {
           const [label, url] = note.link;
           const link = element("a", "guidance-link", label);

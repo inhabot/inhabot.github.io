@@ -269,10 +269,25 @@ tbody tr:hover td { background: #fcfaff; }
 .link-arrow { display: inline-block; margin-inline-start: 4px; color: var(--purple); font-size: 12px; }
 .link-detail { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
 .school-link:hover .link-name { text-decoration: underline; text-underline-offset: 3px; }
+.author-quote {
+  margin: 0;
+  padding: 8px 10px;
+  border-inline-start: 3px solid var(--purple);
+  border-radius: 3px 8px 8px 3px;
+  background: #f4effc;
+  color: var(--dark-purple);
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
 .row-guidance { color: #50465b; font-size: 13px; line-height: 1.6; word-break: keep-all; }
 .school-links + .row-guidance { margin-top: 8px; }
 .guidance-link { color: var(--dark-purple); font-weight: 700; text-underline-offset: 3px; }
-.row-guidance p + .guidance-link { display: inline-block; margin-top: 3px; }
+.row-guidance .author-quote + * { margin-top: 6px; }
+.row-guidance > .guidance-link { display: inline-block; }
+.row-guidance p + .guidance-link { margin-top: 3px; }
 .empty { padding: 34px 16px; text-align: center; color: var(--muted); }
 .empty button { margin-top: 12px; }
 
