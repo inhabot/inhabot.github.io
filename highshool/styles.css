@@ -249,7 +249,7 @@ thead th { padding-block: 16px; }
 tbody tr > * { border-top: 1px solid #f0edf3; }
 tbody tr:first-child > * { border-top-color: var(--line); }
 tbody tr:hover td { background: #fcfaff; }
-.score-cell { background: #f8f4fc; color: var(--dark-purple); }
+.score-cell { background: var(--dark-purple); color: var(--white); }
 .primary-cell[rowspan] { background: #fbf8ff; }
 .score-value { display: block; font-size: clamp(16px, 2vw, 22px); letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
 .score-detail { display: block; margin-top: 3px; font-size: 12px; }
