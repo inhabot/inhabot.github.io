@@ -46,8 +46,7 @@
   const fireNote = {
     quote: [
       meisterQuote,
-      "한국소방고: 중학교 과학 2.3학년 과정 철저하게 복습할것. 핸드폰,태블릿 사용 제한됨.",
-      "소방고는 에너지고에 비해 성적이 훨 높고 규율이 강하거든..."
+      "한국소방고: 중학교 과학 2.3학년 과정 철저하게 복습할것. 핸드폰,태블릿 사용 제한됨."
     ].join("\n"),
     context: "학교별 선발 기준과 생활 규정은 해당 학년도 안내에서 확인하세요.",
     link: ["소방고 기숙사 운영 규정", "https://fire-meister.gwe.hs.kr/boardCnts/list.do?boardID=57111&m=120602&s=youngwol_th"]
